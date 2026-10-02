@@ -15,7 +15,6 @@ const queryClient = new QueryClient({
 });
 
 const router = createBrowserRouter(routes);
-const isDev = import.meta.env.DEV;
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -25,7 +24,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Suspense fallback={null}>
           <RouterProvider router={router} />
         </Suspense>
-        {isDev && <DevPlanSwitcher />}
+        {import.meta.env.DEV && <DevPlanSwitcher />}
       </PlanProvider>
     </QueryClientProvider>
   </React.StrictMode>,

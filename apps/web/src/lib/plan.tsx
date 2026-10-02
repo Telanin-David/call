@@ -1,6 +1,8 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 
 export type Plan = 'free' | 'starter' | 'pro';
+
+export const PLAN_LABEL: Record<Plan, string> = { free: 'Free', starter: 'Starter', pro: 'Pro' };
 
 interface PlanCtx {
   plan: Plan;
@@ -9,8 +11,8 @@ interface PlanCtx {
 
 const Ctx = createContext<PlanCtx>({ plan: 'starter', setPlan: () => {} });
 
-export function PlanProvider({ children }: { children: React.ReactNode }) {
-  const [plan, setPlan] = useState<Plan>('starter');
+export function PlanProvider({ children, initial = 'starter' }: { children: ReactNode; initial?: Plan }) {
+  const [plan, setPlan] = useState<Plan>(initial);
   return <Ctx.Provider value={{ plan, setPlan }}>{children}</Ctx.Provider>;
 }
 
@@ -21,24 +23,13 @@ export function usePlan() {
 export function DevPlanSwitcher() {
   const { plan, setPlan } = usePlan();
   return (
-    <div style={{
-      position: 'fixed', bottom: 16, left: 16, zIndex: 9999,
-      background: '#111113', color: '#fff', borderRadius: 12,
-      padding: '8px 12px', display: 'flex', gap: 6, fontSize: 12, fontWeight: 600,
-    }}>
-      <span style={{ opacity: .5, marginRight: 4 }}>Plan:</span>
-      {(['free', 'starter', 'pro'] as Plan[]).map(p => (
-        <button
-          key={p}
-          onClick={() => setPlan(p)}
-          style={{
-            padding: '3px 8px', borderRadius: 6, border: 0, cursor: 'pointer',
-            background: plan === p ? '#ff6b1a' : 'rgba(255,255,255,.12)',
-            color: plan === p ? '#111113' : '#fff',
-            fontWeight: 600, fontSize: 11, textTransform: 'capitalize',
-          }}
-        >{p}</button>
-      ))}
-    </div>
+    <details className="dl-dev">
+      <summary>Dev · {PLAN_LABEL[plan]}</summary>
+      <div className="dl-seg">
+        {(Object.keys(PLAN_LABEL) as Plan[]).map(p => (
+          <button key={p} type="button" aria-pressed={plan === p} onClick={() => setPlan(p)}>{PLAN_LABEL[p]}</button>
+        ))}
+      </div>
+    </details>
   );
 }

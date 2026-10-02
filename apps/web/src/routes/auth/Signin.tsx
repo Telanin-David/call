@@ -1,58 +1,34 @@
-import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AuthLeft } from '@/layouts/AuthLayout';
+import AuthShell from '@/layouts/AuthShell';
+import PasswordInput from '@/components/PasswordInput';
 
 export default function Signin() {
   const navigate = useNavigate();
-  const [show, setShow] = useState(false);
-
   return (
-    <>
-      <AuthLeft
-        headline="Welcome back. Your leads are waiting."
-        bullets={['Auto-dial your list hands-free', 'Script always on screen', 'Call from anywhere']}
-      />
-      <main style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 48 }}>
-        <div style={{ width: 420, display: 'flex', flexDirection: 'column', gap: 22 }}>
-          <div>
-            <h1 className="dl-title">Sign in</h1>
-            <p className="dl-muted" style={{ marginTop: 6 }}>Good to see you again.</p>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div className="dl-field">
-              <label>Email or phone</label>
-              <input className="dl-input" placeholder="you@example.com" />
-            </div>
-            <div className="dl-field">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label>Password</label>
-                <Link to="/forgot" className="dl-link" style={{ fontSize: 13 }}>Forgot?</Link>
-              </div>
-              <div style={{ position: 'relative' }}>
-                <input className="dl-input" type={show ? 'text' : 'password'} placeholder="••••••••••" style={{ paddingRight: 80 }} />
-                <button
-                  type="button"
-                  onClick={() => setShow(s => !s)}
-                  style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 0, cursor: 'pointer', fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}
-                >
-                  {show ? 'Hide' : 'Show'}
-                </button>
-              </div>
-            </div>
-          </div>
-          <label className="dl-check">
-            <input type="checkbox" defaultChecked />
-            <span>Keep me signed in on this laptop</span>
-          </label>
-          <button className="dl-btn dl-btn--primary dl-btn--lg dl-btn--block" style={{ height: 52 }}
-            onClick={() => navigate('/')}>
-            Sign in
-          </button>
-          <p style={{ textAlign: 'center', fontSize: 14, color: 'var(--muted)' }}>
-            New here? <Link to="/signup" className="dl-link">Create an account</Link>
-          </p>
+    <AuthShell headline="Welcome back. Your leads are waiting.">
+      <form className="dl-auth-form" onSubmit={e => { e.preventDefault(); navigate('/'); }}>
+        <div>
+          <h2 className="dl-auth-h2">Sign in</h2>
+          <p className="dl-auth-sub">Use the email or phone number on your account.</p>
         </div>
-      </main>
-    </>
+        <div className="dl-field">
+          <label htmlFor="si-id">Email or phone</label>
+          <input id="si-id" className="dl-input" defaultValue="tunde.bakare@gmail.com" />
+        </div>
+        <div className="dl-field">
+          <div className="dl-field-head">
+            <label htmlFor="si-pw">Password</label>
+            <Link className="dl-link dl-link--sm" to="/forgot">Forgot password?</Link>
+          </div>
+          <PasswordInput id="si-pw" defaultValue="correct-horse" />
+        </div>
+        <label className="dl-check dl-check--sm">
+          <input type="checkbox" defaultChecked />
+          <span>Keep me signed in on this laptop</span>
+        </label>
+        <button type="submit" className="dl-btn dl-btn--primary dl-btn--lg dl-btn--block dl-btn--xl">Sign in</button>
+        <p className="dl-auth-foot">New here? <Link className="dl-link" to="/signup">Create an account</Link></p>
+      </form>
+    </AuthShell>
   );
 }

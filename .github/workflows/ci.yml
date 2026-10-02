@@ -96,6 +96,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @dialer/web run lint
       - run: pnpm --filter @dialer/web exec tsc --noEmit
+      - run: pnpm --filter @dialer/web test
 
   web-build:
     name: Web build

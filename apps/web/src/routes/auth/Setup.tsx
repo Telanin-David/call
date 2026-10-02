@@ -1,104 +1,91 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { ME } from '@/lib/fake';
+import { formatUsd, usd } from '@/lib/money';
 import Icon from '@/components/Icon';
 
-const AMOUNTS = [5, 10, 20, 50];
+const AMOUNTS = [usd(5), usd(10), usd(20), usd(50)];
+const FREE_RATE_PER_MIN = usd(0, 2.5);
+
+type StepState = 'done' | 'now' | 'todo';
+
+interface Step {
+  title: string;
+  body: string;
+  state: StepState;
+  tag?: string;
+}
+
+const STEPS: Step[] = [
+  { title: 'Confirm email and phone', body: 'Done in the last step', state: 'done' },
+  { title: 'Agree to the rules', body: 'Limits, numbers you can call, one account per person', state: 'done' },
+  { title: 'Add money', body: 'Everything is prepaid. Calls and numbers come out of your balance.', state: 'now' },
+  { title: 'Get a US or Canada number', body: 'The number leads see and call back. $1.50 a month.', state: 'todo', tag: 'After step 3' },
+  { title: 'Upload your leads', body: 'A CSV file from your laptop', state: 'todo' },
+  { title: 'Add your script', body: 'Paste it or upload a file', state: 'todo' },
+];
 
 export default function Setup() {
   const navigate = useNavigate();
-  const [amount, setAmount] = useState(10);
-
-  const steps = [
-    { label: 'Confirm email and phone', done: true },
-    { label: 'Agree to the rules', done: true },
-    { label: 'Add money to your balance', active: true },
-    { label: 'Get a US or Canada number' },
-    { label: 'Upload a list of leads' },
-    { label: 'Add a calling script' },
-  ];
+  const [amount, setAmount] = useState(usd(10));
+  const done = STEPS.filter(s => s.state === 'done').length;
 
   return (
-    <div className="dl" style={{ minHeight: '100vh', background: 'var(--surface-sunk)' }}>
-      {/* Minimal topbar */}
-      <header className="dl-topbar">
-        <span className="dl-brand" style={{ color: 'var(--ink)' }}>
-          <span className="dl-brand-mark" />
-          Dialer
-        </span>
-        <span className="dl-pill" style={{ marginLeft: 'auto' }}>Free plan</span>
-        <button className="dl-avatar" style={{ border: 0, background: 'var(--warn-soft)', color: 'var(--warn-ink)', cursor: 'pointer' }}>TU</button>
-      </header>
-
-      <div style={{ maxWidth: 1000, margin: '0 auto', padding: '40px 28px', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 320px', gap: 28 }}>
-        {/* Left: checklist */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          <div>
-            <h1 className="dl-title">Set up your account</h1>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
-              <div className="dl-progress" style={{ flex: 1 }}>
-                <span style={{ width: '33%' }} />
-              </div>
-              <span className="dl-small dl-muted">2 of 6 done · about 4 minutes left</span>
-            </div>
-          </div>
-
-          <div className="dl-steps">
-            {steps.map((s, i) => (
-              <div key={i} className={`dl-step ${s.done ? 'is-done' : (s as any).active ? 'is-now' : 'is-todo'}`}>
-                <i>
-                  {s.done
-                    ? <Icon name="i-check" size={13} />
-                    : i + 1}
-                </i>
-                <span style={{ fontWeight: (s as any).active ? 600 : undefined }}>{s.label}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Step 3 expanded */}
-          <div className="dl-card">
-            <h3 className="dl-heading" style={{ marginBottom: 16 }}>Add money to your balance</h3>
-            <div className="dl-amounts" style={{ marginBottom: 16 }}>
-              {AMOUNTS.map(a => (
-                <button key={a} className={`dl-chip ${amount === a ? '' : ''}`}
-                  aria-pressed={amount === a}
-                  onClick={() => setAmount(a)}
-                  style={{ height: 48, justifyContent: 'center', borderRadius: 10, fontSize: 15 }}>
-                  ${a}
-                </button>
-              ))}
-            </div>
-            <div style={{ borderTop: '1px solid var(--line)', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div className="dl-price"><span>Balance top-up</span><b>${amount.toFixed(2)}</b></div>
-              <div className="dl-price"><span>Card fee (3.5%)</span><b>${(amount * 0.035).toFixed(2)}</b></div>
-              <div className="dl-price" style={{ fontWeight: 600 }}><span>Total charged</span><b>${(amount * 1.035).toFixed(2)}</b></div>
-            </div>
-            <button className="dl-btn dl-btn--primary dl-btn--lg dl-btn--block" style={{ marginTop: 16 }}
-              onClick={() => navigate('/numbers')}>
-              Add ${(amount * 1.035).toFixed(2)} by card
-            </button>
+    <div className="dl-twocol">
+      <div className="dl-col">
+        <div className="dl-setup-head">
+          <h1 className="dl-h1">Let's get you calling, {ME.first}</h1>
+          <div className="dl-progressline">
+            <div className="dl-bar8"><span style={{ width: `${Math.round((done / STEPS.length) * 100)}%` }} /></div>
+            <span><b>{done} of {STEPS.length} done</b> · about 4 minutes left</span>
           </div>
         </div>
 
-        {/* Right: plan card */}
-        <div style={{ position: 'sticky', top: 24 }}>
-          <div className="dl-plan">
-            <div>
-              <div className="dl-label">Free plan</div>
-              <div className="dl-plan-price">$0 <span style={{ fontSize: 16, fontWeight: 400, letterSpacing: 0 }}>/mo</span></div>
+        {STEPS.map((s, i) => (
+          <section key={s.title} className={`dl-stepcard is-${s.state}`}>
+            <div className="dl-stephead">
+              <span className="dl-stepnum">{s.state === 'done' ? <Icon name="i-check" size={15} /> : i + 1}</span>
+              <div className="dl-grow"><b>{s.title}</b><p>{s.body}</p></div>
+              {s.state === 'done' && <span className="dl-steptag is-ok">Done</span>}
+              {s.tag && <span className="dl-steptag">{s.tag}</span>}
             </div>
-            <ul>
-              <li><span className="dl-tick"><Icon name="i-check" size={11} /></span>30 dials per day</li>
-              <li><span className="dl-tick"><Icon name="i-check" size={11} /></span>Tap to call each lead</li>
-              <li><span className="dl-tick"><Icon name="i-check" size={11} /></span>Script on screen (first 2 months)</li>
-              <li><span className="dl-tick"><Icon name="i-check" size={11} /></span>US and Canada numbers</li>
-            </ul>
-            <div className="dl-plan-later">
-              Upgrade to Starter: <b>$10/mo</b> for 3 months, then $15.
-            </div>
-          </div>
-        </div>
+            {s.state === 'now' && (
+              <div className="dl-stepbody">
+                <div className="dl-col">
+                  <div className="dl-amounts">
+                    {AMOUNTS.map(a => (
+                      <button key={a} className="dl-chip" aria-pressed={amount === a} onClick={() => setAmount(a)}>{formatUsd(a).replace('.00', '')}</button>
+                    ))}
+                  </div>
+                  <div className="dl-hint-brand">
+                    <Icon name="i-globe" />
+                    <span>On Free, calls to the US and Canada cost <b>$0.025 a minute</b>. {formatUsd(amount)} is about <b>{Math.floor(amount / FREE_RATE_PER_MIN)} minutes</b>.</span>
+                  </div>
+                </div>
+                <div className="dl-paybox">
+                  <div className="dl-price"><span className="dl-muted">Top-up</span><b>{formatUsd(amount)}</b></div>
+                  <div className="dl-price dl-price--total"><span>You pay</span><b>{formatUsd(amount)}</b></div>
+                  <button className="dl-btn dl-btn--primary dl-btn--lg dl-btn--block" onClick={() => navigate('/numbers')}>Pay {formatUsd(amount)} by card</button>
+                  <span className="dl-fine">The name on the card must be {ME.name}. Your bank may add a fee for paying in US dollars.</span>
+                </div>
+              </div>
+            )}
+          </section>
+        ))}
       </div>
+
+      <aside className="dl-side dl-side--sticky">
+        <div className="dl-darkcard">
+          <div className="dl-hero-eyebrow">YOUR PLAN</div>
+          <div className="dl-darkcard-title">Free</div>
+          <p className="dl-darkcard-body">Call by hand, 30 dials a day. Your script shows on screen for your first 2 months.</p>
+          <Link className="dl-link" to="/plans">See all plans</Link>
+        </div>
+        <div className="dl-notecard">
+          <span className="dl-tile t-lemon"><Icon name="i-lock" size={17} /></span>
+          <div><b>New account limits</b>Verify your ID any time to remove them. You can do it later from Settings.</div>
+        </div>
+      </aside>
     </div>
   );
 }

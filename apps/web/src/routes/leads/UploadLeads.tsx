@@ -1,157 +1,112 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import Icon from '@/components/Icon';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import Icon, { type IconName } from '@/components/Icon';
 
-type Step = 1 | 2 | 3;
+const FIELDS = ['First name', 'Last name', 'Company', 'Phone number', 'Email', 'City (sets her time zone)', 'Notes', 'Skip this column'] as const;
+type Field = (typeof FIELDS)[number];
 
-const COLUMNS = [
-  { yours: 'First Name', sample: 'James', saveas: 'First name' },
-  { yours: 'Last Name', sample: 'Obi', saveas: 'Last name' },
-  { yours: 'Company', sample: 'Obi Ventures', saveas: 'Company' },
-  { yours: 'Job Title', sample: 'CEO', saveas: 'Job title' },
-  { yours: 'Phone', sample: '+234 801 234 5678', saveas: 'Phone' },
-  { yours: 'Email', sample: 'james@obiventures.ng', saveas: 'Email' },
-  { yours: 'Website', sample: 'obiventures.ng', saveas: 'Website' },
-  { yours: 'City', sample: 'Lagos', saveas: 'Skip column' },
+const COLUMNS: { yours: string; sample: string; saveAs: Field }[] = [
+  { yours: 'First Name', sample: 'Lena', saveAs: 'First name' },
+  { yours: 'Last Name', sample: 'Park', saveAs: 'Last name' },
+  { yours: 'Business', sample: 'Sparkle Offices', saveAs: 'Company' },
+  { yours: 'Phone', sample: '(646) 555-0110', saveAs: 'Phone number' },
+  { yours: 'Email Address', sample: 'lena@sparkleoffices.com', saveAs: 'Email' },
+  { yours: 'City', sample: 'Brooklyn, NY', saveAs: 'City (sets her time zone)' },
+  { yours: 'Sites', sample: '3', saveAs: 'Skip this column' },
+  { yours: 'Notes', sample: 'Unhappy with Friday cleaner', saveAs: 'Notes' },
 ];
 
-const FIELDS = ['First name', 'Last name', 'Phone', 'Email', 'Company', 'Job title', 'Website', 'Location', 'Skip column'];
+const LEFT_OUT: { icon: IconName; tone: string; title: string; body: string }[] = [
+  { icon: 'i-globe', tone: 't-lemon', title: '2 not US or Canada', body: 'UK and Ghana numbers. Calling them costs more, so they go in a separate list.' },
+  { icon: 'i-users', tone: 't-grey', title: '2 duplicates', body: 'Same phone number twice. We kept the first.' },
+  { icon: 'i-ban', tone: 't-red', title: '1 on the do-not-call list', body: 'We never call it, and you are never charged.' },
+];
+
+const STEPS = ['Upload file', 'Match columns', 'Check and add'] as const;
 
 export default function UploadLeads() {
   const navigate = useNavigate();
-  const [step, setStep] = useState<Step>(1);
-  const [dragging, setDragging] = useState(false);
+  const [params] = useSearchParams();
+  const fromSetup = params.get('from') === 'setup';
+  const [step, setStep] = useState<1 | 2>(params.get('step') === 'match' ? 2 : 1);
+  const [mapping, setMapping] = useState<Field[]>(COLUMNS.map(c => c.saveAs));
 
   return (
-    <div className="dl-page">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button className="dl-link" onClick={() => step > 1 ? setStep(s => (s - 1) as Step) : navigate('/leads')}>
-          <Icon name="i-left" size={14} />
-          {step === 1 ? 'Back to leads' : 'Back'}
-        </button>
+    <div className="dl-wrap dl-wrap--22">
+      <div>
+        {fromSetup
+          ? <Link className="dl-link dl-back" to="/setup"><Icon name="i-left" size={16} />Setup · step 5 of 6</Link>
+          : <Link className="dl-link dl-back" to="/leads"><Icon name="i-left" size={16} />Leads</Link>}
+        <h1 className="dl-h1">Upload leads</h1>
       </div>
 
-      {/* Steps */}
-      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-        {(['Upload file', 'Match columns', 'Check and add'] as const).map((label, i) => {
-          const n = (i + 1) as Step;
-          const done = n < step;
-          const active = n === step;
+      <div className="dl-steps3" aria-label="Progress">
+        {STEPS.map((label, i) => {
+          const n = i + 1;
+          const state = n < step ? 'is-done' : n === step ? 'is-now' : 'is-todo';
           return (
-            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{
-                  width: 22, height: 22, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 12, fontWeight: 600,
-                  background: done ? 'var(--success)' : active ? 'var(--brand)' : 'var(--surface-sunk)',
-                  color: done ? '#fff' : active ? 'var(--on-brand)' : 'var(--muted)',
-                }}>
-                  {done ? <Icon name="i-check" size={12} /> : n}
-                </span>
-                <span style={{ fontSize: 13, fontWeight: active ? 600 : 400, color: active ? 'var(--ink)' : 'var(--muted)' }}>{label}</span>
-              </div>
-              {i < 2 && <span style={{ width: 32, height: 1, background: 'var(--line)', marginLeft: 4 }} />}
-            </div>
+            <span key={label} className="dl-steps3">
+              {i > 0 && <span className="dl-s3-line" />}
+              <span className={`dl-s3 ${state}`}>
+                <i>{n < step ? <Icon name="i-check" size={14} /> : n}</i>{label}
+              </span>
+            </span>
           );
         })}
       </div>
 
-      {step === 1 && (
-        <div
-          className="dl-drop"
-          onDragOver={e => { e.preventDefault(); setDragging(true); }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={() => { setDragging(false); setStep(2); }}
-          style={{ borderColor: dragging ? 'var(--brand)' : undefined }}
-        >
-          <span style={{ width: 48, height: 48, borderRadius: 16, background: 'var(--brand-soft)', color: 'var(--brand-ink)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name="i-upload" size={22} />
-          </span>
-          <div>
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>Drop a CSV or Excel file here</div>
-            <div className="dl-small dl-muted">or click to browse · max 50 MB</div>
-          </div>
-          <button className="dl-btn dl-btn--outline" onClick={() => setStep(2)}>Browse files</button>
-          <div className="dl-small dl-muted" style={{ marginTop: 8 }}>
-            Need a template? <button className="dl-link" style={{ fontSize: 13 }}>Download sample CSV</button>
-          </div>
+      {step === 1 ? (
+        <div className="dl-drop">
+          <span className="dl-tile t-orange"><Icon name="i-upload" /></span>
+          <b>Drop a CSV file here</b>
+          <p className="dl-hint">First row should be column names. Up to 5,000 rows.</p>
+          <button className="dl-btn dl-btn--primary" onClick={() => setStep(2)}>Choose file</button>
         </div>
-      )}
+      ) : (
+        <div className="dl-split320">
+          <div className="dl-list">
+            <div className="dl-filehead">
+              <span className="dl-tile t-mint"><Icon name="i-file" size={19} /></span>
+              <div className="dl-grow"><b>october-leads.csv</b><p>42 rows · 8 columns</p></div>
+              <button className="dl-link dl-link--14" onClick={() => setStep(1)}>Change file</button>
+            </div>
+            <div className="dl-maprow dl-maphead"><span>Your column</span><span>First row</span><span /><span>Save as</span></div>
+            {COLUMNS.map((c, i) => (
+              <div key={c.yours} className="dl-maprow">
+                <b>{c.yours}</b>
+                <span className="dl-cell">{c.sample}</span>
+                <span className="dl-arrow"><Icon name="i-right" size={16} /></span>
+                <span className={`dl-mapsel${mapping[i] === 'Skip this column' ? ' is-skip' : ''}`}>
+                  <select aria-label={`Save ${c.yours} as`} value={mapping[i]}
+                    onChange={e => setMapping(m => m.map((v, j) => (j === i ? (e.target.value as Field) : v)))}>
+                    {FIELDS.map(f => <option key={f}>{f}</option>)}
+                  </select>
+                  <Icon name="i-right" size={14} />
+                </span>
+              </div>
+            ))}
+          </div>
 
-      {step === 2 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 280px', gap: 20 }}>
-          <div>
-            <div className="dl-card" style={{ padding: 0, overflow: 'hidden' }}>
-              <table className="dl-table">
-                <thead>
-                  <tr>
-                    <th>YOUR COLUMN</th>
-                    <th>FIRST ROW</th>
-                    <th />
-                    <th>SAVE AS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {COLUMNS.map(c => (
-                    <tr key={c.yours}>
-                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{c.yours}</td>
-                      <td style={{ color: 'var(--muted)', fontSize: 13 }}>{c.sample}</td>
-                      <td style={{ color: 'var(--faint)' }}>→</td>
-                      <td>
-                        <select className="dl-select" style={{ height: 36, fontSize: 13, width: 160 }}
-                          defaultValue={c.saveas}>
-                          {FIELDS.map(f => <option key={f}>{f}</option>)}
-                        </select>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <aside className="dl-side">
+            <div className="dl-hero dl-hero--24">
+              <div className="dl-hero-eyebrow">READY TO ADD</div>
+              <div className="dl-hero-big">37<small> of 42</small></div>
+              <div className="dl-hero-meta">List name: <b>October leads</b></div>
+              <button className="dl-btn dl-btn--primary dl-btn--lg dl-btn--block" onClick={() => navigate(fromSetup ? '/scripts?from=setup' : '/leads')}>Add 37 leads</button>
             </div>
-            <button className="dl-btn dl-btn--primary dl-btn--lg" style={{ marginTop: 16 }}
-              onClick={() => setStep(3)}>
-              <Icon name="i-right" size={16} />
-              Continue
-            </button>
-          </div>
-          <div className="dl-card" style={{ alignSelf: 'start' }}>
-            <h3 className="dl-heading" style={{ marginBottom: 12 }}>Summary</h3>
-            <div className="dl-price"><span>Total rows</span><b>1,245</b></div>
-            <div className="dl-price"><span>With phone</span><b>1,198</b></div>
-            <div className="dl-price"><span>Duplicates</span><b>12</b></div>
-            <div className="dl-price"><span>DNC matches</span><b>4</b></div>
-            <hr className="dl-divider" style={{ margin: '12px 0' }} />
-            <div className="dl-price" style={{ fontWeight: 600 }}><span>Will be added</span><b>1,182</b></div>
-          </div>
-        </div>
-      )}
-
-      {step === 3 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="dl-card">
-            <h3 className="dl-heading" style={{ marginBottom: 12 }}>Ready to add 1,182 leads</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16 }}>
-              {[
-                { label: 'Total leads', value: '1,182' },
-                { label: 'With phone', value: '1,182' },
-                { label: 'DNC skipped', value: '4' },
-                { label: 'Duplicates removed', value: '12' },
-              ].map(s => (
-                <div key={s.label} className="dl-card dl-card--sunk" style={{ padding: 16 }}>
-                  <div className="dl-small dl-muted">{s.label}</div>
-                  <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', marginTop: 4 }}>{s.value}</div>
-                </div>
-              ))}
+            <div className="dl-panel dl-panel--20">
+              <div className="dl-cardlabel">5 rows left out</div>
+              <div className="dl-reasons">
+                {LEFT_OUT.map(r => (
+                  <div key={r.title} className="dl-reason">
+                    <span className={`dl-tile ${r.tone}`}><Icon name={r.icon} size={15} /></span>
+                    <span><b>{r.title}</b><p>{r.body}</p></span>
+                  </div>
+                ))}
+                <button className="dl-link dl-link--14 dl-start">See the 5 rows</button>
+              </div>
             </div>
-            <div className="dl-field" style={{ marginBottom: 16 }}>
-              <label>List name</label>
-              <input className="dl-input" defaultValue="Lagos CEOs Q4" />
-            </div>
-            <button className="dl-btn dl-btn--primary dl-btn--lg" onClick={() => navigate('/leads')}>
-              <Icon name="i-check" size={16} />
-              Add 1,182 leads
-            </button>
-          </div>
+          </aside>
         </div>
       )}
     </div>

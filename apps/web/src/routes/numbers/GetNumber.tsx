@@ -1,92 +1,86 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { formatUsd, usd } from '@/lib/money';
 import Icon from '@/components/Icon';
 
 type Country = 'us' | 'ca';
 
-const NUMBERS: Record<Country, Array<{ number: string; area: string; location: string }>> = {
-  us: [
-    { number: '+1 (212) 555-0147', area: '212', location: 'New York, NY' },
-    { number: '+1 (646) 555-0120', area: '646', location: 'New York, NY' },
-    { number: '+1 (310) 555-0189', area: '310', location: 'Los Angeles, CA' },
-    { number: '+1 (312) 555-0134', area: '312', location: 'Chicago, IL' },
-    { number: '+1 (415) 555-0176', area: '415', location: 'San Francisco, CA' },
-  ],
-  ca: [
-    { number: '+1 (416) 555-0161', area: '416', location: 'Toronto, ON' },
-    { number: '+1 (604) 555-0143', area: '604', location: 'Vancouver, BC' },
-    { number: '+1 (514) 555-0198', area: '514', location: 'Montreal, QC' },
-  ],
+const AREAS: Record<Country, { code: string; city: string }> = {
+  us: { code: '646', city: 'New York, NY' },
+  ca: { code: '416', city: 'Toronto, ON' },
 };
+
+const SUFFIXES = ['0142', '0187', '0123', '0199', '0176', '0158'];
+const MONTHLY = usd(1, 50);
+const BALANCE_NOW = usd(10);
 
 export default function GetNumber() {
   const navigate = useNavigate();
   const [country, setCountry] = useState<Country>('us');
-  const [area, setArea] = useState('');
-  const [selected, setSelected] = useState<string | null>(null);
+  const [area, setArea] = useState(AREAS.us.code);
+  const [picked, setPicked] = useState(0);
+  const city = area === AREAS[country].code ? AREAS[country].city : '';
+  const numbers = SUFFIXES.map(s => `+1 (${area}) 555-${s}`);
+  const chosen = numbers[picked] ?? numbers[0] ?? '';
 
-  const numbers = NUMBERS[country].filter(n => !area || n.area.startsWith(area));
+  function switchCountry(c: Country) {
+    setCountry(c);
+    setArea(AREAS[c].code);
+    setPicked(0);
+  }
 
   return (
-    <div className="dl-page" style={{ maxWidth: 720 }}>
-      <div>
-        <Link to="/setup" className="dl-link" style={{ fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <Icon name="i-left" size={13} />
-          Setup · step 4 of 6
-        </Link>
-      </div>
-
-      <div>
-        <h1 className="dl-title">Get a US or Canada number</h1>
-        <p className="dl-muted" style={{ marginTop: 6 }}>$1.50/month per number. Cancel any time.</p>
-      </div>
-
-      {/* Country toggle */}
-      <div className="dl-seg" style={{ alignSelf: 'flex-start' }}>
-        <button aria-pressed={country === 'us'} onClick={() => setCountry('us')}>🇺🇸 United States</button>
-        <button aria-pressed={country === 'ca'} onClick={() => setCountry('ca')}>🇨🇦 Canada</button>
-      </div>
-
-      {/* Area code search */}
-      <div className="dl-field" style={{ maxWidth: 280 }}>
-        <label>Area code (optional)</label>
-        <input className="dl-input" placeholder="e.g. 212" value={area} onChange={e => setArea(e.target.value.replace(/\D/g, '').slice(0, 3))} />
-        {area && numbers.length > 0 && <span className="dl-hint">{numbers[0]?.location}</span>}
-      </div>
-
-      {/* Number list */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {numbers.map(n => (
-          <label key={n.number} style={{
-            display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 12,
-            border: `1px solid ${selected === n.number ? 'var(--brand)' : 'var(--line)'}`,
-            background: selected === n.number ? 'var(--brand-soft)' : 'var(--surface)',
-            cursor: 'pointer', boxShadow: selected === n.number ? '0 0 0 1px var(--brand)' : undefined,
-          }}>
-            <input type="radio" name="number" value={n.number} checked={selected === n.number}
-              onChange={() => setSelected(n.number)} style={{ accentColor: 'var(--brand)', width: 16, height: 16 }} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600, fontFamily: 'var(--font-mono)', fontSize: 15 }}>{n.number}</div>
-              <div className="dl-small dl-muted">{n.location}</div>
-            </div>
-            <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}>$1.50/mo</span>
-          </label>
-        ))}
-        {numbers.length === 0 && (
-          <div className="dl-empty">
-            <Icon name="i-phone" size={24} />
-            <span>No numbers found for area code {area}</span>
+    <div className="dl-twocol dl-twocol--340">
+      <div className="dl-col dl-col--18">
+        <div>
+          <Link className="dl-link dl-back" to="/setup"><Icon name="i-left" size={16} />Setup · step 4 of 6</Link>
+          <h1 className="dl-h1">Get your number</h1>
+          <p className="dl-lede">Pick an area code close to your leads. People are more likely to pick up a local number.</p>
+        </div>
+        <div className="dl-seg2" role="group" aria-label="Country">
+          <button aria-pressed={country === 'us'} onClick={() => switchCountry('us')}>United States</button>
+          <button aria-pressed={country === 'ca'} onClick={() => switchCountry('ca')}>Canada</button>
+        </div>
+        <div className="dl-bigsearch">
+          <Icon name="i-pin" />
+          <input className="dl-input" aria-label="Area code" inputMode="numeric" value={area}
+            onChange={e => setArea(e.target.value.replace(/\D/g, '').slice(0, 3))} />
+          {city && <small>{city}</small>}
+        </div>
+        {area.length === 3 ? (
+          <div className="dl-picks" role="radiogroup" aria-label="Available numbers">
+            {numbers.map((n, i) => (
+              <button key={n} role="radio" className="dl-pick" aria-checked={picked === i} onClick={() => setPicked(i)}>
+                <span className="dl-pick-radio" />
+                <span className="dl-grow"><b className="dl-num">{n}</b><small>{city ? `${city} · Local number` : 'Local number'}</small></span>
+                <span className="dl-pick-price">{formatUsd(MONTHLY)}<span> a month</span></span>
+              </button>
+            ))}
           </div>
+        ) : (
+          <p className="dl-hint">Type a 3-digit area code.</p>
         )}
+        <button className="dl-link dl-link--14 dl-start">Show more numbers</button>
       </div>
 
-      {selected && (
-        <button className="dl-btn dl-btn--primary dl-btn--lg" style={{ alignSelf: 'flex-start' }}
-          onClick={() => navigate('/setup')}>
-          <Icon name="i-check" size={16} />
-          Get {selected}
-        </button>
-      )}
+      <aside className="dl-side">
+        <div className="dl-darkcard dl-darkcard--lg">
+          <div className="dl-hero-eyebrow">YOUR NEW NUMBER</div>
+          <div className="dl-darkcard-num dl-num">{chosen}</div>
+          <div className="dl-darkcard-sub">{city}</div>
+          <div className="dl-darkcard-list">
+            <span><Icon name="i-call" size={17} />Leads see this number when you call</span>
+            <span><Icon name="i-history" size={17} />They can call you back on it</span>
+          </div>
+        </div>
+        <div className="dl-sumcard">
+          <div className="dl-price"><span className="dl-muted">Number, monthly</span><b>{formatUsd(MONTHLY)}</b></div>
+          <div className="dl-price"><span className="dl-muted">Balance now</span><b>{formatUsd(BALANCE_NOW)}</b></div>
+          <div className="dl-price dl-price--total"><span>Balance after</span><b>{formatUsd(BALANCE_NOW - MONTHLY)}</b></div>
+          <button className="dl-btn dl-btn--primary dl-btn--lg dl-btn--block" onClick={() => navigate('/leads/upload?from=setup')}>Rent for {formatUsd(MONTHLY)}</button>
+          <span className="dl-fine">Renews every month from your balance on the same date. You can rent as many numbers as you need, $1.50 each. Cancel any one in Numbers. You keep it until the end of the month you paid for.</span>
+        </div>
+      </aside>
     </div>
   );
 }

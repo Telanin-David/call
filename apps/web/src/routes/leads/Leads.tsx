@@ -1,95 +1,60 @@
 import { useNavigate } from 'react-router-dom';
 import Icon from '@/components/Icon';
 
-const LISTS = [
-  { name: 'Lagos CEOs Q4', script: 'Main pitch', total: 250, done: 87, status: 'active' },
-  { name: 'Abuja Finance Leads', script: 'Finance pitch', total: 180, done: 180, status: 'done' },
-  { name: 'Accra Import-Export', script: 'Trade pitch', total: 320, done: 0, status: 'new' },
-  { name: 'Nairobi Tech Startups', script: 'Tech pitch', total: 95, done: 12, status: 'active' },
-  { name: 'US Real Estate PMs', script: 'RE pitch', total: 400, done: 67, status: 'active' },
-];
+type Status = 'active' | 'done' | 'new' | 'abroad';
 
-const STATUS_PILL: Record<string, string> = {
-  active: 'dl-pill--brand',
-  done: '',
-  new: 'dl-pill--warn',
+const STATUS: Record<Status, { label: string; pill: string }> = {
+  active: { label: 'In use', pill: 'dl-pill dl-pill--brand' },
+  done: { label: 'Done', pill: 'dl-pill' },
+  new: { label: 'Not started', pill: 'dl-pill dl-pill--warn' },
+  abroad: { label: 'Outside US and Canada', pill: 'dl-pill' },
 };
-const STATUS_LABEL: Record<string, string> = {
-  active: 'In use',
-  done: 'Done',
-  new: 'Not started',
-};
+
+const LISTS: { name: string; total: number; called: number; followups: number; script: string; status: Status }[] = [
+  { name: 'October leads', total: 42, called: 5, followups: 5, script: 'Office cleaning v2', status: 'active' },
+  { name: 'September follow-up list', total: 120, called: 120, followups: 9, script: 'Office cleaning v2', status: 'done' },
+  { name: 'Dental offices NY', total: 64, called: 0, followups: 0, script: 'Office cleaning v1', status: 'new' },
+  { name: 'UK and Ghana numbers', total: 2, called: 0, followups: 0, script: 'Office cleaning v2', status: 'abroad' },
+];
 
 export default function Leads() {
   const navigate = useNavigate();
-
   return (
-    <div className="dl-page">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 className="dl-title">Leads</h1>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button className="dl-btn dl-btn--outline" onClick={() => navigate('/scripts')}>
-            <Icon name="i-note" size={15} />
-            Edit scripts
-          </button>
-          <button className="dl-btn dl-btn--primary" onClick={() => navigate('/leads/upload')}>
-            <Icon name="i-upload" size={15} />
-            Upload a list
-          </button>
+    <div className="dl-wrap dl-wrap--wide">
+      <div className="dl-pagehead dl-pagehead--12">
+        <div className="dl-grow">
+          <h1 className="dl-h1">Leads</h1>
+          <p className="dl-lede">Your lead lists. Each list uses one script.</p>
         </div>
+        <button className="dl-btn dl-btn--outline dl-btn--lg" onClick={() => navigate('/scripts')}><Icon name="i-file" size={17} />Edit scripts</button>
+        <button className="dl-btn dl-btn--primary dl-btn--lg" onClick={() => navigate('/leads/upload')}><Icon name="i-upload" size={17} />Upload a list</button>
       </div>
 
-      <div className="dl-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <table className="dl-table">
-          <thead>
-            <tr>
-              <th>LIST</th>
-              <th>SCRIPT</th>
-              <th>PROGRESS</th>
-              <th>STATUS</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {LISTS.map(l => {
-              const pct = Math.round((l.done / l.total) * 100);
-              return (
-                <tr key={l.name}>
-                  <td>
-                    <div style={{ fontWeight: 600 }}>{l.name}</div>
-                    <span className="sub">{l.total.toLocaleString()} leads</span>
-                  </td>
-                  <td>{l.script}</td>
-                  <td style={{ width: 200 }}>
-                    <div style={{ marginBottom: 4, display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--muted)' }}>
-                      <span>{l.done} / {l.total}</span>
-                      <span>{pct}%</span>
-                    </div>
-                    <div className="dl-progress">
-                      <span style={{ width: `${pct}%` }} />
-                    </div>
-                  </td>
-                  <td>
-                    <span className={`dl-pill ${STATUS_PILL[l.status]}`}>{STATUS_LABEL[l.status]}</span>
-                  </td>
-                  <td>
-                    <button className="dl-btn" style={{ height: 32, padding: '0 12px', fontSize: 13 }}
-                      onClick={() => navigate('/call/1')}>
-                      <Icon name="i-call" size={13} />
-                      Call
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        <div style={{ padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-          <span className="dl-small dl-muted">
-            Numbers on the DNC list are skipped automatically. Your leads see "Skipped (DNC)".
-          </span>
-        </div>
+      <div className="dl-list dl-list--leads">
+        <div className="dl-list-row dl-list-head"><span>List</span><span>Script</span><span>Progress</span><span>Status</span><span /></div>
+        {LISTS.map(l => {
+          const left = l.total - l.called;
+          return (
+            <div key={l.name} className="dl-list-row">
+              <div className="dl-who">
+                <span className={`dl-tile ${l.status === 'active' ? 't-orange' : 't-grey'}`}><Icon name="i-list" /></span>
+                <div><b>{l.name}</b><p>{l.total} leads · {l.followups} follow-ups</p></div>
+              </div>
+              <span className="dl-note">{l.script}</span>
+              <div className="dl-meter2">
+                <div><span>{l.called} called</span><b>{left} left</b></div>
+                <div className="dl-bar6"><i style={{ width: `${Math.round((l.called / l.total) * 100)}%` }} /></div>
+              </div>
+              <span className={STATUS[l.status].pill}>{STATUS[l.status].label}</span>
+              {l.status === 'done'
+                ? <button className="dl-btn dl-btn--outline dl-btn--38">Open</button>
+                : <button className="dl-btn dl-btn--primary dl-btn--38" onClick={() => navigate('/call')}>Call list</button>}
+            </div>
+          );
+        })}
       </div>
+
+      <p className="dl-footnote"><Icon name="i-ban" size={15} />Numbers on the do-not-call list are removed when you upload, and you're never charged for them.</p>
     </div>
   );
 }
