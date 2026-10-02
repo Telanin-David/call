@@ -22,6 +22,12 @@ dist/
 out/
 build/
 
+# TypeScript build artifacts
+*.tsbuildinfo
+vite.config.d.ts
+vite.config.js
+apps/web/src/**/*.js
+
 # Editor
 .vscode/
 .idea/
