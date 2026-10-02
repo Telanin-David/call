@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dial screen, on a call</title>
+<link rel="stylesheet" href="dialer.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Geist+Mono:wght@500;600&amp;display=swap">
+<style>body{margin:0}</style>
+</helmet>
+<div class="dl" data-theme="light" style="width:1440px;height:900px;display:flex;flex-direction:column;position:relative">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<symbol id="i-up" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12"></path><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"></path></g></symbol>
+<symbol id="i-down" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2"></path><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"></path></g></symbol>
+<symbol id="i-callback" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"></path><path d="M16 2v4"></path><path d="M8 2v4"></path><path d="M3 10h5"></path><path d="M17.5 17.5 16 16.3V14"></path><circle cx="16" cy="16" r="6"></circle></g></symbol>
+<symbol id="i-missed" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2l-6 6M16 2l6 6"></path><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></g></symbol>
+<symbol id="i-wrong" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M17 8l5 5M22 8l-5 5"></path></g></symbol>
+<symbol id="i-ban" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m4.9 4.9 14.2 14.2"></path></g></symbol>
+<symbol id="i-hangup" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"></path><path d="M22 2 2 22"></path></g></symbol>
+<symbol id="i-mic" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><path d="M12 19v3"></path></g></symbol>
+<symbol id="i-panel" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M9 3v18"></path><path d="m16 15-3-3 3-3"></path></g></symbol>
+<symbol id="i-phone" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2"></rect><path d="M12 18h.01"></path></g></symbol>
+<symbol id="i-pause" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="14" y="4" width="4" height="16" rx="1"></rect><rect x="6" y="4" width="4" height="16" rx="1"></rect></g></symbol>
+<symbol id="i-skip" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l10 8-10 8z"></path><path d="M19 5v14"></path></g></symbol>
+<symbol id="i-building" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"></path><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"></path><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"></path><path d="M10 6h4M10 10h4M10 14h4M10 18h4"></path></g></symbol>
+<symbol id="i-call" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></g></symbol>
+<symbol id="i-mail" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></g></symbol>
+<symbol id="i-pin" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path><circle cx="12" cy="10" r="3"></circle></g></symbol>
+<symbol id="i-globe" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></g></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></g></symbol>
+<symbol id="i-history" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M12 7v5l4 2"></path></g></symbol>
+<symbol id="i-note" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"></path><path d="M15 3v6h6"></path></g></symbol>
+<symbol id="i-laptop" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"></path></g></symbol>
+<symbol id="i-speaker" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"></path><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></g></symbol>
+<symbol id="i-qr" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="5" height="5" x="3" y="3" rx="1"></rect><rect width="5" height="5" x="16" y="3" rx="1"></rect><rect width="5" height="5" x="3" y="16" rx="1"></rect><path d="M21 16h-3a2 2 0 0 0-2 2v3"></path><path d="M21 21v.01"></path><path d="M12 7v3a2 2 0 0 1-2 2H7"></path><path d="M3 12h.01M12 3h.01M12 16v.01M16 12h1M21 12v.01M12 21v-1"></path></g></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"></path></g></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></g></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></g></symbol>
+<symbol id="i-headset" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"></path></g></symbol>
+</svg>
+
+<header class="dl-topbar">
+<span class="dl-brand"><span class="dl-brand-mark"></span>Dialer</span>
+<nav class="dl-nav" aria-label="Main"><a href="#">Today</a><a href="#" aria-current="page">Calling</a><a href="#">Follow-ups</a><a href="#">Leads</a><a href="#">History</a></nav>
+<span style="flex:1"></span>
+<button class="dl-device" aria-label="Talking on your phone, Pixel 6a. Good signal"><span class="ico"><svg class="ic-sm"><use href="#i-phone"></use></svg></span><span>Talking on your phone<small>Pixel 6a · good signal</small></span><span class="dl-signal dl-signal--good" style="margin-left:4px"><i></i><i></i><i></i></span></button>
+<span class="dl-pill dl-pill--brand" style="height:28px">Starter</span><div class="dl-money"><b>$24.51</b><span>Balance</span></div>
+<button class="dl-btn dl-btn--outline">Top up</button>
+<span class="dl-avatar">TB</span>
+</header>
+
+<div style="flex:1;display:grid;grid-template-columns:288px minmax(0,1fr) 380px;min-height:0">
+
+<aside style="border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column;gap:2px" aria-label="Queue">
+<div style="display:flex;align-items:center;gap:8px;padding:4px 4px 12px 12px"><span class="dl-label" style="flex:1">UP NEXT <span class="dl-muted" style="font-weight:400">40 left</span></span><button class="dl-iconbtn" aria-label="Close queue"><svg class="ic"><use href="#i-panel"></use></svg></button></div>
+<button class="dl-q2 is-done" style="border:0;width:100%;background-color:transparent;text-align:left;font-family:inherit;color:inherit;cursor:pointer"><span class="av dl-av-e">TA</span><div style="flex:1;min-width:0"><div class="nm">Tom Allen</div><div class="sm">No answer</div></div></button>
+<button class="dl-q2 is-done" style="border:0;width:100%;background-color:transparent;text-align:left;font-family:inherit;color:inherit;cursor:pointer"><span class="av dl-av-a">AO</span><div style="flex:1;min-width:0"><div class="nm">Ada Obi</div><div class="sm">Call back tomorrow</div></div></button>
+<button class="dl-q2 is-current" style="border:0;width:100%;text-align:left;font-family:inherit;color:inherit;cursor:pointer"><span class="av">LP</span><div style="flex:1;min-width:0"><div class="nm">Lena Park</div><div class="sm">On call now</div></div><span class="dl-dot dl-dot--ok"></span></button>
+<button class="dl-q2 is-open" style="border:0;width:100%;text-align:left;font-family:inherit;color:inherit;cursor:pointer" aria-expanded="true"><span class="av dl-av-b">MR</span><div style="flex:1;min-width:0"><div class="nm">Mark Reyes</div><div class="sm">Reyes Home Care · 2:14 pm</div></div></button>
+<button class="dl-q2" style="border:0;width:100%;background-color:transparent;text-align:left;font-family:inherit;color:inherit;cursor:pointer"><span class="av dl-av-d">RD</span><div style="flex:1;min-width:0"><div class="nm">Rosa Diaz</div><div class="sm">Diaz Maids · 3:14 pm</div></div></button>
+<button class="dl-q2" style="border:0;width:100%;background-color:transparent;text-align:left;font-family:inherit;color:inherit;cursor:pointer"><span class="av dl-av-a">KM</span><div style="flex:1;min-width:0"><div class="nm">Kwame Mensah</div><div class="sm">Mensah Facility · 3:14 pm</div></div></button>
+<button class="dl-q2" style="border:0;width:100%;background-color:transparent;text-align:left;font-family:inherit;color:inherit;cursor:pointer"><span class="av dl-av-e">JM</span><div style="flex:1;min-width:0"><div class="nm">Jade Moore</div><div class="sm">Moore Cleaning · 12:14 pm</div></div></button>
+<button class="dl-q2" style="border:0;width:100%;background-color:transparent;text-align:left;font-family:inherit;color:inherit;cursor:pointer"><span class="av dl-av-c">BO</span><div style="flex:1;min-width:0"><div class="nm">Ben Ortiz</div><div class="sm">Ortiz Pro Clean · 3:14 pm</div></div></button>
+<span style="flex:1"></span>
+<div class="dl-meter" style="padding:12px"><div class="dl-meter-row"><span class="dl-muted">Dials today</span><b class="dl-num">86 of 120</b></div><div class="dl-progress"><span style="width:72%"></span></div></div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"><button class="dl-btn"><svg class="ic-sm"><use href="#i-pause"></use></svg>Pause</button><button class="dl-btn"><svg class="ic-sm"><use href="#i-skip"></use></svg>Skip</button></div>
+</aside>
+
+<main style="padding:24px 32px;display:flex;flex-direction:column;gap:16px;min-height:0;background:var(--surface-sunk)">
+<div class="dl-card" style="padding:20px 22px;display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:center;gap:14px">
+<span class="dl-avlg dl-av-c" style="width:52px;height:52px">LP</span>
+<div style="flex:1"><h1 class="dl-lead-name" style="font-size:26px;line-height:32px">Lena Park</h1><p class="dl-muted dl-small" style="margin-top:2px">Office Manager, Sparkle Offices</p></div>
+<span class="dl-pill dl-pill--success"><svg class="ic-sm" style="width:14px;height:14px"><use href="#i-up"></use></svg>Interested last time</span>
+<span class="dl-pill">3rd call</span>
+</div>
+<div class="dl-facts">
+<div class="dl-fact"><span><svg class="ic-sm"><use href="#i-call"></use></svg>Phone</span><b>+1 (646) 555-0110</b></div>
+<div class="dl-fact"><span><svg class="ic-sm"><use href="#i-mail"></use></svg>Email</span><b>lena@sparkleoffices.com</b></div>
+<div class="dl-fact"><span><svg class="ic-sm"><use href="#i-pin"></use></svg>Location</span><b>Brooklyn, New York</b></div>
+<div class="dl-fact"><span><svg class="ic-sm"><use href="#i-building"></use></svg>Company</span><b>Office cleaning, 3 sites</b></div>
+<div class="dl-fact"><span><svg class="ic-sm"><use href="#i-globe"></use></svg>Website</span><b>sparkleoffices.com</b></div>
+<div class="dl-fact"><span><svg class="ic-sm"><use href="#i-list"></use></svg>List</span><b>October leads</b></div>
+</div>
+<div class="dl-conclusion" style="background:var(--warn-soft)"><svg class="ic-sm" style="color:var(--warn-ink);margin-top:2px"><use href="#i-history"></use></svg><b style="color:var(--warn-ink)">Last call, 24 Sep</b><span>Asked for a call after 3 pm her time. Uses another cleaner now, not happy with Fridays.</span></div>
+</div>
+
+<div class="dl-paper" style="flex:1;min-height:0">
+<div style="display:flex;align-items:center;gap:6px;margin-bottom:18px"><span class="dl-label" style="flex:1">YOUR SCRIPT · OFFICE CLEANING V2</span><button class="dl-btn dl-btn--quiet" style="height:32px;padding:0 10px">Edit</button><button class="dl-iconbtn" aria-label="Smaller text">A-</button><button class="dl-iconbtn" aria-label="Bigger text">A+</button></div>
+<div class="dl-sc">
+<h4>Opening</h4>
+<p>Hi <span class="dl-merge">Lena</span>, this is Tunde from Bright Clean. I know I'm calling out of the blue, so I'll be quick. Do you have 30 seconds?</p>
+<h4>Why I'm calling</h4>
+<p>We clean offices across New York for teams like <span class="dl-merge">Sparkle Offices</span>. Most of our clients came to us after their old cleaner kept missing days.</p>
+<h4>Question</h4>
+<p>How is cleaning going across your <span class="dl-merge">3 sites</span> right now?</p>
+<h4>If she says "send me an email"</h4>
+<p>Sure. What's the best email? Can I call Thursday to walk you through it?</p>
+<h4>Close</h4>
+<p>Can we book 15 minutes on Thursday at 10 am your time?</p>
+</div>
+</div>
+</main>
+
+<section style="border-left:1px solid var(--line);padding:20px;display:flex;flex-direction:column;gap:14px" aria-label="Call">
+<div class="dl-callcard">
+<div style="display:flex;align-items:center;justify-content:space-between"><span class="lv"><span class="dl-dot dl-dot--ok dl-dot--pulse"></span>CONNECTED</span><span class="rec" style="color:#a1a1aa"><svg width="13" height="13" style="flex:none;color:#a1a1aa"><use href="#i-lock"></use></svg>Not recorded · Pro</span></div>
+<div class="tm">02:14</div>
+<div class="row"><div><span>Her time</span><b>3:14 pm</b></div><div><span>Your time</span><b>8:14 pm</b></div><div class="hot"><span>This call</span><b>$0.045</b></div></div>
+<div class="dev"><span class="ico"><svg class="ic"><use href="#i-phone"></use></svg></span><div><b>Your phone</b><span>Mic and speaker · Pixel 6a</span></div><span class="bat">64%</span></div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+<button class="dl-btn dl-btn--lg dl-btn--outline"><svg class="ic"><use href="#i-mic"></use></svg>Mute<span class="dl-kbd">M</span></button>
+<button class="dl-btn dl-btn--lg dl-btn--danger"><svg class="ic"><use href="#i-hangup"></use></svg>Hang up<span class="dl-kbd">H</span></button>
+</div>
+<span class="dl-label" style="margin-top:4px">HOW DID IT GO? <span style="font-weight:400">Keys 1 to 6</span></span>
+<div class="dl-otiles">
+<button class="dl-otile"><span class="t t-mint"><svg class="ic"><use href="#i-up"></use></svg></span>Interested</button>
+<button class="dl-otile" aria-pressed="true"><span class="t t-orange"><svg class="ic"><use href="#i-callback"></use></svg></span>Call back</button>
+<button class="dl-otile"><span class="t t-grey"><svg class="ic"><use href="#i-down"></use></svg></span>Not interested</button>
+<button class="dl-otile"><span class="t t-lemon"><svg class="ic"><use href="#i-missed"></use></svg></span>No answer</button>
+<button class="dl-otile"><span class="t t-grey"><svg class="ic"><use href="#i-wrong"></use></svg></span>Wrong number</button>
+<button class="dl-otile"><span class="t t-red"><svg class="ic"><use href="#i-ban"></use></svg></span>Do not call</button>
+</div>
+<span class="dl-label" style="margin-top:2px">CALL BACK WHEN?</span>
+<div class="dl-chiprow" style="flex-wrap:nowrap;gap:6px"><button class="dl-chip" style="padding:0 12px" aria-pressed="true">Tomorrow</button><button class="dl-chip" style="padding:0 12px">In 3 days</button><button class="dl-chip" style="padding:0 12px">Next week</button><button class="dl-chip" style="padding:0;width:40px;justify-content:center" aria-label="Pick a date"><svg class="ic-sm"><use href="#i-callback"></use></svg></button></div>
+</section>
+</div>
+<div class="dl-pop" style="left:296px;top:262px" role="dialog" aria-label="Mark Reyes">
+<div style="display:flex;align-items:center;gap:12px"><span class="dl-avlg dl-av-b" style="width:40px;height:40px;font-size:14px">MR</span><div style="flex:1"><b style="font-weight:600">Mark Reyes</b><div class="dl-mini">Owner, Reyes Home Care</div></div><span class="dl-pill">Next</span></div>
+<div class="kv"><span>Phone</span><b style="font-weight:500">+1 (312) 555-0172</b><span>His time</span><b style="font-weight:500">2:14 pm, Chicago</b><span>Calls so far</span><b style="font-weight:500">2</b><span>Last time</span><b style="font-weight:500">No answer, 28 Sep</b></div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"><button class="dl-btn">Skip him</button><button class="dl-btn dl-btn--outline">Call next</button></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

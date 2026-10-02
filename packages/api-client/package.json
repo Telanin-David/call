@@ -1,0 +1,12 @@
+{
+  "name": "@dialer/api-client",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./src/index.ts",
+  "scripts": {
+    "generate": "openapi-typescript ../../api/openapi.yaml -o src/schema.d.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.0.0"
+  }
+}

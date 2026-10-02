@@ -1,0 +1,1300 @@
+openapi: "3.1.0"
+info:
+  title: Dialer API
+  version: "0.1.0"
+  description: |
+    Single API contract for the Dialer sales dialer.
+    All routes require a session cookie except /auth/signup, /auth/signin, and /auth/confirm.
+servers:
+  - url: http://localhost:8080
+    description: Local dev
+  - url: https://api.dialer.app
+    description: Production
+
+tags:
+  - name: auth
+    description: Sign up, confirm, sign in, sign out, reset password
+  - name: me
+    description: Profile, settings, today's limits
+  - name: plans
+    description: Compare, upgrade, move to Free
+  - name: wallet
+    description: Balance, activity, statement, top-ups
+  - name: numbers
+    description: Search, rent, cancel, set default
+  - name: lists
+    description: Lead lists
+  - name: leads
+    description: Leads within a list
+  - name: imports
+    description: CSV upload, column matching, check, add
+  - name: scripts
+    description: Rep scripts
+  - name: calls
+    description: Call lifecycle
+  - name: dialer
+    description: Auto-dial engine
+  - name: followups
+    description: Follow-up tasks
+  - name: history
+    description: Call log
+  - name: recordings
+    description: Call recordings (Pro)
+  - name: kyc
+    description: ID and face check
+  - name: pairing
+    description: Phone–laptop pairing via QR code
+  - name: admin
+    description: Admin console endpoints
+  - name: webhooks
+    description: Inbound webhooks from providers
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  version:
+                    type: string
+
+  /auth/signup:
+    post:
+      tags: [auth]
+      summary: Create a new account
+      operationId: authSignup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignupRequest"
+      responses:
+        "201":
+          description: Account created; confirmation email and SMS sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /auth/confirm:
+    post:
+      tags: [auth]
+      summary: Confirm email and phone with codes
+      operationId: authConfirm
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmRequest"
+      responses:
+        "200":
+          description: Confirmed; session cookie set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /auth/signin:
+    post:
+      tags: [auth]
+      summary: Sign in
+      operationId: authSignin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SigninRequest"
+      responses:
+        "200":
+          description: Signed in; session cookie set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/signout:
+    post:
+      tags: [auth]
+      summary: Sign out; clears session cookie
+      operationId: authSignout
+      responses:
+        "204":
+          description: Signed out
+
+  /auth/forgot:
+    post:
+      tags: [auth]
+      summary: Request a password reset code
+      operationId: authForgot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "204":
+          description: Code sent if account exists
+
+  /auth/reset:
+    post:
+      tags: [auth]
+      summary: Set a new password using the reset code
+      operationId: authReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                code:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "204":
+          description: Password updated
+
+  /me:
+    get:
+      tags: [me]
+      summary: Get own profile and today's limits
+      operationId: getMe
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /me/settings:
+    patch:
+      tags: [me]
+      summary: Update settings (timezone, country, etc.)
+      operationId: updateSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+
+  /plans:
+    get:
+      tags: [plans]
+      summary: List all plans
+      operationId: listPlans
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  plans:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Plan"
+
+  /subscription:
+    get:
+      tags: [plans]
+      summary: Get current subscription
+      operationId: getSubscription
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+
+    post:
+      tags: [plans]
+      summary: Upgrade or downgrade plan
+      operationId: changeSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan_id]
+              properties:
+                plan_id:
+                  type: string
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+        "402":
+          $ref: "#/components/responses/PaymentRequired"
+
+  /wallet:
+    get:
+      tags: [wallet]
+      summary: Get wallet balance and recent activity
+      operationId: getWallet
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletResponse"
+
+  /wallet/topups:
+    post:
+      tags: [wallet]
+      summary: Initiate a top-up via Paystack or Stripe
+      operationId: initiateTopup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TopupRequest"
+      responses:
+        "200":
+          description: Payment URL returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopupResponse"
+
+  /numbers:
+    get:
+      tags: [numbers]
+      summary: Search available numbers by area code
+      operationId: searchNumbers
+      parameters:
+        - name: area_code
+          in: query
+          schema:
+            type: string
+        - name: country
+          in: query
+          schema:
+            type: string
+            default: US
+      responses:
+        "200":
+          description: Available numbers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  numbers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AvailableNumber"
+
+  /numbers/mine:
+    get:
+      tags: [numbers]
+      summary: List rented numbers
+      operationId: listMyNumbers
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  numbers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RentedNumber"
+
+  /numbers/{numberId}:
+    delete:
+      tags: [numbers]
+      summary: Cancel a rented number
+      operationId: cancelNumber
+      parameters:
+        - name: numberId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Cancelled
+
+  /numbers/{numberId}/default:
+    put:
+      tags: [numbers]
+      summary: Set as default outbound number
+      operationId: setDefaultNumber
+      parameters:
+        - name: numberId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Default set
+
+  /lists:
+    get:
+      tags: [lists]
+      summary: List all lead lists
+      operationId: listLeadLists
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lists:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LeadList"
+    post:
+      tags: [lists]
+      summary: Create a lead list
+      operationId: createLeadList
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadList"
+
+  /lists/{listId}/imports:
+    post:
+      tags: [imports]
+      summary: Upload a CSV and get column mapping suggestions
+      operationId: uploadCSV
+      parameters:
+        - name: listId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Import preview with column mapping
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportPreview"
+
+  /lists/{listId}/imports/{importId}/confirm:
+    post:
+      tags: [imports]
+      summary: Confirm column mapping and import leads
+      operationId: confirmImport
+      parameters:
+        - name: listId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: importId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ColumnMapping"
+      responses:
+        "202":
+          description: Import started
+
+  /scripts:
+    get:
+      tags: [scripts]
+      summary: List scripts
+      operationId: listScripts
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scripts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Script"
+    post:
+      tags: [scripts]
+      summary: Create a script
+      operationId: createScript
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScriptRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Script"
+
+  /calls:
+    post:
+      tags: [calls]
+      summary: Start a call
+      operationId: startCall
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartCallRequest"
+      responses:
+        "200":
+          description: Call started; includes short-lived Telnyx token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StartCallResponse"
+        "402":
+          $ref: "#/components/responses/PaymentRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /calls/{callId}/outcome:
+    post:
+      tags: [calls]
+      summary: Save call outcome
+      operationId: saveOutcome
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OutcomeRequest"
+      responses:
+        "204":
+          description: Saved
+
+  /calls/{callId}/end:
+    post:
+      tags: [calls]
+      summary: End a call early
+      operationId: endCall
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Ended
+
+  /dialer/start:
+    post:
+      tags: [dialer]
+      summary: Start auto-dial session (Starter/Pro)
+      operationId: startDialer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [list_id]
+              properties:
+                list_id:
+                  type: string
+                  format: uuid
+      responses:
+        "204":
+          description: Session started
+
+  /dialer/pause:
+    post:
+      tags: [dialer]
+      summary: Pause auto-dial
+      operationId: pauseDialer
+      responses:
+        "204":
+          description: Paused
+
+  /dialer/skip:
+    post:
+      tags: [dialer]
+      summary: Skip current lead
+      operationId: skipDialer
+      responses:
+        "204":
+          description: Skipped
+
+  /dialer/stop:
+    post:
+      tags: [dialer]
+      summary: Stop auto-dial session
+      operationId: stopDialer
+      responses:
+        "204":
+          description: Stopped
+
+  /followups:
+    get:
+      tags: [followups]
+      summary: List follow-ups (today, tomorrow, later)
+      operationId: listFollowups
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  followups:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Followup"
+
+  /history:
+    get:
+      tags: [history]
+      summary: Full call log
+      operationId: listHistory
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 25
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HistoryResponse"
+
+  /recordings/{callId}:
+    get:
+      tags: [recordings]
+      summary: Get recording metadata (Pro)
+      operationId: getRecording
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Recording"
+
+  /kyc:
+    post:
+      tags: [kyc]
+      summary: Start ID and face check
+      operationId: startKyc
+      responses:
+        "200":
+          description: Smile ID session URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+
+    get:
+      tags: [kyc]
+      summary: Get KYC status
+      operationId: getKycStatus
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KycStatus"
+
+  /pairing:
+    post:
+      tags: [pairing]
+      summary: Create a QR pairing code (laptop side)
+      operationId: createPairing
+      responses:
+        "200":
+          description: One-time code (5 min TTL)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  qr_url:
+                    type: string
+                  expires_at:
+                    type: string
+                    format: date-time
+
+  /pairing/join:
+    post:
+      tags: [pairing]
+      summary: Join as phone audio leg using pairing code
+      operationId: joinPairing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+      responses:
+        "200":
+          description: Joined; Telnyx WebRTC token for phone leg
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+
+  /webhooks/telnyx:
+    post:
+      tags: [webhooks]
+      summary: Telnyx call events webhook
+      operationId: telnyxWebhook
+      responses:
+        "200":
+          description: Acknowledged
+
+  /webhooks/paystack:
+    post:
+      tags: [webhooks]
+      summary: Paystack payment webhook
+      operationId: paystackWebhook
+      responses:
+        "200":
+          description: Acknowledged
+
+  /webhooks/stripe:
+    post:
+      tags: [webhooks]
+      summary: Stripe payment webhook
+      operationId: stripeWebhook
+      responses:
+        "200":
+          description: Acknowledged
+
+  /webhooks/smileid:
+    post:
+      tags: [webhooks]
+      summary: Smile ID result webhook
+      operationId: smileidWebhook
+      responses:
+        "200":
+          description: Acknowledged
+
+  /admin/users:
+    get:
+      tags: [admin]
+      summary: List users
+      operationId: adminListUsers
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+      responses:
+        "200":
+          description: OK
+
+  /admin/kyc:
+    get:
+      tags: [admin]
+      summary: List pending KYC checks
+      operationId: adminListKyc
+      responses:
+        "200":
+          description: OK
+
+components:
+  schemas:
+    SignupRequest:
+      type: object
+      required: [name, email, phone, password, country]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          description: E.164 format
+        password:
+          type: string
+          minLength: 8
+        country:
+          type: string
+          description: ISO 3166-1 alpha-2
+
+    ConfirmRequest:
+      type: object
+      required: [email_code, phone_code]
+      properties:
+        email_code:
+          type: string
+        phone_code:
+          type: string
+
+    SigninRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    AuthResponse:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+        confirmed:
+          type: boolean
+        plan:
+          type: string
+
+    MeResponse:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        country:
+          type: string
+        timezone:
+          type: string
+        plan:
+          type: string
+        dials_today:
+          type: integer
+        dials_limit:
+          type: integer
+        kyc_status:
+          type: string
+          enum: [none, pending, approved, rejected]
+        balance_usd:
+          type: number
+          description: Display only — ledger stores micro-dollars
+
+    SettingsRequest:
+      type: object
+      properties:
+        timezone:
+          type: string
+        country:
+          type: string
+
+    Plan:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          enum: [free, starter, pro]
+        monthly_fee_usd:
+          type: number
+        intro_months:
+          type: integer
+        intro_fee_usd:
+          type: number
+        call_rate_multiplier:
+          type: number
+        dials_per_day:
+          type: integer
+          nullable: true
+        features:
+          type: array
+          items:
+            type: string
+
+    Subscription:
+      type: object
+      properties:
+        plan_id:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        intro_ends_at:
+          type: string
+          format: date-time
+          nullable: true
+        next_renewal:
+          type: string
+          format: date
+
+    WalletResponse:
+      type: object
+      properties:
+        balance_microdollars:
+          type: integer
+          format: int64
+        balance_usd:
+          type: number
+        activity:
+          type: array
+          items:
+            $ref: "#/components/schemas/LedgerEntry"
+
+    LedgerEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [topup, call, hold, release, number, plan, refund]
+        amount_microdollars:
+          type: integer
+          format: int64
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    TopupRequest:
+      type: object
+      required: [amount_usd, provider]
+      properties:
+        amount_usd:
+          type: number
+          minimum: 5
+        provider:
+          type: string
+          enum: [paystack, stripe]
+
+    TopupResponse:
+      type: object
+      properties:
+        payment_url:
+          type: string
+        reference:
+          type: string
+
+    AvailableNumber:
+      type: object
+      properties:
+        number:
+          type: string
+        area_code:
+          type: string
+        city:
+          type: string
+        monthly_price_usd:
+          type: number
+
+    RentedNumber:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: string
+        city:
+          type: string
+        is_default:
+          type: boolean
+        monthly_price_usd:
+          type: number
+        renews_at:
+          type: string
+          format: date
+
+    LeadList:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        lead_count:
+          type: integer
+        called_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    ImportPreview:
+      type: object
+      properties:
+        import_id:
+          type: string
+          format: uuid
+        row_count:
+          type: integer
+        columns:
+          type: array
+          items:
+            type: string
+        suggestions:
+          type: object
+          description: Suggested column→field mapping
+        duplicates:
+          type: integer
+        dnc_hits:
+          type: integer
+
+    ColumnMapping:
+      type: object
+      properties:
+        phone:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        company:
+          type: string
+        city:
+          type: string
+        timezone:
+          type: string
+
+    Script:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        parts:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              body:
+                type: string
+
+    ScriptRequest:
+      type: object
+      required: [name, parts]
+      properties:
+        name:
+          type: string
+        parts:
+          type: array
+          items:
+            type: object
+
+    StartCallRequest:
+      type: object
+      required: [lead_id, from_number_id]
+      properties:
+        lead_id:
+          type: string
+          format: uuid
+        from_number_id:
+          type: string
+          format: uuid
+        device:
+          type: string
+          enum: [laptop, phone, linked]
+          default: laptop
+
+    StartCallResponse:
+      type: object
+      properties:
+        call_id:
+          type: string
+          format: uuid
+        telnyx_token:
+          type: string
+        telnyx_call_id:
+          type: string
+
+    OutcomeRequest:
+      type: object
+      required: [outcome]
+      properties:
+        outcome:
+          type: string
+          enum: ["1", "2", "3", "4", "5", "6"]
+          description: "1=interested, 2=callback, 3=not interested, 4=voicemail, 5=no answer, 6=wrong number"
+        note:
+          type: string
+        followup_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    Followup:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        lead_id:
+          type: string
+          format: uuid
+        lead_name:
+          type: string
+        lead_phone:
+          type: string
+        due_at:
+          type: string
+          format: date-time
+        reason:
+          type: string
+
+    HistoryResponse:
+      type: object
+      properties:
+        calls:
+          type: array
+          items:
+            $ref: "#/components/schemas/CallRecord"
+        total:
+          type: integer
+        page:
+          type: integer
+
+    CallRecord:
+      type: object
+      properties:
+        call_id:
+          type: string
+          format: uuid
+        lead_name:
+          type: string
+        lead_phone:
+          type: string
+        from_number:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        seconds:
+          type: integer
+        cost_microdollars:
+          type: integer
+          format: int64
+        outcome:
+          type: string
+        note:
+          type: string
+
+    Recording:
+      type: object
+      properties:
+        call_id:
+          type: string
+          format: uuid
+        file_url:
+          type: string
+        seconds:
+          type: integer
+        transcript:
+          type: string
+          nullable: true
+        summary:
+          type: string
+          nullable: true
+        suggested_followup_at:
+          type: string
+          format: date
+          nullable: true
+
+    KycStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [none, pending, approved, rejected]
+        submitted_at:
+          type: string
+          format: date-time
+          nullable: true
+        result_at:
+          type: string
+          format: date-time
+          nullable: true
+        rejection_reason:
+          type: string
+          nullable: true
+
+  responses:
+    Unauthorized:
+      description: Not authenticated
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    Forbidden:
+      description: Plan limit or rule violation
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    PaymentRequired:
+      description: Insufficient balance
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    Conflict:
+      description: Resource already exists
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    ValidationError:
+      description: Request body validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+
+    ErrorBody:
+      description: Standard error wrapper
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              code:
+                type: string
+              fields:
+                type: object
+                additionalProperties:
+                  type: string

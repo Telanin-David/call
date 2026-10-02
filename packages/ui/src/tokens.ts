@@ -1,0 +1,11 @@
+export const brand = '#ff6b1a';
+export const brandHover = '#f25c0a';
+export const ink = '#111113';
+export const bg = '#ffffff';
+export const surface = '#ffffff';
+export const surfaceSunk = '#f6f6f4';
+export const muted = '#63636b';
+export const line = '#ececee';
+export const success = '#12b76a';
+export const danger = '#dc2626';
+export const warn = '#e2a100';

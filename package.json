@@ -1,0 +1,12 @@
+{
+  "name": "dialer",
+  "private": true,
+  "scripts": {
+    "dev": "docker compose -f infra/docker-compose.dev.yml up -d && concurrently \"cd services/api && go run ./cmd/api\" \"cd apps/web && pnpm dev\"",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

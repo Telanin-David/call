@@ -1,0 +1,39 @@
+# Environment files — never commit secrets
+.env
+.env.local
+.env.*.local
+services/api/.env
+
+# Go
+services/api/api
+services/api/dialer
+services/api/worker
+*.test
+
+# Node
+node_modules/
+apps/*/node_modules/
+packages/*/node_modules/
+apps/*/dist/
+.pnpm-store/
+
+# Build output
+dist/
+out/
+build/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker volumes (local dev)
+infra/.volumes/
+
+# Generated API client (regenerate with make gen)
+packages/api-client/src/schema.d.ts

@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "claude/**", "feat/**", "fix/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  go-lint:
+    name: Go lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: services/api/go.sum
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.62.2
+          working-directory: services/api
+
+  go-test:
+    name: Go test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: dialer_test
+          POSTGRES_USER: dialer
+          POSTGRES_PASSWORD: dialer
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      valkey:
+        image: valkey/valkey:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://dialer:dialer@localhost:5432/dialer_test?sslmode=disable
+      CACHE_URL: valkey://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: services/api/go.sum
+      - name: Run migrations
+        working-directory: services/api
+        run: go run github.com/pressly/goose/v3/cmd/goose@latest -dir migrations postgres "$DATABASE_URL" up
+      - name: Test
+        working-directory: services/api
+        run: go test -race -count=1 ./...
+
+  go-build:
+    name: Go build
+    runs-on: ubuntu-latest
+    needs: [go-lint, go-test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: services/api/go.sum
+      - name: Build all binaries
+        working-directory: services/api
+        run: |
+          CGO_ENABLED=0 go build ./cmd/api
+          CGO_ENABLED=0 go build ./cmd/dialer
+          CGO_ENABLED=0 go build ./cmd/worker
+
+  web-lint:
+    name: Web lint + typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @dialer/web run lint
+      - run: pnpm --filter @dialer/web exec tsc --noEmit
+
+  web-build:
+    name: Web build
+    runs-on: ubuntu-latest
+    needs: [web-lint]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @dialer/web build

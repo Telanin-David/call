@@ -1,0 +1,26 @@
+dialer.app {
+    encode gzip
+
+    # API
+    handle /api/* {
+        uri strip_prefix /api
+        reverse_proxy localhost:8080
+    }
+
+    # WebSocket
+    handle /ws {
+        reverse_proxy localhost:8080
+    }
+
+    # Webhooks (no path rewrite — providers send to the full path)
+    handle /webhooks/* {
+        reverse_proxy localhost:8080
+    }
+
+    # Frontend SPA
+    handle {
+        root * /var/www/dialer
+        try_files {path} /index.html
+        file_server
+    }
+}

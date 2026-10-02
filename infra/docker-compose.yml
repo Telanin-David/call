@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dialer
+      POSTGRES_USER: dialer
+      POSTGRES_PASSWORD: dialer
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dialer"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - valkey_data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ../services/api
+      dockerfile: ../../infra/Dockerfile.api
+    environment:
+      ENV: development
+      ADDR: :8080
+      DATABASE_URL: postgres://dialer:dialer@postgres:5432/dialer?sslmode=disable
+      CACHE_URL: valkey://valkey:6379
+      SESSION_KEY: dev-session-key-change-in-production
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    develop:
+      watch:
+        - action: rebuild
+          path: ../services/api
+
+  web:
+    build:
+      context: ../apps/web
+      dockerfile: ../../infra/Dockerfile.web
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
+volumes:
+  pg_data:
+  valkey_data:
