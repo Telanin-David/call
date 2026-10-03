@@ -174,6 +174,21 @@ export function useCallSession() {
 
   // Dev "Simulate" menu: open the matching state as soon as it's picked.
   useEffect(() => {
+    if (sim === 'oncall' || sim === 'wrapup') {
+      setPhase(sim === 'oncall' ? 'live' : 'wrapup');
+      setSeconds(sim === 'oncall' ? 134 : 252);
+      setOutcome(null);
+      setCallStatus(sim === 'oncall' ? 'answered' : 'idle');
+      setSim(null);
+    }
+    if (sim === 'pairing') {
+      if (!free) { setTalkVia('phone'); setPhoneLinked(false); setPhase('pairing'); }
+      setSim(null);
+    }
+    if (sim === 'upgrade') {
+      setUpgrade(free ? { to: 'starter', reason: 'Talk on your phone with Starter' } : { to: 'pro', reason: 'Recording is on Pro' });
+      setSim(null);
+    }
     if (isBlock(sim)) setBlockOpen(true);
     if (isProblem(sim) && sim !== 'mic' && phase !== 'live') {
       setPhase('live');

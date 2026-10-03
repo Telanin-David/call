@@ -206,3 +206,19 @@ describe('finished flows', () => {
     expect(screen.getByText('482 913')).toBeTruthy();
   });
 });
+
+describe('All screens page', () => {
+  afterEach(() => act(() => useSimStore.setState({ sim: null })));
+
+  it('opens a simulated state in the right plan with one click', async () => {
+    renderAt('/screens', 'starter');
+    fireEvent.click(await screen.findByRole('button', { name: /Upgrade to Starter/ }));
+    expect(await screen.findByRole('button', { name: 'Upgrade for $10.00' })).toBeTruthy();
+  });
+
+  it('opens Move to Free on the settings page', async () => {
+    renderAt('/screens', 'starter');
+    fireEvent.click(await screen.findByRole('button', { name: /Move to Free/ }));
+    expect(await screen.findByRole('dialog', { name: 'Move to Free on 1 Nov?' })).toBeTruthy();
+  });
+});

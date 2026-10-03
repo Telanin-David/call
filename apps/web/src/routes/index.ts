@@ -1,6 +1,7 @@
 import type { RouteObject } from 'react-router-dom';
 import { lazy } from 'react';
 import Root from '@/layouts/Root';
+import { DEV_TOOLS } from '@/lib/devtools';
 import AppLayout, { type ShellHandle } from '@/layouts/AppLayout';
 import { usd } from '@/lib/money';
 
@@ -26,6 +27,7 @@ const Rules = lazy(() => import('./rules/Rules'));
 const VerifyId = lazy(() => import('./verify/VerifyId'));
 const Recording = lazy(() => import('./history/Recording'));
 const LinkPhone = lazy(() => import('./link/LinkPhone'));
+const Screens = lazy(() => import('./screens/Screens'));
 
 const h = (handle: ShellHandle) => handle;
 
@@ -39,6 +41,7 @@ export const routes: RouteObject[] = [
       { path: '/confirm', Component: Confirm },
       { path: '/forgot', Component: Forgot },
       { path: '/link', Component: LinkPhone },
+      ...(DEV_TOOLS ? [{ path: '/screens', Component: Screens }] : []),
       { path: '/pair', Component: LinkPhone },
       {
         Component: AppLayout,
