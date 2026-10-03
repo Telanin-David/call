@@ -45,8 +45,8 @@ const CARD: Record<Plan, { card: string; check: string; base: string; note: stri
   pro: { card: 'bg-night text-white', check: 'text-sun', base: 'text-zinc-400', note: 'text-zinc-400', pill: 'lemon', pillClass: '', cta: 'lemon' },
 };
 
-const COLS = 'grid grid-cols-[minmax(0,1fr)_220px_220px_220px] items-center';
-const cell = 'flex justify-center font-semibold';
+const COLS = 'grid grid-cols-[minmax(0,1fr)_112px_112px_112px] items-center lg:grid-cols-[minmax(0,1fr)_220px_220px_220px]';
+const cell = 'flex justify-center px-2 text-center font-semibold';
 const hl = 'self-stretch items-center bg-brand-tint';
 
 function CellView({ value }: { value: Cell }) {
@@ -60,23 +60,23 @@ export default function ComparePlans() {
   const { plan: current, setPlan } = usePlan();
 
   return (
-    <Page className="gap-10 pb-16 pt-11">
+    <Page className="gap-8 pb-12 pt-6 lg:gap-10 lg:pb-16 lg:pt-11">
       <PageHeader size="xl" title="Pick your plan" back={<BackLink to="/call">Back to calling</BackLink>}
         lede="Free never ends. Every plan pays for calls from your balance, and the higher the plan, the less you pay a minute. Prices are in US dollars."
         className="gap-6"
         aside={<Note className="text-14"><Icon name="check" className="text-muted" /><span>Paid from your balance<br /><b className="tabular-nums">{formatUsd(BALANCE)} available</b></span></Note>} />
 
-      <div className="grid grid-cols-3 items-start gap-5">
+      <div className="grid items-start gap-4 lg:grid-cols-3 lg:gap-5">
         {PLANS.map(p => {
           const f = FEATURES[p];
           const c = CARD[p];
           return (
-            <section key={p} aria-label={`${PLAN_LABEL[p]} plan`} className={cn('relative flex flex-col gap-5 overflow-hidden rounded-3xl px-[26px] pb-6 pt-[26px]', c.card)}>
+            <section key={p} aria-label={`${PLAN_LABEL[p]} plan`} className={cn('relative flex flex-col gap-5 overflow-hidden rounded-3xl px-5 pb-6 pt-[22px] sm:px-[26px] sm:pt-[26px]', c.card)}>
               {p === 'pro' && <Blobs layout="plan" />}
               <div className="relative flex min-h-6 items-center"><Pill tone={c.pill} className={cn('font-bold', c.pillClass)}>{PLAN_LABEL[p]}</Pill></div>
               <div className="relative">
                 <div className="flex items-baseline gap-2">
-                  <b className="text-52 font-extrabold tracking-[-0.04em]">{formatUsd(FEE_INTRO[p]).replace('.00', '')}</b>
+                  <b className="text-44 font-extrabold tracking-[-0.04em] sm:text-52">{formatUsd(FEE_INTRO[p]).replace('.00', '')}</b>
                   <span className={cn('text-14', c.note)}>a month</span>
                 </div>
                 <p className={cn('mt-1 text-14', c.note)}>
@@ -99,29 +99,31 @@ export default function ComparePlans() {
 
       <section>
         <h2 className="pb-4 text-24 font-extrabold tracking-[-0.03em]">Compare everything</h2>
-        <div className="overflow-hidden rounded-2xl border border-line pt-1.5">
+        <div className="overflow-x-auto rounded-2xl border border-line pt-1.5">
+          <div className="min-w-[560px]">
           <div className={cn(COLS, 'h-14 text-14 font-bold')}>
-            <span className="pl-5 font-semibold text-muted">What you get</span>
+            <span className="pl-4 font-semibold text-muted lg:pl-5">What you get</span>
             <span className={cell}>Free</span>
             <span className={cn(cell, hl, 'rounded-t-xl text-brand-ink')}>Starter</span>
             <span className={cell}>Pro</span>
           </div>
           {COMPARE.map(([label, free, starter, pro]) => (
             <div key={label} className={cn(COLS, 'min-h-[52px] border-t border-line text-14')}>
-              <span className="pl-5 text-ink-2">{label}</span>
+              <span className="py-2 pl-4 text-ink-2 lg:py-0 lg:pl-5">{label}</span>
               <span className={cell}><CellView value={free} /></span>
               <span className={cn(cell, hl)}><CellView value={starter} /></span>
               <span className={cell}><CellView value={pro} /></span>
             </div>
           ))}
           <div className={cn(COLS, 'min-h-[52px] border-t border-line text-14')}>
-            <span className="pl-5 text-ink-2">How you pay for calls and numbers</span>
+            <span className="py-2 pl-4 text-ink-2 lg:py-0 lg:pl-5">How you pay for calls and numbers</span>
             <span className="col-span-3 text-center text-muted">From your balance, on every plan</span>
+          </div>
           </div>
         </div>
       </section>
 
-      <div className="grid grid-cols-3 gap-6 rounded-2xl bg-sunk px-6 py-[22px]">
+      <div className="grid gap-5 rounded-2xl bg-sunk px-5 py-5 md:grid-cols-3 md:gap-6 md:px-6 md:py-[22px]">
         {([
           ['up', 'bg-[#ffe3cc]', 'Upgrade starts now', 'You pay the difference for the rest of this month, shown before you confirm.'],
           ['callback', 'bg-[#fff3a3]', 'Downgrade at renewal', 'You keep what you paid for until your next renewal date.'],

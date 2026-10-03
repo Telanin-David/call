@@ -16,12 +16,12 @@ export default function Today() {
       <PageHeader eyebrow="Wednesday 1 October" title={`Good evening, ${ME.first}`}
         aside={<span className="text-14 text-muted">Your time 8:14 pm · New York 3:14 pm</span>} />
 
-      <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-[18px]">
+      <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:gap-[18px]">
         <DarkCard as="section" aria-label="Ready to call">
           <DarkEyebrow>READY TO CALL</DarkEyebrow>
-          <div className="mt-2 text-30 font-extrabold tracking-[-0.03em]">October leads</div>
+          <div className="mt-2 text-26 font-extrabold tracking-[-0.03em] sm:text-30">October leads</div>
           <div className="mt-0.5 text-15 text-zinc-400">37 left · script: Office cleaning v2</div>
-          <div className="mt-[22px] flex gap-2.5">
+          <div className="mt-[22px] flex flex-wrap gap-2.5">
             <Button variant="primary" size="lg" className="px-[26px]" onClick={() => navigate('/call')}><Icon name="call" />Start calling</Button>
             <Link to="/leads" className={buttonClass({ variant: 'glass', size: 'lg' })}>Pick a list</Link>
           </div>
@@ -34,7 +34,7 @@ export default function Today() {
         </div>
       </div>
 
-      <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] items-start gap-[18px]">
+      <div className="grid items-start gap-3.5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:gap-[18px]">
         <Card as="section">
           <CardHead title="Follow-ups due today"><Link className={cn(linkClass, 'text-14')} to="/followups">See all</Link></CardHead>
           {due.map(f => (

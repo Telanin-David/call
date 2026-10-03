@@ -4,7 +4,7 @@ import { cn } from './cn';
 type DivProps = HTMLAttributes<HTMLElement> & { as?: 'div' | 'section' | 'aside' | 'nav' };
 
 export function Card({ as: Tag = 'div', className, ...rest }: DivProps) {
-  return <Tag className={cn('rounded-3xl border border-line bg-surface p-[22px]', className)} {...rest} />;
+  return <Tag className={cn('rounded-3xl border border-line bg-surface p-[22px] max-sm:p-[18px]', className)} {...rest} />;
 }
 
 export function CardHead({ title, children, className }: { title: ReactNode; children?: ReactNode; className?: string }) {
@@ -41,7 +41,7 @@ export function Blobs({ layout }: { layout: BlobLayout }) {
 
 export function DarkCard({ as: Tag = 'div', blobs = 'hero', className, children, ...rest }: DivProps & { blobs?: BlobLayout }) {
   return (
-    <Tag className={cn('relative overflow-hidden rounded-3xl bg-night p-[26px] text-white', className)} {...rest}>
+    <Tag className={cn('relative overflow-hidden rounded-3xl bg-night p-[26px] text-white max-sm:p-[22px]', className)} {...rest}>
       <Blobs layout={blobs} />
       <div className="relative">{children}</div>
     </Tag>

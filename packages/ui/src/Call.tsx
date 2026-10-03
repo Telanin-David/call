@@ -95,11 +95,11 @@ export function CallDevice({ icon, title, sub, battery }: { icon: IconName; titl
 
 export function Facts({ items }: { items: { icon: IconName; label: string; value: ReactNode }[] }) {
   return (
-    <div className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-line bg-line">
+    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-3">
       {items.map(f => (
-        <div key={f.label} className="flex flex-col gap-0.5 bg-surface px-4 py-3">
+        <div key={f.label} className="flex min-w-0 flex-col gap-0.5 bg-surface px-3 py-3 sm:px-4">
           <span className="flex items-center gap-1.5 text-12 text-muted"><Icon name={f.icon} size={16} />{f.label}</span>
-          <b className="text-14 font-medium tabular-nums">{f.value}</b>
+          <b className="break-words text-13 font-medium tabular-nums sm:text-14">{f.value}</b>
         </div>
       ))}
     </div>
@@ -109,7 +109,7 @@ export function Facts({ items }: { items: { icon: IconName; label: string; value
 export function Paper({ className, children }: { className?: string; children: ReactNode }) {
   return (
     <div className={cn(
-      'relative overflow-hidden rounded-2xl border border-line bg-surface px-8 py-7 shadow-card',
+      'relative overflow-hidden rounded-2xl border border-line bg-surface px-8 py-7 shadow-card max-sm:p-5',
       "after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-14 after:bg-gradient-to-b after:from-transparent after:to-surface after:content-['']",
       className,
     )}>
@@ -122,7 +122,7 @@ export function ScriptText({ size, className, children }: { size?: number; class
   const style: CSSProperties | undefined = size ? { fontSize: size, lineHeight: `${Math.round(size * 1.6)}px` } : undefined;
   return (
     <div style={style} className={cn(
-      'max-w-[62ch] text-20 leading-8 tracking-[-0.005em]',
+      'max-w-[62ch] text-20 leading-8 tracking-[-0.005em] max-sm:text-18 max-sm:leading-7',
       '[&_p]:mb-3.5 [&_h4]:mb-1.5 [&_h4]:mt-[18px] [&_h4]:text-11 [&_h4]:font-semibold [&_h4]:uppercase [&_h4]:leading-4 [&_h4]:tracking-[.08em] [&_h4]:text-faint [&_h4:first-child]:mt-0',
       className,
     )}>

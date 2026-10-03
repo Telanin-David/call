@@ -36,7 +36,7 @@ export default function GetNumber() {
       <div className="flex flex-col gap-[18px]">
         <PageHeader back={<BackLink to="/setup">Setup · step 4 of 6</BackLink>} title="Get your number"
           lede="Pick an area code close to your leads. People are more likely to pick up a local number." />
-        <Segmented label="Country" options={COUNTRIES} value={country} onChange={switchCountry} className="w-[280px]" />
+        <Segmented label="Country" options={COUNTRIES} value={country} onChange={switchCountry} className="w-full sm:w-[280px]" />
         <div className="relative">
           <Icon name="pin" className="absolute left-3.5 top-[15px] text-faint" />
           <Input aria-label="Area code" inputMode="numeric" value={area} className="h-12 pl-[42px] text-16"

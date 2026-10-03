@@ -33,16 +33,16 @@ export default function Leads() {
         <ListRow cols={COLS} head><span>List</span><span>Script</span><span>Progress</span><span>Status</span><span /></ListRow>
         {LISTS.map(l => (
           <ListRow key={l.name} cols={COLS} className="py-4">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 max-lg:basis-full">
               <Tile tone={l.status === 'active' ? 'brand' : 'grey'}><Icon name="list" /></Tile>
-              <div><b className="text-15">{l.name}</b><p className="text-13 text-muted">{l.total} leads · {l.followups} follow-ups</p></div>
+              <div><b className="text-15">{l.name}</b><p className="text-13 text-muted">{l.total} leads · {l.followups} follow-ups<span className="lg:hidden"> · {l.script}</span></p></div>
             </div>
-            <span className="text-14 text-ink-2">{l.script}</span>
-            <div>
+            <span className="text-14 text-ink-2 max-lg:hidden">{l.script}</span>
+            <div className="max-lg:basis-full">
               <div className="mb-1.5 flex justify-between text-13"><span className="text-muted">{l.called} called</span><b>{l.total - l.called} left</b></div>
               <Progress value={(l.called / l.total) * 100} label={`${l.name} progress`} />
             </div>
-            <Pill tone={STATUS[l.status].tone}>{STATUS[l.status].label}</Pill>
+            <Pill tone={STATUS[l.status].tone} className="max-lg:mr-auto">{STATUS[l.status].label}</Pill>
             {l.status === 'done'
               ? <Button variant="outline" className="h-[38px]">Open</Button>
               : <Button variant="primary" className="h-[38px]" onClick={() => navigate('/call')}>Call list</Button>}
@@ -50,7 +50,7 @@ export default function Leads() {
         ))}
       </List>
 
-      <p className="flex items-center gap-3 text-13 text-muted"><Icon name="ban" size={15} />Numbers on the do-not-call list are removed when you upload, and you're never charged for them.</p>
+      <p className="flex items-start gap-3 text-13 text-muted"><Icon name="ban" size={15} className="mt-0.5 flex-none" />Numbers on the do-not-call list are removed when you upload, and you're never charged for them.</p>
     </Page>
   );
 }

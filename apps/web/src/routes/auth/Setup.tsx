@@ -34,9 +34,9 @@ export default function Setup() {
     <TwoCol side={300}>
       <div className="flex flex-col gap-3">
         <div className="pb-2.5">
-          <h1 className="text-36 font-extrabold tracking-[-0.04em]">Let's get you calling, {ME.first}</h1>
-          <div className="mt-3.5 flex items-center gap-3.5 text-14 text-muted">
-            <div className="h-2 max-w-[320px] flex-1 overflow-hidden rounded-sm bg-well-2">
+          <h1 className="text-28 font-extrabold tracking-[-0.04em] md:text-36">Let's get you calling, {ME.first}</h1>
+          <div className="mt-3.5 flex flex-wrap items-center gap-x-3.5 gap-y-2 text-14 text-muted">
+            <div className="h-2 min-w-[160px] max-w-[320px] flex-1 overflow-hidden rounded-sm bg-well-2">
               <span className="block h-full rounded-sm bg-tangerine" style={{ width: `${Math.round((done / STEPS.length) * 100)}%` }} />
             </div>
             <span><b className="text-ink">{done} of {STEPS.length} done</b> · about 4 minutes left</span>
@@ -44,7 +44,7 @@ export default function Setup() {
         </div>
 
         {STEPS.map((s, i) => (
-          <section key={s.title} className={cn('flex flex-col gap-[18px] rounded-2xl border bg-surface px-5 py-[18px]', s.state === 'now' ? 'border-2 border-tangerine' : 'border-line')}>
+          <section key={s.title} className={cn('flex flex-col gap-[18px] rounded-2xl border bg-surface px-4 py-[18px] sm:px-5', s.state === 'now' ? 'border-2 border-tangerine' : 'border-line')}>
             <div className="flex items-center gap-3.5">
               <span className={cn('flex size-[30px] flex-none items-center justify-center rounded-full text-14 font-bold', NUM[s.state])}>
                 {s.state === 'done' ? <Icon name="check" size={15} /> : i + 1}
@@ -54,10 +54,10 @@ export default function Setup() {
                 <p className="text-13 text-muted">{s.body}</p>
               </div>
               {s.state === 'done' && <span className="text-13 font-semibold text-success-ink">Done</span>}
-              {s.tag && <span className="text-13 text-faint">{s.tag}</span>}
+              {s.tag && <span className="text-13 text-faint max-sm:hidden">{s.tag}</span>}
             </div>
             {s.state === 'now' && (
-              <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-6 pl-11">
+              <div className="grid gap-4 sm:pl-11 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-6">
                 <div className="flex flex-col gap-3.5">
                   <AmountPicker amounts={AMOUNTS} value={amount} onChange={setAmount} format={a => formatUsd(a).replace('.00', '')} />
                   <Note tone="tint" className="gap-2.5 text-14">
@@ -77,7 +77,7 @@ export default function Setup() {
         ))}
       </div>
 
-      <aside className="sticky top-0 flex flex-col gap-3.5">
+      <aside className="flex flex-col gap-3.5 lg:sticky lg:top-0">
         <DarkCard blobs="side" className="rounded-2xl p-[22px]">
           <DarkEyebrow>YOUR PLAN</DarkEyebrow>
           <div className="mt-1 text-26 font-extrabold tracking-[-0.03em]">Free</div>

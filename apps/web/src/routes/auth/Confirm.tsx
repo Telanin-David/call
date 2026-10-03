@@ -12,7 +12,7 @@ export default function Confirm() {
           <span className="flex size-[38px] flex-none items-center justify-center rounded-full bg-success text-white"><Icon name="check" /></span>
           <div className="flex-1"><b className="text-15">Email confirmed</b><p className="text-13 text-success-ink">tunde.bakare@gmail.com</p></div>
         </div>
-        <div className="flex flex-col gap-4 rounded-2xl border border-line p-[22px]">
+        <div className="flex flex-col gap-4 rounded-2xl border border-line p-4 sm:p-[22px]">
           <div className="flex items-center gap-3.5">
             <Tile tone="brand" size={38}><Icon name="phone" /></Tile>
             <div className="flex-1"><b className="text-15">Enter your phone code</b><p className="text-13 text-muted">Sent by SMS to +234 803 123 4567</p></div>
@@ -20,7 +20,7 @@ export default function Confirm() {
           </div>
           <CodeBoxes digits="3071" size="lg" />
           <Button type="submit" variant="primary" size="xl" block>Confirm</Button>
-          <div className="flex justify-between text-13 text-muted">
+          <div className="flex flex-wrap justify-between gap-2 text-13 text-muted">
             <span>Send again in <b className="text-ink tabular-nums">0:42</b></span>
             <span>No SMS? <a className={linkClass} href="#">Send by WhatsApp</a></span>
           </div>

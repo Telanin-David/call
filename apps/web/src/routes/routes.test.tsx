@@ -56,3 +56,27 @@ describe('dev plan switcher', () => {
     expect(proCard.textContent).toContain('Your plan');
   });
 });
+
+describe('app shell navigation', () => {
+  it.each([
+    ['/', 'Today'],
+    ['/followups', 'Follow-ups'],
+    ['/history', 'History'],
+  ])('%s marks %s as current in both the top and bottom nav', async (path, label) => {
+    renderAt(path);
+    await screen.findAllByRole('navigation', { name: 'Main' });
+    const navs = screen.getAllByRole('navigation', { name: 'Main' });
+    expect(navs).toHaveLength(2);
+    for (const nav of navs) {
+      const links = nav.querySelectorAll('a');
+      expect(Array.from(links, a => a.textContent)).toEqual(['Today', 'Calling', 'Follow-ups', 'Leads', 'History']);
+      expect(nav.querySelector('[aria-current="page"]')?.textContent).toBe(label);
+    }
+  });
+
+  it('hides section navigation during onboarding', async () => {
+    renderAt('/setup');
+    await screen.findByRole('heading', { name: "Let's get you calling, Tunde" });
+    expect(screen.queryAllByRole('navigation', { name: 'Main' })).toHaveLength(0);
+  });
+});

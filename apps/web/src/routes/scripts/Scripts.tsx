@@ -35,7 +35,7 @@ export default function Scripts() {
           <Button variant="primary">Save script</Button>
         </>} />
 
-      <div className="grid grid-cols-[230px_minmax(0,1fr)_340px] items-start gap-[18px]">
+      <div className="grid items-start gap-3.5 md:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[230px_minmax(0,1fr)_340px] lg:gap-[18px]">
         <Card as="nav" aria-label="Scripts" className="p-3.5">
           <CardLabel>Scripts</CardLabel>
           <div className="flex flex-col gap-1">
@@ -50,7 +50,7 @@ export default function Scripts() {
           <LinkButton className="ml-3 mt-3 text-14">+ New script</LinkButton>
         </Card>
 
-        <Card as="section" aria-label="Editor" className="p-5">
+        <Card as="section" aria-label="Editor" className="p-4 sm:p-5">
           <div className="mb-3.5 flex flex-wrap items-center gap-2 text-13 text-muted">
             <span className="mr-1">Add a detail:</span>
             {MERGE_TAGS.map(t => (
@@ -79,7 +79,7 @@ export default function Scripts() {
           <LinkButton className="mt-3.5 text-14" onClick={() => setParts(ps => [...ps, { title: 'New part', body: '' }])}>+ Add a part</LinkButton>
         </Card>
 
-        <aside className="flex flex-col gap-2.5">
+        <aside className="flex flex-col gap-2.5 md:col-span-2 lg:col-span-1">
           <CardLabel className="mb-0">On a call with Lena, it looks like this</CardLabel>
           <Paper className="max-h-[580px] rounded-3xl p-[22px]">
             <ScriptText className="text-17 leading-[27px]">

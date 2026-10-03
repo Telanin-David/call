@@ -25,9 +25,9 @@ const NUMBERS = [
 
 function Kv({ label, children, action }: { label: string; children: ReactNode; action?: string }) {
   return (
-    <div className="flex items-center gap-4 border-t border-line py-3.5 text-14">
-      <span className="w-[200px] flex-none text-muted">{label}</span>
-      <span className="flex-1 font-semibold">{children}</span>
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 border-t border-line py-3.5 text-14">
+      <span className="w-full flex-none text-muted sm:w-[200px]">{label}</span>
+      <span className="min-w-0 flex-1 font-semibold">{children}</span>
       {action && <LinkButton className="text-14">{action}</LinkButton>}
     </div>
   );
@@ -58,27 +58,29 @@ export default function Settings() {
   const [section, setSection] = useState<Section>('billing');
 
   return (
-    <div className="mx-auto grid max-w-[1168px] grid-cols-[240px_minmax(0,1fr)] items-start gap-8 px-6 py-8">
-      <nav className="flex flex-col gap-1" aria-label="Settings">
-        <h1 className="pb-4 pl-3 text-30 font-extrabold tracking-[-0.04em]">Settings</h1>
+    <div className="mx-auto grid max-w-[1168px] items-start gap-4 px-4 py-5 sm:px-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-8 lg:py-8">
+      <nav className="flex min-w-0 flex-col gap-1" aria-label="Settings">
+        <h1 className="pb-2 text-28 font-extrabold tracking-[-0.04em] lg:pb-4 lg:pl-3 lg:text-30">Settings</h1>
+        <div className="flex gap-1 max-lg:-mx-4 max-lg:overflow-x-auto max-lg:px-4 max-lg:pb-1 max-lg:[scrollbar-width:none] sm:max-lg:mx-0 sm:max-lg:px-0 lg:flex-col">
         {NAV.map(n => {
           const current = section === n.key;
           return (
             <button key={n.key} type="button" aria-current={current ? 'page' : undefined} onClick={() => setSection(n.key)}
-              className={cn('flex cursor-pointer items-center gap-2.5 rounded-lg border-0 bg-transparent px-3 py-2.5 text-left text-15 font-medium text-ink',
+              className={cn('flex flex-none cursor-pointer items-center gap-2.5 whitespace-nowrap rounded-lg border-0 bg-transparent px-3 py-2.5 text-left text-15 font-medium text-ink',
                 current && 'bg-surface font-bold shadow-[0_1px_3px_rgba(0,0,0,.06)]')}>
               <Icon name={n.icon} size={17} className={current ? 'text-brand-ink' : 'text-faint'} />{n.label}
             </button>
           );
         })}
+        </div>
       </nav>
 
       <div className="flex flex-col gap-4">
         {section === 'billing' && (
           <>
             <DarkCard as="section" aria-label="Your plan">
-              <div className="flex items-end gap-5">
-                <div className="flex-1">
+              <div className="flex flex-wrap items-end gap-3 sm:gap-5">
+                <div className="flex-1 max-sm:basis-full">
                   <DarkEyebrow>YOUR PLAN</DarkEyebrow>
                   <div className="mt-1 text-32 font-extrabold tracking-[-0.03em]">{PLAN_LABEL[plan]}</div>
                   <div className="mt-0.5 text-14 text-zinc-300">

@@ -41,11 +41,11 @@ export function PasswordInput({ id, defaultValue = '' }: { id?: string; defaultV
 
 export function CodeBoxes({ digits, size = 'lg' }: { digits: string; size?: 'md' | 'lg' }) {
   return (
-    <div className="flex gap-2.5" aria-label="6-digit code">
+    <div className="flex gap-2 sm:gap-2.5" aria-label="6-digit code">
       {Array.from({ length: 6 }, (_, i) => (
         <span key={i} className={cn(
-          'flex w-[54px] items-center justify-center rounded-md border border-transparent bg-sunk font-mono font-semibold text-ink',
-          size === 'lg' ? 'h-16 text-[26px]' : 'h-[60px] text-24',
+          'flex min-w-0 max-w-[54px] flex-1 items-center justify-center rounded-md border border-transparent bg-sunk font-mono font-semibold text-ink',
+          size === 'lg' ? 'h-14 text-24 sm:h-16 sm:text-[26px]' : 'h-[52px] text-22 sm:h-[60px] sm:text-24',
           i === digits.length && 'border-2 border-brand bg-surface',
         )}>
           {digits[i] ?? ''}
@@ -111,10 +111,10 @@ export function TabPills<T extends string>({ tabs, value, onChange }: {
   tabs: readonly { value: T; label: string; count: number }[]; value: T; onChange: (v: T) => void;
 }) {
   return (
-    <div role="tablist" className="flex gap-1.5">
+    <div role="tablist" className="flex gap-1.5 max-sm:-mx-4 max-sm:overflow-x-auto max-sm:px-4 max-sm:py-px max-sm:[scrollbar-width:none]">
       {tabs.map(t => (
         <button key={t.value} role="tab" type="button" aria-selected={value === t.value} onClick={() => onChange(t.value)}
-          className="group inline-flex h-[38px] cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-3.5 text-14 font-semibold text-ink-2 aria-selected:border-night aria-selected:bg-night aria-selected:font-bold aria-selected:text-white">
+          className="group inline-flex h-[38px] flex-none cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-3.5 text-14 font-semibold text-ink-2 aria-selected:border-night aria-selected:bg-night aria-selected:font-bold aria-selected:text-white">
           {t.label}
           <i className="rounded-[8px] bg-well px-[7px] py-px text-12 not-italic leading-4 text-muted group-aria-selected:bg-tangerine group-aria-selected:text-night">{t.count}</i>
         </button>

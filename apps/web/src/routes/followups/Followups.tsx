@@ -33,11 +33,12 @@ export default function Followups() {
           const missed = f.result === 'missed';
           return (
             <ListRow key={f.lead.id} cols={COLS} alert={missed}>
-              <Person initials={f.lead.initials} tone={f.lead.tone} name={f.lead.name} sub={f.lead.company} />
-              <div><b className="text-14">{f.when}</b><p className={missed ? 'text-13 text-danger-ink' : 'text-13 text-brand-ink'}>{f.due}</p></div>
-              <span className="text-14 text-ink-2">{f.note}</span>
-              <Pill tone={RESULT_TONE[f.result]}>{RESULT_LABEL[f.result]}</Pill>
-              <Button variant="primary" className="h-[38px]" onClick={() => navigate(`/call/${f.lead.id}`)}><Icon name="call" size={15} />Call</Button>
+              <Person initials={f.lead.initials} tone={f.lead.tone} name={f.lead.name} sub={f.lead.company} className="max-lg:order-1 max-lg:flex-1" />
+              <div className="max-lg:order-3 max-lg:flex max-lg:items-baseline max-lg:gap-2"><b className="text-14">{f.when}</b><p className={missed ? 'text-13 text-danger-ink' : 'text-13 text-brand-ink'}>{f.due}</p></div>
+              <span className="text-14 text-ink-2 max-lg:order-4 max-lg:basis-full">{f.note}</span>
+              <Pill tone={RESULT_TONE[f.result]} className="max-lg:order-3 max-lg:ml-auto">{RESULT_LABEL[f.result]}</Pill>
+              <Button variant="primary" className="h-[38px] max-lg:order-2" onClick={() => navigate(`/call/${f.lead.id}`)}><Icon name="call" size={15} />Call</Button>
+              <span aria-hidden="true" className="order-2 basis-full lg:hidden" />
             </ListRow>
           );
         })}

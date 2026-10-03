@@ -11,8 +11,8 @@ export function ListRow({ cols, head, alert, className, children }: {
 }) {
   return (
     <div role="row" className={cn(
-      'grid items-center gap-4 border-t border-line px-5 py-3.5',
-      head && 'border-t-0 py-3 text-12 font-extrabold uppercase tracking-[.05em] text-faint',
+      'flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line px-4 py-3.5 lg:grid lg:gap-4 lg:px-5',
+      head && 'border-t-0 py-3 text-12 font-extrabold uppercase tracking-[.05em] text-faint max-lg:hidden',
       alert && 'bg-danger-tint',
       cols, className,
     )}>
@@ -75,14 +75,14 @@ export function PageHeader({ eyebrow, title, lede, back, aside, size = 'md', cla
   eyebrow?: string; title: ReactNode; lede?: ReactNode; back?: ReactNode; aside?: ReactNode; size?: 'md' | 'xl'; className?: string;
 }) {
   return (
-    <div className={cn('flex items-end gap-4', className)}>
+    <div className={cn('flex flex-col items-start gap-4 sm:flex-row sm:items-end', className)}>
       <div className="min-w-0 flex-1">
         {back}
         {eyebrow && <div className="mb-1 text-13 font-bold uppercase tracking-[.04em] text-faint">{eyebrow}</div>}
-        <h1 className={cn('font-extrabold tracking-[-0.04em]', size === 'xl' ? 'text-44' : 'text-36')}>{title}</h1>
-        {lede && <p className={cn('text-muted', size === 'xl' ? 'max-w-[620px] pt-2.5 text-17 leading-[26px]' : 'pt-2 text-16')}>{lede}</p>}
+        <h1 className={cn('font-extrabold tracking-[-0.04em]', size === 'xl' ? 'text-32 md:text-44' : 'text-28 md:text-36')}>{title}</h1>
+        {lede && <p className={cn('text-muted', size === 'xl' ? 'max-w-[620px] pt-2.5 text-16 leading-[24px] md:text-17 md:leading-[26px]' : 'pt-2 text-15 md:text-16')}>{lede}</p>}
       </div>
-      {aside}
+      {aside && <div className="flex flex-wrap items-center gap-[inherit]">{aside}</div>}
     </div>
   );
 }

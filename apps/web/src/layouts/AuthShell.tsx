@@ -18,8 +18,19 @@ interface AuthShellProps {
 
 export default function AuthShell({ headline: title, signupStep, children }: AuthShellProps) {
   return (
-    <div className="grid min-h-screen grid-cols-[600px_minmax(0,1fr)]">
-      <aside className="relative flex flex-col overflow-hidden bg-night px-14 py-12 text-white">
+    <div className="grid min-h-dvh lg:grid-cols-[600px_minmax(0,1fr)]">
+      <header className="flex flex-col gap-3 bg-night px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))] text-white lg:hidden">
+        <Brand dark className="text-16" />
+        {signupStep && (
+          <div>
+            <div className="flex gap-1.5">
+              {[1, 2, 3].map(i => <span key={i} className={cn('h-1 flex-1 rounded-sm', i <= signupStep.n ? 'bg-tangerine' : 'bg-white/14')} />)}
+            </div>
+            <p className="pt-2 text-12 text-zinc-400">Step {signupStep.n} of 3 · {signupStep.label}</p>
+          </div>
+        )}
+      </header>
+      <aside className="relative flex flex-col overflow-hidden bg-night px-14 py-12 text-white max-lg:hidden">
         <span aria-hidden="true" className="absolute -bottom-[140px] -right-[120px] size-[420px] rounded-full bg-tangerine" />
         <span aria-hidden="true" className="absolute bottom-[170px] right-60 size-[46px] rounded-full bg-sun" />
         <Brand dark className="relative text-18" />
@@ -50,14 +61,14 @@ export default function AuthShell({ headline: title, signupStep, children }: Aut
           <h1 className={cn(headline, 'relative max-w-[440px] pt-24')}>{title}</h1>
         )}
       </aside>
-      <main className="flex items-center justify-center p-12">{children}</main>
+      <main className="flex justify-center px-5 py-8 sm:items-center sm:p-12">{children}</main>
     </div>
   );
 }
 
 export function AuthForm({ wide, onSubmit, children }: { wide?: boolean; onSubmit?: () => void; children: ReactNode }) {
   return (
-    <form className={cn('flex flex-col', wide ? 'w-[440px] gap-[26px]' : 'w-[420px] gap-[22px]')}
+    <form className={cn('flex w-full flex-col', wide ? 'max-w-[440px] gap-[26px]' : 'max-w-[420px] gap-[22px]')}
       onSubmit={e => { e.preventDefault(); onSubmit?.(); }}>
       {children}
     </form>
@@ -67,7 +78,7 @@ export function AuthForm({ wide, onSubmit, children }: { wide?: boolean; onSubmi
 export function AuthTitle({ title, sub }: { title: string; sub: string }) {
   return (
     <div>
-      <h2 className="text-32 font-extrabold tracking-[-0.035em]">{title}</h2>
+      <h2 className="text-28 font-extrabold tracking-[-0.035em] sm:text-32">{title}</h2>
       <p className="pt-2 text-15 text-muted">{sub}</p>
     </div>
   );

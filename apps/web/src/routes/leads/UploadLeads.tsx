@@ -24,7 +24,7 @@ const LEFT_OUT: { icon: IconName; tone: TileTone; title: string; body: string }[
 ];
 
 const STEPS = ['Upload file', 'Match columns', 'Check and add'] as const;
-const MAP_COLS = 'grid grid-cols-[200px_1fr_30px_280px] items-center gap-3 border-t border-line px-[18px]';
+const MAP_COLS = 'grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] items-center gap-x-3 border-t border-line px-4 sm:grid-cols-[200px_1fr_30px_280px] sm:gap-3 sm:px-[18px]';
 
 export default function UploadLeads() {
   const navigate = useNavigate();
@@ -44,13 +44,13 @@ export default function UploadLeads() {
           const state = n < step ? 'done' : n === step ? 'now' : 'todo';
           return (
             <Fragment key={label}>
-              {i > 0 && <li aria-hidden="true" className="h-0.5 w-10 flex-none bg-line-2" />}
+              {i > 0 && <li aria-hidden="true" className="h-0.5 w-4 flex-none bg-line-2 sm:w-10" />}
               <li className={cn('flex items-center gap-2.5 text-14 font-semibold', state === 'now' && 'font-bold', state === 'todo' && 'text-faint')}>
                 <span className={cn('flex size-7 items-center justify-center rounded-full text-13 font-extrabold',
                   state === 'done' && 'bg-success text-white', state === 'now' && 'bg-tangerine text-night', state === 'todo' && 'bg-well-2 text-faint')}>
                   {state === 'done' ? <Icon name="check" size={14} /> : n}
                 </span>
-                {label}
+                <span className={cn(state !== 'now' && 'max-sm:sr-only')}>{label}</span>
               </li>
             </Fragment>
           );
@@ -58,34 +58,34 @@ export default function UploadLeads() {
       </ol>
 
       {step === 1 ? (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border-[1.5px] border-dashed border-line-strong bg-surface p-12 text-center">
+        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border-[1.5px] border-dashed border-line-strong bg-surface px-6 py-10 text-center sm:p-12">
           <Tile tone="brand"><Icon name="upload" /></Tile>
           <b>Drop a CSV file here</b>
           <p className="text-13 text-muted">First row should be column names. Up to 5,000 rows.</p>
           <Button variant="primary" onClick={() => setStep(2)}>Choose file</Button>
         </div>
       ) : (
-        <div className="grid grid-cols-[minmax(0,1fr)_320px] items-start gap-6">
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-6">
           <List>
-            <div className="flex items-center gap-3.5 px-[18px] py-4">
+            <div className="flex items-center gap-3.5 px-4 py-4 sm:px-[18px]">
               <Tile tone="mint"><Icon name="file" size={19} /></Tile>
               <div className="flex-1"><b className="text-15">october-leads.csv</b><p className="text-13 text-muted">42 rows · 8 columns</p></div>
               <LinkButton className="text-14" onClick={() => setStep(1)}>Change file</LinkButton>
             </div>
             <div className={cn(MAP_COLS, 'bg-sunk py-2.5 text-12 font-extrabold uppercase tracking-[.05em] text-faint')}>
-              <span>Your column</span><span>First row</span><span /><span>Save as</span>
+              <span>Your column</span><span className="max-sm:hidden">First row</span><span className="max-sm:hidden" /><span>Save as</span>
             </div>
             {COLUMNS.map((c, i) => {
               const skip = mapping[i] === 'Skip this column';
               return (
                 <div key={c.yours} className={cn(MAP_COLS, 'py-3')}>
-                  <b className="text-14">{c.yours}</b>
-                  <span className="truncate text-14 text-muted">{c.sample}</span>
-                  <Icon name="right" size={16} className="text-off" />
-                  <span className="relative">
+                  <b className="text-14 max-sm:col-start-1">{c.yours}</b>
+                  <span className="truncate text-14 text-muted max-sm:col-start-1 max-sm:row-start-2 max-sm:text-13">{c.sample}</span>
+                  <Icon name="right" size={16} className="text-off max-sm:hidden" />
+                  <span className="relative max-sm:col-start-2 max-sm:row-span-2 max-sm:row-start-1">
                     <select aria-label={`Save ${c.yours} as`} value={mapping[i]}
                       onChange={e => setMapping(m => m.map((v, j) => (j === i ? (e.target.value as Field) : v)))}
-                      className={cn('h-10 w-full cursor-pointer appearance-none rounded-md border pl-3 pr-8 text-14',
+                      className={cn('h-10 w-full cursor-pointer appearance-none rounded-md border pl-3 pr-8 text-13 sm:text-14',
                         skip ? 'border-line-2 bg-sunk font-medium text-faint' : 'border-line-strong bg-surface font-semibold text-ink')}>
                       {FIELDS.map(f => <option key={f}>{f}</option>)}
                     </select>

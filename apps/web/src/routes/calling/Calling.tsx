@@ -123,8 +123,8 @@ export default function Calling() {
   const cost = Math.round((RATE_PER_MIN[plan] * seconds) / 60);
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[288px_minmax(0,1fr)_380px] bg-surface">
-      <aside className="flex flex-col gap-0.5 overflow-auto border-r border-line px-3 py-4" aria-label="Queue">
+    <div className="flex flex-col gap-3.5 bg-sunk p-4 sm:p-6 xl:grid xl:h-full xl:min-h-0 xl:grid-cols-[288px_minmax(0,1fr)_380px] xl:gap-0 xl:bg-surface xl:p-0">
+      <aside className="flex flex-col gap-0.5 border-line px-3 py-4 max-xl:order-4 max-xl:rounded-xl max-xl:border max-xl:bg-surface xl:overflow-auto xl:border-r" aria-label="Queue">
         <div className="flex items-center gap-2 pb-3 pl-3 pr-1 pt-1">
           <span className={cn(label, 'flex-1')}>{free ? 'YOUR LEADS' : 'UP NEXT'} <span className="font-normal">{left} {free ? 'to call' : 'left'}</span></span>
           <button type="button" aria-label="Close queue" className="flex size-9 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent text-muted hover:bg-sunk hover:text-ink">
@@ -176,12 +176,12 @@ export default function Calling() {
         )}
       </aside>
 
-      <main className="flex min-h-0 flex-col gap-4 overflow-hidden bg-sunk px-8 py-6">
-        <section aria-label="Lead" className="flex flex-col gap-4 rounded-xl border border-line bg-surface px-[22px] py-5 shadow-card">
-          <div className="flex items-center gap-3.5">
+      <main className="max-xl:contents xl:flex xl:min-h-0 xl:flex-col xl:gap-4 xl:overflow-hidden xl:bg-sunk xl:px-8 xl:py-6">
+        <section aria-label="Lead" className="flex flex-col gap-4 rounded-xl border border-line bg-surface px-4 py-4 shadow-card max-xl:order-1 sm:px-[22px] sm:py-5">
+          <div className="flex flex-wrap items-center gap-3.5">
             <Avatar initials={lead.initials} tone={lead.tone} size={52} />
-            <div className="flex-1">
-              <h1 className="text-26 font-semibold tracking-[-0.03em]">{lead.name}</h1>
+            <div className="min-w-[150px] flex-1">
+              <h1 className="text-22 font-semibold tracking-[-0.03em] sm:text-26">{lead.name}</h1>
               <p className="pt-0.5 text-13 text-muted">{detail.title}, {lead.company}</p>
             </div>
             {detail.lastCall && <Pill tone="success"><Icon name="up" size={14} />{RESULT_LABEL[detail.lastCall.result]} last time</Pill>}
@@ -196,7 +196,7 @@ export default function Calling() {
             { icon: 'list', label: 'List', value: 'October leads' },
           ]} />
           {detail.lastCall && (
-            <div className="flex items-start gap-3 rounded-md bg-warn-soft px-3.5 py-3 text-14">
+            <div className="flex flex-wrap items-start gap-x-3 gap-y-1 rounded-md bg-warn-soft px-3.5 py-3 text-14 sm:flex-nowrap">
               <Icon name="history" size={16} className="mt-0.5 text-warn-ink" />
               <b className="whitespace-nowrap text-12 leading-5 font-medium text-warn-ink">Last call, {detail.lastCall.date}</b>
               <span>{detail.lastCall.note}</span>
@@ -204,8 +204,8 @@ export default function Calling() {
           )}
         </section>
 
-        <Paper className="min-h-0 flex-1">
-          <div className="mb-[18px] flex items-center gap-1.5">
+        <Paper className="max-xl:order-3 max-xl:after:hidden xl:min-h-0 xl:flex-1">
+          <div className="mb-[18px] flex flex-wrap items-center gap-1.5">
             <span className={cn(label, 'flex-1')}>YOUR SCRIPT · {SCRIPT_NAME.toUpperCase()}</span>
             {free && <Pill tone="brand">Free until 1 Dec</Pill>}
             <Link to="/scripts" className={buttonClass({ variant: 'quiet', size: 'sm' })}>Edit</Link>
@@ -223,7 +223,7 @@ export default function Calling() {
         </Paper>
       </main>
 
-      <section className="flex flex-col gap-3.5 overflow-auto border-l border-line p-5" aria-label="Call">
+      <section className="flex flex-col gap-3.5 max-xl:order-2 xl:overflow-auto xl:border-l xl:border-line xl:p-5" aria-label="Call">
         <CallCard>
           <div className="flex items-center justify-between">
             <CallStatus live={live} />
@@ -259,7 +259,7 @@ export default function Calling() {
             {outcome === 'callback' && (
               <>
                 <span className={cn(label, 'mt-0.5')}>CALL BACK WHEN?</span>
-                <div className="flex gap-1.5">
+                <div className="flex flex-wrap gap-1.5">
                   {WHEN.map(w => <Chip key={w} pressed={when === w} className="px-3" onClick={() => setWhen(w)}>{w}</Chip>)}
                   <Chip aria-label="Pick a date" className="w-10 flex-none px-0"><Icon name="callback" size={16} /></Chip>
                 </div>
@@ -297,7 +297,7 @@ export default function Calling() {
                     <Button variant="outline" className="h-[34px]" onClick={() => setPhase('pairing')}>Scan code</Button></>}
               </Note>
             )}
-            <span className="flex-1" />
+            <span className="flex-1 max-xl:hidden" />
             <Button variant="primary" size="lg" block aria-disabled={!canStart} onClick={start}>
               <Icon name="call" />{free ? `Call ${merge.first_name}` : 'Start calling'}{!free && <Kbd onColor>P</Kbd>}
             </Button>

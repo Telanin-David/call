@@ -10,7 +10,7 @@ const WIDTH = {
 } as const;
 
 export function Page({ width = 1120, className, children }: { width?: keyof typeof WIDTH; className?: string; children: ReactNode }) {
-  return <div className={cn('mx-auto flex flex-col gap-5 px-6 py-8', WIDTH[width], className)}>{children}</div>;
+  return <div className={cn('mx-auto flex w-full flex-col gap-5 px-4 py-5 sm:px-6 lg:py-8', WIDTH[width], className)}>{children}</div>;
 }
 
 export function BackLink({ to, children }: { to: string; children: ReactNode }) {
@@ -23,8 +23,8 @@ export function BackLink({ to, children }: { to: string; children: ReactNode }) 
 
 export function TwoCol({ side, children }: { side: 300 | 340; children: ReactNode }) {
   return (
-    <div className={cn('mx-auto grid max-w-[1088px] items-start gap-7 px-6 py-8',
-      side === 300 ? 'grid-cols-[minmax(0,1fr)_300px] pt-9' : 'grid-cols-[minmax(0,1fr)_340px]')}>
+    <div className={cn('mx-auto grid max-w-[1088px] items-start gap-5 px-4 py-5 sm:px-6 lg:gap-7 lg:py-8',
+      side === 300 ? 'lg:grid-cols-[minmax(0,1fr)_300px] lg:pt-9' : 'lg:grid-cols-[minmax(0,1fr)_340px]')}>
       {children}
     </div>
   );

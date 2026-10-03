@@ -35,11 +35,11 @@ export default function Wallet() {
     <Page>
       <PageHeader title="Wallet" lede="Everything is prepaid. Calls, your number and your plan come out of this balance." />
 
-      <div className="grid grid-cols-[420px_minmax(0,1fr)] items-start gap-[18px]">
+      <div className="grid items-start gap-3.5 lg:grid-cols-[420px_minmax(0,1fr)] lg:gap-[18px]">
         <div className="flex flex-col gap-3.5">
           <DarkCard as="section" aria-label="Balance">
             <DarkEyebrow>BALANCE</DarkEyebrow>
-            <div className="mt-1.5 text-52 leading-[58px] font-extrabold tracking-[-0.04em] tabular-nums">{formatUsd(BALANCE)}</div>
+            <div className="mt-1.5 text-44 leading-[50px] font-extrabold sm:text-52 sm:leading-[58px] tracking-[-0.04em] tabular-nums">{formatUsd(BALANCE)}</div>
             <div className="text-14 text-zinc-400">About {minutesFor(BALANCE, plan).toLocaleString('en-US')} minutes at {formatRate(plan)} on {PLAN_LABEL[plan]}</div>
             <div className="mt-[22px]">
               <AmountPicker dark amounts={AMOUNTS} value={amount} onChange={setAmount} format={a => formatUsd(a).replace('.00', '')} />
@@ -68,7 +68,7 @@ export default function Wallet() {
           <Card as="section">
             <CardHead title="Activity" className="mb-1"><a className={cn(linkClass, 'text-14')} href="#">Download statement</a></CardHead>
             {ledger.map((e, i) => (
-              <div key={i} className="grid grid-cols-[90px_minmax(0,1fr)_120px] items-center gap-3.5 border-t border-line py-[13px] text-14">
+              <div key={i} className="grid grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-3 border-t border-line py-[13px] text-14 sm:grid-cols-[90px_minmax(0,1fr)_120px] sm:gap-3.5">
                 <span className="text-muted">{e.date}</span>
                 <div><b>{e.title}</b><p className="text-13 text-muted">{e.sub}</p></div>
                 <b className={cn('text-right tabular-nums', e.amount > 0 && 'text-success-ink')}>{e.amount > 0 ? '+' : '−'}{formatUsd(Math.abs(e.amount))}</b>
