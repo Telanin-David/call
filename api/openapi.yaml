@@ -4,7 +4,9 @@ info:
   version: "0.1.0"
   description: |
     Single API contract for the Dialer sales dialer.
-    All routes require a session cookie except /auth/signup, /auth/signin, and /auth/confirm.
+    All routes require a session cookie except /auth/signup, /auth/signin, /auth/confirm/email,
+    /auth/forgot and /auth/reset. Writes must be sent as application/json.
+    Money is always an integer in micro-dollars (1 USD = 1,000,000).
 servers:
   - url: http://localhost:8080
     description: Local dev
@@ -71,7 +73,10 @@ paths:
   /auth/signup:
     post:
       tags: [auth]
-      summary: Create a new account
+      summary: Create an account and sign in
+      description: |
+        Sends a confirmation link by email and a 6-digit code by SMS, and sets
+        the session cookie. The account can be used once both are confirmed.
       operationId: authSignup
       requestBody:
         required: true
@@ -81,41 +86,100 @@ paths:
               $ref: "#/components/schemas/SignupRequest"
       responses:
         "201":
-          description: Account created; confirmation email and SMS sent
+          description: Account created; session cookie set
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthResponse"
+                $ref: "#/components/schemas/User"
         "409":
           $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
-  /auth/confirm:
+  /auth/confirm/email:
     post:
       tags: [auth]
-      summary: Confirm email and phone with codes
-      operationId: authConfirm
+      summary: Confirm the email with the token from the emailed link
+      description: Needs no session; the link may be opened on another device. Opening it twice is fine.
+      operationId: authConfirmEmail
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ConfirmRequest"
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        "204":
+          description: Email confirmed
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /auth/confirm/phone:
+    post:
+      tags: [auth]
+      summary: Confirm the phone with the 6-digit code
+      description: Five wrong tries end the code; ask for a new one with /auth/resend.
+      operationId: authConfirmPhone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  example: "307142"
       responses:
         "200":
-          description: Confirmed; session cookie set
+          description: Phone confirmed
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthResponse"
+                $ref: "#/components/schemas/MeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "422":
           $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /auth/resend:
+    post:
+      tags: [auth]
+      summary: Send a new email link or phone code
+      description: At most one a minute and five an hour. A new code replaces the old one.
+      operationId: authResend
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channel]
+              properties:
+                channel:
+                  type: string
+                  enum: [email, sms, whatsapp]
+      responses:
+        "204":
+          description: Sent (or nothing to send because it is already confirmed)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /auth/signin:
     post:
       tags: [auth]
-      summary: Sign in
+      summary: Sign in with email or phone and password
       operationId: authSignin
       requestBody:
         required: true
@@ -125,13 +189,17 @@ paths:
               $ref: "#/components/schemas/SigninRequest"
       responses:
         "200":
-          description: Signed in; session cookie set
+          description: Signed in; session cookie set. If `confirmed` is false, show the confirm screen.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthResponse"
+                $ref: "#/components/schemas/User"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /auth/signout:
     post:
@@ -145,7 +213,8 @@ paths:
   /auth/forgot:
     post:
       tags: [auth]
-      summary: Request a password reset code
+      summary: Send a password reset code to the account's phone
+      description: Answers 204 whether or not the account exists.
       operationId: authForgot
       requestBody:
         required: true
@@ -153,19 +222,22 @@ paths:
           application/json:
             schema:
               type: object
-              required: [email]
+              required: [login]
               properties:
-                email:
+                login:
                   type: string
-                  format: email
+                  description: Email or phone number
       responses:
         "204":
-          description: Code sent if account exists
+          description: Code sent if the account exists
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /auth/reset:
     post:
       tags: [auth]
       summary: Set a new password using the reset code
+      description: Signs the account out on every device.
       operationId: authReset
       requestBody:
         required: true
@@ -173,18 +245,23 @@ paths:
           application/json:
             schema:
               type: object
-              required: [email, code, password]
+              required: [login, code, password]
               properties:
-                email:
+                login:
                   type: string
-                  format: email
+                  description: Email or phone number
                 code:
                   type: string
                 password:
                   type: string
+                  minLength: 10
       responses:
         "204":
           description: Password updated
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /me:
     get:
@@ -824,60 +901,57 @@ paths:
 
 components:
   schemas:
+    ErrorBody:
+      type: object
+      description: Every error has this shape. `error` is shown to the rep as is.
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          description: Stable machine-readable reason, e.g. "code_wrong"
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+
     SignupRequest:
       type: object
-      required: [name, email, phone, password, country]
+      required: [name, email, phone, password, country, accept_rules]
       properties:
         name:
           type: string
+          description: Full name as on the rep's ID; the card name must match it
         email:
           type: string
           format: email
         phone:
           type: string
-          description: E.164 format
+          description: With country code, e.g. "+234 803 123 4567"; stored as E.164
         password:
           type: string
-          minLength: 8
+          minLength: 10
         country:
           type: string
           description: ISO 3166-1 alpha-2
-
-    ConfirmRequest:
-      type: object
-      required: [email_code, phone_code]
-      properties:
-        email_code:
+        timezone:
           type: string
-        phone_code:
-          type: string
+          description: IANA zone, e.g. "Africa/Lagos". Defaults to UTC.
+        accept_rules:
+          type: boolean
+          description: Must be true
 
     SigninRequest:
       type: object
-      required: [email, password]
+      required: [login, password]
       properties:
-        email:
+        login:
           type: string
-          format: email
+          description: Email or phone number
         password:
           type: string
 
-    AuthResponse:
-      type: object
-      properties:
-        user_id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        email:
-          type: string
-        confirmed:
-          type: boolean
-        plan:
-          type: string
-
-    MeResponse:
+    User:
       type: object
       properties:
         user_id:
@@ -893,18 +967,37 @@ components:
           type: string
         timezone:
           type: string
-        plan:
+        email_confirmed:
+          type: boolean
+        phone_confirmed:
+          type: boolean
+        confirmed:
+          type: boolean
+          description: Both email and phone confirmed
+        rules_accepted_at:
           type: string
-        dials_today:
-          type: integer
-        dials_limit:
-          type: integer
-        kyc_status:
+          format: date-time
+          nullable: true
+        created_at:
           type: string
-          enum: [none, pending, approved, rejected]
-        balance_usd:
-          type: number
-          description: Display only — ledger stores micro-dollars
+          format: date-time
+
+    MeResponse:
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - type: object
+          properties:
+            plan:
+              type: string
+              enum: [free, starter, pro]
+            balance_microdollars:
+              type: integer
+              format: int64
+              description: What the rep can spend now. 1 USD = 1,000,000.
+            held_microdollars:
+              type: integer
+              format: int64
+              description: Set aside for calls in progress; already taken off the balance
 
     SettingsRequest:
       type: object
@@ -1276,25 +1369,15 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorBody"
+    TooManyRequests:
+      description: Too many tries or sends; see the Retry-After header when present
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
     ValidationError:
       description: Request body validation failed
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorBody"
-
-    ErrorBody:
-      description: Standard error wrapper
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              error:
-                type: string
-              code:
-                type: string
-              fields:
-                type: object
-                additionalProperties:
-                  type: string
