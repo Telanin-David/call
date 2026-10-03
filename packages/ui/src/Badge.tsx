@@ -21,7 +21,7 @@ export function Pill({ tone = 'neutral', className, children }: { tone?: PillTon
 }
 
 export type AvatarTone = 'a' | 'b' | 'c' | 'd' | 'e' | 'brand' | 'plain';
-export type AvatarSize = 32 | 36 | 38 | 52;
+export type AvatarSize = 32 | 36 | 38 | 40 | 52;
 
 const AV_TONE: Record<AvatarTone, string> = {
   a: 'bg-av-a text-av-a-fg',
@@ -37,6 +37,7 @@ const AV_SIZE: Record<AvatarSize, string> = {
   32: 'size-8 text-11 font-bold',
   36: 'size-9 text-12 font-bold',
   38: 'size-[38px] text-12 font-bold',
+  40: 'size-10 text-13 font-bold',
   52: 'size-[52px] text-18 font-semibold',
 };
 

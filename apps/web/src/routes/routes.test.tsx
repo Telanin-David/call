@@ -1,5 +1,5 @@
-import { describe, expect, it, afterEach } from 'vitest';
-import { cleanup, render, screen, fireEvent } from '@testing-library/react';
+import { describe, expect, it, afterEach, beforeEach } from 'vitest';
+import { cleanup, render, screen, fireEvent, within } from '@testing-library/react';
 import { RouterProvider, createMemoryRouter } from 'react-router-dom';
 import { Suspense } from 'react';
 import { routes } from './index';
@@ -86,7 +86,7 @@ describe('app shell navigation', () => {
 });
 
 describe('D1 states', () => {
-  afterEach(() => useSimStore.setState({ sim: null }));
+  afterEach(() => act(() => useSimStore.setState({ sim: null })));
 
   it('shows a recording with its transcript on Pro, and an upsell otherwise', async () => {
     renderAt('/history/ada', 'pro');
@@ -135,5 +135,31 @@ describe('D1 states', () => {
     expect(alert.textContent).toContain('Lena is still on the line');
     fireEvent.click(screen.getByRole('button', { name: 'Use this laptop for sound' }));
     expect(screen.queryByRole('alert', { name: 'Call problem' })).toBeNull();
+  });
+});
+
+describe('phone calling flow', () => {
+  const desktop = window.matchMedia;
+  beforeEach(() => {
+    window.matchMedia = (query: string) => ({ ...desktop(query), matches: query.includes('max-width: 767px') });
+  });
+  afterEach(() => { window.matchMedia = desktop; });
+
+  it('calls, wraps up and moves on to the next lead', async () => {
+    renderAt('/call', 'starter');
+    fireEvent.click(await screen.findByRole('button', { name: /Start calling/ }));
+    const controls = screen.getByRole('navigation', { name: 'Call controls' });
+    expect(screen.getByRole('heading', { name: 'Lena Park' })).toBeTruthy();
+    fireEvent.click(within(controls).getByRole('button', { name: 'End' }));
+    expect(screen.getByRole('heading', { name: 'How did it go?' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('radio', { name: 'Interested' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save · call Mark Reyes' }));
+    expect(await screen.findByRole('heading', { name: 'Mark Reyes' })).toBeTruthy();
+  });
+
+  it('lets Free users tap any lead to call it', async () => {
+    renderAt('/call', 'free');
+    fireEvent.click(await screen.findByRole('button', { name: 'Call Rosa Diaz' }));
+    expect(screen.getByRole('heading', { name: 'Rosa Diaz' })).toBeTruthy();
   });
 });

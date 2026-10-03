@@ -8,8 +8,9 @@ export function CallbackAlert({ open, lead, sub, note, onAnswer, onLater }: {
   open: boolean; lead: Lead; sub: string; note: string; onAnswer: () => void; onLater: () => void;
 }) {
   return (
-    <Modal open={open} onClose={onLater} label={`${lead.name} is calling you back`} bare width="md" className="bg-night px-[22px] pb-[max(22px,env(safe-area-inset-bottom))] pt-[22px] text-white">
-      <div className="flex items-center gap-3.5">
+    <Modal open={open} onClose={onLater} label={`${lead.name} is calling you back`} bare width="md"
+      className="bg-night px-[22px] pb-[max(22px,env(safe-area-inset-bottom))] pt-[22px] text-white max-sm:flex max-sm:h-dvh max-sm:max-h-none max-sm:flex-col max-sm:justify-center max-sm:rounded-none">
+      <div className="flex items-center gap-3.5 max-sm:flex-col max-sm:text-center">
         <span className="rounded-full p-[3px] shadow-[0_0_0_3px_var(--success)]">
           <Avatar initials={lead.initials} tone={lead.tone} size={52} />
         </span>
