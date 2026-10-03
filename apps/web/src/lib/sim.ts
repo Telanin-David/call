@@ -16,9 +16,20 @@ export const SIMS = {
   mic: 'Mic blocked',
   weak: 'Weak connection',
   script: 'Free script months over',
+  oncall: 'On a call',
+  wrapup: 'After a call (phone layout)',
+  pairing: 'Scan with your phone',
+  upgrade: 'Upgrade offer',
+  movefree: 'Move to Free',
 } as const;
 
 export type Sim = keyof typeof SIMS;
+
+/** Where each simulated state lives. Everything else is on the dial screen. */
+export const SIM_ROUTE: Partial<Record<Sim, string>> = { movefree: '/settings' };
+
+/** Sims that do one thing when picked and then clear themselves. */
+export const ONE_SHOT = ['oncall', 'wrapup', 'pairing', 'upgrade', 'movefree'] as const satisfies readonly Sim[];
 
 export const BLOCKS = ['limit', 'balance', 'tries', 'dnc'] as const satisfies readonly Sim[];
 export const PROBLEMS = ['internet', 'phone', 'mic', 'weak'] as const satisfies readonly Sim[];

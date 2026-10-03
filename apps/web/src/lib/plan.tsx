@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SIMS, useSimStore, type Sim } from './sim';
+import { SIMS, SIM_ROUTE, useSimStore, type Sim } from './sim';
 
 export type Plan = 'free' | 'starter' | 'pro';
 
@@ -41,14 +41,19 @@ export function DevPlanSwitcher() {
         <select aria-label="Simulate" value={sim ?? ''}
           onChange={e => {
             const v = e.target.value;
-            setSim(v ? (v as Sim) : null);
-            if (v && v !== 'script') navigate('/call');
-            if (v === 'script') { setPlan('free'); navigate('/call'); }
+            const next = v ? (v as Sim) : null;
+            if (next === 'script') setPlan('free');
+            setSim(next);
+            if (next) navigate(SIM_ROUTE[next] ?? '/call');
           }}
           className="ml-1 h-7 cursor-pointer rounded-[7px] border-0 bg-white/10 px-2 text-12 text-zinc-200">
           <option value="">Simulate…</option>
           {(Object.keys(SIMS) as Sim[]).map(k => <option key={k} value={k}>{SIMS[k]}</option>)}
         </select>
+        <button type="button" onClick={() => navigate('/screens')}
+          className="ml-1 h-7 cursor-pointer rounded-[7px] border-0 bg-tangerine px-3 text-12 font-bold text-night">
+          All screens
+        </button>
       </div>
     </details>
   );

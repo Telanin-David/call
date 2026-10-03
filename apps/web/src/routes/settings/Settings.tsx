@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, CardHead, DarkCard, DarkEyebrow, Field, Icon, Input, LinkButton, Modal, Select, cn, useToast, type IconName } from '@dialer/ui';
 import { usePlan, PLAN_LABEL } from '@/lib/plan';
+import { useSimStore } from '@/lib/sim';
 import { BALANCE, ME } from '@/lib/fake';
 import { formatUsd } from '@/lib/money';
 import { DIALS_PER_DAY, FEE_INTRO, FEE_LATER, NUMBER_MONTHLY, formatRate } from '@/lib/pricing';
@@ -73,6 +74,13 @@ export default function Settings() {
   const { plan } = usePlan();
   const [section, setSection] = useState<Section>('billing');
   const [askFree, setAskFree] = useState(false);
+  const { sim, setSim } = useSimStore();
+  useEffect(() => {
+    if (sim !== 'movefree') return;
+    setSection('billing');
+    if (plan !== 'free') setAskFree(true);
+    setSim(null);
+  }, [sim, setSim, plan]);
   const [edit, setEdit] = useState<Edit | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const toast = useToast();
