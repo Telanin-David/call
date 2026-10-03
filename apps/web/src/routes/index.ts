@@ -7,6 +7,7 @@ import { usd } from '@/lib/money';
 const Signin = lazy(() => import('./auth/Signin'));
 const Signup = lazy(() => import('./auth/Signup'));
 const Confirm = lazy(() => import('./auth/Confirm'));
+const CheckEmail = lazy(() => import('./auth/CheckEmail'));
 const Forgot = lazy(() => import('./auth/Forgot'));
 const Setup = lazy(() => import('./auth/Setup'));
 
@@ -34,9 +35,11 @@ export const routes: RouteObject[] = [
     children: [
       { path: '/signin', Component: Signin },
       { path: '/signup', Component: Signup },
+      { path: '/check-email', Component: CheckEmail },
       { path: '/confirm', Component: Confirm },
       { path: '/forgot', Component: Forgot },
       { path: '/link', Component: LinkPhone },
+      { path: '/pair', Component: LinkPhone },
       {
         Component: AppLayout,
         children: [

@@ -1,9 +1,10 @@
 import { useNavigate } from 'react-router-dom';
-import { Button, CodeBoxes, Icon, Tile, cn, linkClass } from '@dialer/ui';
+import { Button, CodeBoxes, Icon, Tile, cn, linkClass, useToast } from '@dialer/ui';
 import AuthShell, { AuthForm, AuthTitle } from '@/layouts/AuthShell';
 
 export default function Confirm() {
   const navigate = useNavigate();
+  const toast = useToast();
   return (
     <AuthShell signupStep={{ n: 2, label: 'Confirm' }}>
       <AuthForm wide onSubmit={() => navigate('/setup')}>
@@ -22,7 +23,7 @@ export default function Confirm() {
           <Button type="submit" variant="primary" size="xl" block>Confirm</Button>
           <div className="flex flex-wrap justify-between gap-2 text-13 text-muted">
             <span>Send again in <b className="text-ink tabular-nums">0:42</b></span>
-            <span>No SMS? <a className={linkClass} href="#">Send by WhatsApp</a></span>
+            <span>No SMS? <button type="button" className={cn(linkClass, 'text-13')} onClick={() => toast('Code sent by WhatsApp to +234 803 123 4567')}>Send by WhatsApp</button></span>
           </div>
         </div>
       </AuthForm>

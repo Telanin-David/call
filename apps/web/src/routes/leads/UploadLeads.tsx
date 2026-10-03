@@ -17,6 +17,14 @@ const COLUMNS: { yours: string; sample: string; saveAs: Field }[] = [
   { yours: 'Notes', sample: 'Unhappy with Friday cleaner', saveAs: 'Notes' },
 ];
 
+const LEFT_OUT_ROWS = [
+  'Row 9 · Kofi Asante · +233 24 555 0190 · Ghana',
+  'Row 17 · Amy Clarke · +44 20 7946 0958 · UK',
+  'Row 23 · Lena Park · (646) 555-0110 · duplicate of row 4',
+  'Row 31 · Tom Allen · (917) 555-0142 · duplicate of row 12',
+  'Row 38 · Maria Gomez · (305) 555-0117 · on the do-not-call list',
+];
+
 const LEFT_OUT: { icon: IconName; tone: TileTone; title: string; body: string }[] = [
   { icon: 'globe', tone: 'lemon', title: '2 not US or Canada', body: 'UK and Ghana numbers. Calling them costs more, so they go in a separate list.' },
   { icon: 'users', tone: 'grey', title: '2 duplicates', body: 'Same phone number twice. We kept the first.' },
@@ -32,6 +40,7 @@ export default function UploadLeads() {
   const fromSetup = params.get('from') === 'setup';
   const [step, setStep] = useState<1 | 2>(params.get('step') === 'match' ? 2 : 1);
   const [mapping, setMapping] = useState<Field[]>(COLUMNS.map(c => c.saveAs));
+  const [showRows, setShowRows] = useState(false);
 
   return (
     <Page className="gap-[22px]">
@@ -112,7 +121,12 @@ export default function UploadLeads() {
                     <span><b>{r.title}</b><p className="text-muted">{r.body}</p></span>
                   </div>
                 ))}
-                <LinkButton className="self-start text-14">See the 5 rows</LinkButton>
+                {showRows && (
+                  <ul className="flex list-none flex-col gap-1 rounded-xl bg-sunk p-3 font-mono text-12 text-muted">
+                    {LEFT_OUT_ROWS.map(r => <li key={r}>{r}</li>)}
+                  </ul>
+                )}
+                <LinkButton className="self-start text-14" aria-expanded={showRows} onClick={() => setShowRows(v => !v)}>{showRows ? 'Hide the 5 rows' : 'See the 5 rows'}</LinkButton>
               </div>
             </div>
           </aside>

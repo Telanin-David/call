@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { cn } from './cn';
 import { Icon } from './icons/Icon';
 
@@ -72,4 +72,35 @@ export function Toggle({ checked, onChange, label, className }: {
         className,
       )} />
   );
+}
+
+interface ToastCtx { show: (message: string) => void }
+const ToastContext = createContext<ToastCtx>({ show: () => {} });
+
+/** Short confirmation at the bottom of the screen ("Script saved"). One at a time, gone after 3 seconds. */
+export function ToastProvider({ children }: { children: ReactNode }) {
+  const [message, setMessage] = useState<string | null>(null);
+  const [key, setKey] = useState(0);
+  useEffect(() => {
+    if (!message) return;
+    const t = setTimeout(() => setMessage(null), 3000);
+    return () => clearTimeout(t);
+  }, [message, key]);
+  const show = useCallback((m: string) => { setMessage(m); setKey(k => k + 1); }, []);
+  return (
+    <ToastContext.Provider value={{ show }}>
+      {children}
+      <div role="status" aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-[calc(80px+env(safe-area-inset-bottom))] z-50 flex justify-center px-4 lg:bottom-8">
+        {message && (
+          <span key={key} className="flex items-center gap-2 rounded-full bg-night px-4 py-2.5 text-14 font-semibold text-white shadow-[0_10px_30px_rgba(0,0,0,.25)]">
+            <Icon name="check" size={16} className="text-success" />{message}
+          </span>
+        )}
+      </div>
+    </ToastContext.Provider>
+  );
+}
+
+export function useToast(): (message: string) => void {
+  return useContext(ToastContext).show;
 }

@@ -1,6 +1,6 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Button, Card, CardLabel, Icon, Input, LinkButton, Merge, PageHeader, Paper, ScriptText, Tile, cn } from '@dialer/ui';
+import { Button, Card, CardLabel, Icon, Input, LinkButton, Merge, PageHeader, Paper, ScriptText, Tile, cn, useToast } from '@dialer/ui';
 import { BackLink, Page } from '@/components/Page';
 import { usePlan, PLAN_LABEL } from '@/lib/plan';
 import { MERGE_TAGS, SCRIPT_NAME, SCRIPT_PARTS, renderScript, type MergeValues, type ScriptPart } from '@/lib/script';
@@ -20,6 +20,23 @@ export default function Scripts() {
   const [params] = useSearchParams();
   const fromSetup = params.get('from') === 'setup';
   const [selected, setSelected] = useState(0);
+  const [scripts, setScripts] = useState(SCRIPTS);
+  const file = useRef<HTMLInputElement>(null);
+  const toast = useToast();
+
+  async function upload(f: File) {
+    const text = await f.text();
+    const blocks = text.split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+    if (blocks.length === 0) { toast(`${f.name} is empty`); return; }
+    setParts(blocks.map((body, i) => ({ title: `Part ${i + 1}`, body })));
+    toast(`Added ${blocks.length} parts from ${f.name}`);
+  }
+
+  function newScript() {
+    setScripts(ss => [...ss, { name: `New script ${ss.length - 2}`, note: 'Not in use', active: false }]);
+    setSelected(scripts.length);
+    setParts([{ title: 'Opening', body: '' }]);
+  }
   const [parts, setParts] = useState<ScriptPart[]>(SCRIPT_PARTS);
   const [editing, setEditing] = useState<number | null>(null);
   const [lastPart, setLastPart] = useState(0);
@@ -31,15 +48,17 @@ export default function Scripts() {
       <PageHeader title="Your script" lede="Write it once. It shows on screen while you call, with each lead's details filled in."
         back={fromSetup ? <BackLink to="/setup">Setup · step 6 of 6</BackLink> : <BackLink to="/leads">Leads</BackLink>}
         aside={<>
-          <Button variant="outline"><Icon name="upload" size={16} />Upload a file</Button>
-          <Button variant="primary">Save script</Button>
+          <input ref={file} type="file" accept=".txt,text/plain" className="sr-only" aria-label="Script file"
+            onChange={e => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ''; }} />
+          <Button variant="outline" onClick={() => file.current?.click()}><Icon name="upload" size={16} />Upload a file</Button>
+          <Button variant="primary" onClick={() => toast(`${scripts[selected]?.name ?? 'Script'} saved`)}>Save script</Button>
         </>} />
 
       <div className="grid items-start gap-3.5 md:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[230px_minmax(0,1fr)_340px] lg:gap-[18px]">
         <Card as="nav" aria-label="Scripts" className="p-3.5">
           <CardLabel>Scripts</CardLabel>
           <div className="flex flex-col gap-1">
-            {SCRIPTS.map((s, i) => (
+            {scripts.map((s, i) => (
               <button key={s.name} type="button" aria-current={selected === i} onClick={() => setSelected(i)}
                 className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-0 bg-transparent px-3 py-2.5 text-left hover:bg-sunk aria-[current=true]:bg-brand-soft">
                 <Tile tone={s.active ? 'brand' : 'grey'} size={30}><Icon name="file" size={15} /></Tile>
@@ -47,7 +66,7 @@ export default function Scripts() {
               </button>
             ))}
           </div>
-          <LinkButton className="ml-3 mt-3 text-14">+ New script</LinkButton>
+          <LinkButton className="ml-3 mt-3 text-14" onClick={newScript}>+ New script</LinkButton>
         </Card>
 
         <Card as="section" aria-label="Editor" className="p-4 sm:p-5">

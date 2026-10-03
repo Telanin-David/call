@@ -44,7 +44,7 @@ export default function Leads() {
             </div>
             <Pill tone={STATUS[l.status].tone} className="max-lg:mr-auto">{STATUS[l.status].label}</Pill>
             {l.status === 'done'
-              ? <Button variant="outline" className="h-[38px]">Open</Button>
+              ? <Button variant="outline" className="h-[38px]" onClick={() => navigate('/history')}>Open</Button>
               : <Button variant="primary" className="h-[38px]" onClick={() => navigate('/call')}>Call list</Button>}
           </ListRow>
         ))}

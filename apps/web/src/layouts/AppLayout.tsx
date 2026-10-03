@@ -76,7 +76,7 @@ export default function AppLayout() {
           </nav>
         )}
         <span className="flex-1" />
-        {handle.device && <DeviceChip plan={plan} />}
+        {handle.device && <span className="hidden md:contents"><DeviceChip plan={plan} /></span>}
         <Pill tone={PLAN_PILL[plan]} className="h-7 max-sm:hidden">{plan === 'free' ? 'Free plan' : PLAN_LABEL[plan]}</Pill>
         <Link to="/wallet" aria-label="Wallet" className="flex flex-col items-end leading-none text-ink no-underline">
           <b className="text-15 font-semibold tabular-nums">{formatUsd(handle.balance ?? BALANCE)}</b>

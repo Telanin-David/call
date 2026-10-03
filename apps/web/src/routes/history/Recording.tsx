@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Avatar, Button, Card, DarkCard, Icon, Pill, cn, linkClass } from '@dialer/ui';
+import { Avatar, Button, Card, DarkCard, Icon, Modal, Pill, cn, linkClass, useToast } from '@dialer/ui';
 import { Page } from '@/components/Page';
 import { usePlan } from '@/lib/plan';
 import { CALLS, RESULT_LABEL, RESULT_TONE, type CallRecord } from '@/lib/fake';
@@ -90,6 +90,8 @@ export default function Recording() {
   const { plan } = usePlan();
   const navigate = useNavigate();
   const { callId } = useParams();
+  const toast = useToast();
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const today = CALLS.filter(c => c.when.startsWith('Today'));
   const call = today.find(c => c.lead.id === callId) ?? today.find(c => c.lead.id === 'ada') ?? today[0];
   if (!call) return null;
@@ -176,12 +178,20 @@ export default function Recording() {
             </DarkCard>
           )}
           <Card className="flex flex-col gap-2.5 p-[18px]">
-            <Button variant="outline" block>Download recording</Button>
-            <Button variant="outlineDanger" block>Delete recording</Button>
+            <Button variant="outline" block onClick={() => toast('Downloads come with real recordings in D5')}>Download recording</Button>
+            <Button variant="outlineDanger" block onClick={() => setConfirmDelete(true)}>Delete recording</Button>
             <p className="text-13 text-muted">Recordings are kept for 90 days.</p>
           </Card>
         </div>
       </div>
+
+      <Modal open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Delete this recording?" width="sm">
+        <p className="mt-2 text-15 text-muted">The recording and transcript of your call with {call.lead.name} are removed for good. The call stays in your history.</p>
+        <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
+          <Button size="lg" onClick={() => setConfirmDelete(false)}>Keep it</Button>
+          <Button variant="danger" size="lg" onClick={() => { setConfirmDelete(false); toast('Recording deleted'); navigate('/history'); }}>Delete</Button>
+        </div>
+      </Modal>
     </Page>
   );
 }
