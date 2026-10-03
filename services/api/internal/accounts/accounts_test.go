@@ -245,6 +245,42 @@ func TestSignupChecks(t *testing.T) {
 	}
 }
 
+func TestSignupLimits(t *testing.T) {
+	t.Run("a whole office can sign up from one connection", func(t *testing.T) {
+		e := newEnv(t)
+		for i := 0; i < 12; i++ {
+			c := e.client()
+			c.expect(c.post("/auth/signup", newPerson().signup()), http.StatusCreated, "")
+		}
+	})
+
+	tests := []struct {
+		name  string
+		reuse func(first, next map[string]any)
+		code  string // what tries 2 to 5 get
+	}{
+		{"same email, five tries an hour", func(first, next map[string]any) { next["email"] = first["email"] }, "email_taken"},
+		{"same phone, five tries an hour", func(first, next map[string]any) { next["phone"] = first["phone"] }, "phone_taken"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := newEnv(t)
+			c := e.client()
+			first := newPerson().signup()
+			c.expect(c.post("/auth/signup", first), http.StatusCreated, "")
+			for i := 2; i <= 6; i++ {
+				next := newPerson().signup()
+				tt.reuse(first, next)
+				status, code := http.StatusConflict, tt.code
+				if i == 6 {
+					status, code = http.StatusTooManyRequests, "too_many"
+				}
+				c.expect(c.post("/auth/signup", next), status, code)
+			}
+		})
+	}
+}
+
 func TestPhoneCodeRules(t *testing.T) {
 	ctx := context.Background()
 

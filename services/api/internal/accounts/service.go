@@ -33,7 +33,8 @@ const (
 	limitWindow      = 15 * time.Minute
 	signinsPerLogin  = 10
 	signinsPerIP     = 50
-	signupsPerIPHour = 5
+	signupsPerPerson = 5  // per email and per phone number, each hour
+	signupsPerIPHour = 30 // a whole office signing up together still fits
 	forgotsPerIPHour = 10
 	resetsPerLogin   = 10
 )
@@ -112,8 +113,19 @@ func (s *Service) Signup(ctx context.Context, in SignupInput) (auth.User, Sessio
 	if !in.AcceptRules {
 		return auth.User{}, Session{}, ErrRulesRequired
 	}
-	if err := s.allow(ctx, "signup:ip:"+in.IP, signupsPerIPHour, time.Hour); err != nil {
-		return auth.User{}, Session{}, err
+	// Limit by the person first (the email and phone they typed), and by the
+	// internet connection only as a guard against a flood from one place.
+	for _, l := range []struct {
+		key   string
+		limit int
+	}{
+		{"signup:email:" + email, signupsPerPerson},
+		{"signup:phone:" + phone, signupsPerPerson},
+		{"signup:ip:" + in.IP, signupsPerIPHour},
+	} {
+		if err := s.allow(ctx, l.key, l.limit, time.Hour); err != nil {
+			return auth.User{}, Session{}, err
+		}
 	}
 	hash, err := auth.HashPassword(in.Password)
 	if err != nil {
