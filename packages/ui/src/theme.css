@@ -1,0 +1,139 @@
+/* Dialer design tokens for Tailwind v4. Values come from the canvas (design/boards). */
+@import "tailwindcss";
+@source "./";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root,
+[data-theme="light"] {
+  --bg: #ffffff; --surface: #ffffff; --sunk: #f6f6f4; --hover: #efefec; --well: #f2f2f4; --well-2: #e9e9ee;
+  --ink: #111113; --ink-2: #3f3f46; --muted: #63636b; --faint: #8e8e96; --line: #ececee; --line-2: #e5e5ea; --line-strong: #8e8e96; --off: #c7c7cc;
+  --brand: #ff6b1a; --brand-hover: #f25c0a; --on-brand: #111113; --brand-ink: #c2410c; --brand-soft: #fff1e6; --brand-tint: #fff7f0;
+  --lemon: #ffd60a; --on-lemon: #111113; --warn: #e2a100; --warn-ink: #5c4d00; --warn-soft: #fff8c5;
+  --success: #12b76a; --success-ink: #067647; --success-soft: #e7f8ef;
+  --danger: #dc2626; --danger-hover: #b91c1c; --danger-ink: #b91c1c; --on-danger: #ffffff; --danger-soft: #fee2e2; --danger-tint: #fff8f8;
+  --focus: #c2410c;
+  --av-a-bg: #ffe8d6; --av-a-fg: #b4400a; --av-b-bg: #fff3b0; --av-b-fg: #5c4d00; --av-c-bg: #d9f5e6; --av-c-fg: #067647;
+  --av-d-bg: #ffe1e1; --av-d-fg: #b91c1c; --av-e-bg: #ececee; --av-e-fg: #3f3f46;
+}
+
+[data-theme="dark"] {
+  --bg: #0e0e10; --surface: #17171a; --sunk: #1e1e22; --hover: #26262b; --well: #26262b; --well-2: #2c2c31;
+  --ink: #f4f4f5; --ink-2: #d4d4d8; --muted: #a1a1aa; --faint: #71717a; --line: #27272b; --line-2: #2c2c31; --line-strong: #6b6b74; --off: #52525b;
+  --brand: #ff8a3d; --brand-hover: #ffa063; --on-brand: #1a0b00; --brand-ink: #ff9f5e; --brand-soft: #2a1a0e; --brand-tint: #2a1a0e;
+  --warn: #ffd60a; --warn-ink: #ffe066; --warn-soft: #2a2508;
+  --success: #47d18c; --success-ink: #47d18c; --success-soft: #0f2a1c;
+  --danger-hover: #ef4444; --danger-ink: #fca5a5; --danger-soft: #3b1212; --danger-tint: #3b1212;
+  --focus: #ff9f5e;
+  --av-a-bg: #3a2210; --av-a-fg: #ffb27f; --av-b-bg: #3a3208; --av-b-fg: #ffe066; --av-c-bg: #0f2a1c; --av-c-fg: #47d18c;
+  --av-d-bg: #3b1212; --av-d-fg: #fca5a5; --av-e-bg: #26262b; --av-e-fg: #d4d4d8;
+}
+
+@theme inline {
+  --font-sans: "Manrope", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-sunk: var(--sunk);
+  --color-hover: var(--hover);
+  --color-well: var(--well);
+  --color-well-2: var(--well-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-line-strong: var(--line-strong);
+  --color-off: var(--off);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-on-brand: var(--on-brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-tint: var(--brand-tint);
+  --color-lemon: var(--lemon);
+  --color-on-lemon: var(--on-lemon);
+  --color-warn: var(--warn);
+  --color-warn-ink: var(--warn-ink);
+  --color-warn-soft: var(--warn-soft);
+  --color-success: var(--success);
+  --color-success-ink: var(--success-ink);
+  --color-success-soft: var(--success-soft);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-ink: var(--danger-ink);
+  --color-on-danger: var(--on-danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-tint: var(--danger-tint);
+  --color-focus: var(--focus);
+  --color-av-a: var(--av-a-bg); --color-av-a-fg: var(--av-a-fg);
+  --color-av-b: var(--av-b-bg); --color-av-b-fg: var(--av-b-fg);
+  --color-av-c: var(--av-c-bg); --color-av-c-fg: var(--av-c-fg);
+  --color-av-d: var(--av-d-bg); --color-av-d-fg: var(--av-d-fg);
+  --color-av-e: var(--av-e-bg); --color-av-e-fg: var(--av-e-fg);
+}
+
+@theme {
+  --color-night: #111113;
+  --color-night-2: #18181b;
+  --color-tangerine: #ff6b1a;
+  --color-sun: #ffd60a;
+  --color-glow: #ffb27f;
+
+  --text-11: 11px; --text-11--line-height: 14px;
+  --text-12: 12px; --text-12--line-height: 16px;
+  --text-13: 13px; --text-13--line-height: 18px;
+  --text-14: 14px; --text-14--line-height: 20px;
+  --text-15: 15px; --text-15--line-height: 22px;
+  --text-16: 16px; --text-16--line-height: 24px;
+  --text-17: 17px; --text-17--line-height: 24px;
+  --text-18: 18px; --text-18--line-height: 24px;
+  --text-20: 20px; --text-20--line-height: 26px;
+  --text-22: 22px; --text-22--line-height: 28px;
+  --text-24: 24px; --text-24--line-height: 30px;
+  --text-26: 26px; --text-26--line-height: 32px;
+  --text-28: 28px; --text-28--line-height: 34px;
+  --text-30: 30px; --text-30--line-height: 36px;
+  --text-32: 32px; --text-32--line-height: 38px;
+  --text-36: 36px; --text-36--line-height: 42px;
+  --text-44: 44px; --text-44--line-height: 50px;
+  --text-52: 52px; --text-52--line-height: 56px;
+
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-2xl: 18px;
+  --radius-3xl: 20px;
+
+  --shadow-card: 0 1px 2px rgba(17, 17, 19, .04), 0 4px 16px rgba(17, 17, 19, .03);
+  --shadow-pop: 0 12px 32px rgba(17, 17, 19, .10), 0 1px 2px rgba(17, 17, 19, .06);
+
+  --animate-ring: ring 1.6s ease-out infinite;
+  @keyframes ring {
+    0% { box-shadow: 0 0 0 0 rgba(255, 107, 26, .45); }
+    100% { box-shadow: 0 0 0 8px rgba(255, 107, 26, 0); }
+  }
+}
+
+@layer base {
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 22px;
+    font-feature-settings: "tnum" 1, "cv11" 1;
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  button { font: inherit; color: inherit; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

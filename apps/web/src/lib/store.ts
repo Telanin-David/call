@@ -12,6 +12,22 @@ interface CallState {
   reset: () => void;
 }
 
+export type TalkVia = 'computer' | 'phone';
+
+interface DeviceState {
+  talkVia: TalkVia | null;
+  phoneLinked: boolean;
+  setTalkVia: (v: TalkVia) => void;
+  setPhoneLinked: (linked: boolean) => void;
+}
+
+export const useDeviceStore = create<DeviceState>((set) => ({
+  talkVia: 'phone',
+  phoneLinked: false,
+  setTalkVia: (talkVia) => set({ talkVia }),
+  setPhoneLinked: (phoneLinked) => set({ phoneLinked }),
+}));
+
 export const useCallStore = create<CallState>((set) => ({
   callId: null,
   status: 'idle',

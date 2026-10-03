@@ -1,7 +1,435 @@
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  Avatar, Button, CallCard, CallDevice, CallFacts, CallStatus, CallTimer, ChoiceCard, Chip, Dot, Facts, Icon, Kbd, Merge, Note,
+  OutcomeTile, Paper, Pill, Progress, Radio, ScriptText, Tile, Toggle, buttonClass, cn, linkClass, type IconName, type OutcomeTone,
+} from '@dialer/ui';
+import { BlockedDialog, CallbackAlert, ProblemCard, blockCopy } from './CallAlerts';
+import { NextLeadPopover, peekAt, type Peek } from './NextLead';
+import { UpgradeDialog } from './Upgrade';
+import { isBlock, isProblem, useSimStore } from '@/lib/sim';
+import { usePlan } from '@/lib/plan';
+import { useCallStore, useDeviceStore } from '@/lib/store';
+import { BALANCE, DETAILS, LEADS, QUEUE, RESULT_LABEL, type QueueItem } from '@/lib/fake';
+import { formatUsd, formatUsd3, usd } from '@/lib/money';
+import { DIALS_PER_DAY, RATE_PER_MIN, formatRate } from '@/lib/pricing';
+import { SCRIPT_NAME, SCRIPT_PARTS, renderScript, type MergeValues } from '@/lib/script';
+
+type Phase = 'ready' | 'pairing' | 'live';
+type Outcome = 'interested' | 'callback' | 'not_interested' | 'no_answer' | 'wrong' | 'dnc';
+
+const OUTCOMES: { key: Outcome; label: string; icon: IconName; tone: OutcomeTone }[] = [
+  { key: 'interested', label: 'Interested', icon: 'up', tone: 'mint' },
+  { key: 'callback', label: 'Call back', icon: 'callback', tone: 'orange' },
+  { key: 'not_interested', label: 'Not interested', icon: 'down', tone: 'grey' },
+  { key: 'no_answer', label: 'No answer', icon: 'missed', tone: 'lemon' },
+  { key: 'wrong', label: 'Wrong number', icon: 'wrong', tone: 'grey' },
+  { key: 'dnc', label: 'Do not call', icon: 'ban', tone: 'red' },
+];
+
+const WHEN = ['Tomorrow', 'In 3 days', 'Next week'] as const;
+const ORDINAL = ['', '1st', '2nd', '3rd'];
+const FIRST_OPEN = QUEUE.findIndex(q => !q.done);
+const label = 'text-12 font-medium tracking-[.02em] text-muted';
+
 export default function Calling() {
+  const { plan } = usePlan();
+  const free = plan === 'free';
+  const { leadId } = useParams();
+  const { talkVia, phoneLinked, setTalkVia, setPhoneLinked } = useDeviceStore();
+  const setCallStatus = useCallStore(s => s.setStatus);
+  const navigate = useNavigate();
+  const { sim, setSim } = useSimStore();
+  const [upgrade, setUpgrade] = useState<string | null>(null);
+  const [blockOpen, setBlockOpen] = useState(false);
+  const [peek, setPeek] = useState<Peek | null>(null);
+  const [nextPick, setNextPick] = useState<number | null>(null);
+  const [multiDial, setMultiDial] = useState(true);
+
+  const [queue, setQueue] = useState<QueueItem[]>(QUEUE);
+  const [current, setCurrent] = useState(() => {
+    const i = QUEUE.findIndex(q => q.lead.id === leadId && !q.done);
+    return i >= 0 ? i : FIRST_OPEN;
+  });
+  const [phase, setPhase] = useState<Phase>('ready');
+  const [seconds, setSeconds] = useState(0);
+  const [muted, setMuted] = useState(false);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [when, setWhen] = useState<(typeof WHEN)[number]>('Tomorrow');
+  const [made, setMade] = useState(0);
+  const [scriptSize, setScriptSize] = useState(20);
+
+  const via = free ? 'computer' : talkVia;
+  const canStart = via === 'computer' || (via === 'phone' && phoneLinked);
+  const item = queue[current];
+  const lead = item?.lead;
+  const detail = lead ? DETAILS[lead.id] : undefined;
+  const left = 42 - queue.filter(q => q.done).length;
+  const dials = (free ? 0 : 86) + made;
+  const limit = DIALS_PER_DAY[plan];
+
+  useEffect(() => {
+    if (phase !== 'live') return;
+    const t = setInterval(() => setSeconds(s => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [phase]);
+
+  useEffect(() => {
+    if (phase !== 'pairing') return;
+    const t = setTimeout(() => { setPhoneLinked(true); setPhase('ready'); }, 6000);
+    return () => clearTimeout(t);
+  }, [phase, setPhoneLinked]);
+
+  useEffect(() => () => setCallStatus('idle'), [setCallStatus]);
+
+  function start() {
+    if (isBlock(sim)) { setBlockOpen(true); return; }
+    if (!canStart || !lead) return;
+    setPhase('live');
+    setSeconds(0);
+    setOutcome(null);
+    setMade(m => m + 1);
+    setCallStatus('answered');
+  }
+
+  function hangUp() {
+    const label = outcome === 'callback'
+      ? `Call back ${when.toLowerCase()}`
+      : outcome ? (OUTCOMES.find(o => o.key === outcome)?.label ?? '') : RESULT_LABEL.no_answer;
+    const next = queue.map((q, i) => (i === current ? { ...q, done: label } : q));
+    setQueue(next);
+    setPhase('ready');
+    setMuted(false);
+    setCallStatus('idle');
+    setPeek(null);
+    if (isProblem(sim)) setSim(null);
+    const picked = nextPick !== null && !next[nextPick]?.done ? nextPick : -1;
+    setNextPick(null);
+    const n = picked >= 0 ? picked : next.findIndex(q => !q.done);
+    if (n >= 0) setCurrent(n);
+  }
+
+  function nextOpen(after: number): number {
+    return queue.findIndex((q, i) => i > after && !q.done);
+  }
+
+  // Dev "Simulate" menu: open the matching state as soon as it's picked.
+  useEffect(() => {
+    if (isBlock(sim)) setBlockOpen(true);
+    if (isProblem(sim) && sim !== 'mic' && phase !== 'live') {
+      setPhase('live');
+      setSeconds(sim === 'internet' ? 134 : sim === 'phone' ? 220 : 65);
+      setCallStatus('answered');
+    }
+    // phase is read, not watched: only a new sim should start a call.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sim, setCallStatus]);
+
+  const fixProblem = useCallback((action: 'laptop' | 'phone' | 'retry' | 'ok') => {
+    if (action === 'laptop') setTalkVia('computer');
+    if (action === 'phone') setTalkVia('phone');
+    setSim(null);
+  }, [setSim, setTalkVia]);
+
+  function answerCallback() {
+    setSim(null);
+    const i = queue.findIndex(q => q.lead.id === LEADS.mark.id);
+    if (i < 0) return;
+    setQueue(q => q.map((x, j) => (j === i ? { lead: x.lead } : x)));
+    setCurrent(i);
+    setPhase('live');
+    setSeconds(0);
+    setOutcome(null);
+    setCallStatus('answered');
+  }
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.target instanceof HTMLElement && e.target.closest('input, textarea, select')) return;
+      const k = e.key.toLowerCase();
+      if (phase === 'ready' && k === 'p') start();
+      if (phase !== 'live') return;
+      if (k === 'm') setMuted(m => !m);
+      if (k === 'h') hangUp();
+      const n = Number(k);
+      const o = OUTCOMES[n - 1];
+      if (n >= 1 && n <= 6 && o) setOutcome(o.key);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  if (!lead || !detail) {
+    return <p className="px-6 py-12 text-center text-muted">Your list is done. Pick another list on the Leads page.</p>;
+  }
+
+  const merge: MergeValues = {
+    first_name: lead.name.split(' ')[0] ?? lead.name,
+    company: lead.company,
+    city: detail.location.split(',')[0] ?? detail.location,
+    her_time: detail.localTime,
+  };
+  const live = phase === 'live';
+  const cost = Math.round((RATE_PER_MIN[plan] * seconds) / 60);
+  const clock = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+  const scriptLocked = free && sim === 'script';
+  const nextIndex = nextOpen(current);
+  const nextLead = queue[nextIndex]?.lead;
+  const block = isBlock(sim)
+    ? blockCopy(sim, { limit, lead: lead.name, next: nextLead?.name ?? 'the next lead', balance: formatUsd(usd(0, 4)) })
+    : null;
+
+  function resolveBlock() {
+    if (sim === 'limit') navigate('/verify');
+    if (sim === 'balance') navigate('/wallet');
+    if (sim === 'tries' && nextIndex >= 0) {
+      setQueue(q => q.map((x, j) => (j === current ? { ...x, done: 'Blocked · 3 tries' } : x)));
+      setCurrent(nextIndex);
+    }
+    if (sim === 'dnc' && nextIndex >= 0) {
+      setQueue(q => q.map((x, j) => (j === nextIndex ? { ...x, done: 'Do not call · skipped' } : x)));
+    }
+    setBlockOpen(false);
+    setSim(null);
+  }
+
   return (
-    <div className="dl">
-      <p className="dl-muted">Calling — D1 TODO</p>
+    <div className="flex flex-col gap-3.5 bg-sunk p-4 sm:p-6 xl:grid xl:h-full xl:min-h-0 xl:grid-cols-[288px_minmax(0,1fr)_380px] xl:gap-0 xl:bg-surface xl:p-0">
+      <aside className="flex flex-col gap-0.5 border-line px-3 py-4 max-xl:order-4 max-xl:rounded-xl max-xl:border max-xl:bg-surface xl:overflow-auto xl:border-r" aria-label="Queue">
+        <div className="flex items-center gap-2 pb-3 pl-3 pr-1 pt-1">
+          <span className={cn(label, 'flex-1')}>{free ? 'YOUR LEADS' : 'UP NEXT'} <span className="font-normal">{left} {free ? 'to call' : 'left'}</span></span>
+          <button type="button" aria-label="Close queue" className="flex size-9 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent text-muted hover:bg-sunk hover:text-ink">
+            <Icon name="panel" />
+          </button>
+        </div>
+        {queue.map((q, i) => {
+          const isCurrent = i === current;
+          const d = DETAILS[q.lead.id];
+          const sub = q.done ?? (isCurrent
+            ? (live ? 'On call now' : `${free ? 'Selected' : 'Up first'} · ${d?.localTime ?? ''}`)
+            : nextPick === i ? 'Next up' : `${q.lead.company} · ${d?.localTime ?? ''}`);
+          return (
+            <button key={q.lead.id} type="button" aria-current={isCurrent || undefined} aria-expanded={live && !free && !isCurrent ? peek?.index === i : undefined}
+              disabled={Boolean(q.done) || (live && (free || isCurrent))}
+              onClick={e => {
+                if (!live) { setCurrent(i); return; }
+                const row = e.currentTarget;
+                setPeek(p => (p?.index === i ? null : peekAt(i, row)));
+              }}
+              className={cn('flex w-full items-center gap-3 rounded-lg border-0 bg-transparent px-3 py-2.5 text-left',
+                isCurrent ? 'bg-brand-soft' : 'enabled:cursor-pointer enabled:hover:bg-sunk')}>
+              <Avatar initials={q.lead.initials} tone={isCurrent ? 'brand' : 'plain'} size={32} className="text-12 font-semibold" />
+              <div className="min-w-0 flex-1">
+                <div className={cn('text-14 font-medium', q.done && 'text-muted')}>{q.lead.name}</div>
+                <div className="truncate text-12 text-muted">{sub}</div>
+              </div>
+              {isCurrent && <Dot tone="ok" />}
+              {free && !isCurrent && !q.done && (
+                <span aria-hidden="true" className="flex size-[30px] flex-none items-center justify-center rounded-full bg-surface text-brand-ink shadow-[inset_0_0_0_1px_var(--line)]">
+                  <Icon name="call" size={14} />
+                </span>
+              )}
+            </button>
+          );
+        })}
+        <span className="flex-1" />
+        {plan === 'pro' ? (
+          <div className="mb-2 flex flex-col gap-2.5 rounded-xl border border-line bg-surface p-3.5">
+            <div className="flex items-center gap-2 text-14">
+              <Icon name="call" size={16} className="text-brand-ink" />
+              <b className="flex-1">Dial 2 at once</b>
+              <Toggle checked={multiDial} onChange={setMultiDial} label="Dial 2 at once" />
+            </div>
+            <div className="flex justify-between text-13"><span className="text-muted">No daily limit</span><b className="tabular-nums">{38 + made} of 60 included</b></div>
+            <Progress value={((38 + made) / 60) * 100} label="Multi-dial minutes" />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2 p-3">
+            <div className="flex justify-between text-13"><span className="text-muted">Dials today</span><b className="tabular-nums">{limit ? `${dials} of ${limit}` : `${dials}`}</b></div>
+            <Progress value={limit ? (dials / limit) * 100 : 0} label="Dials today" />
+          </div>
+        )}
+        {free ? (
+          <button type="button" onClick={() => setUpgrade('Auto-dial your list with Starter')}
+            className="flex cursor-pointer items-center gap-2.5 rounded-lg border-0 bg-sunk px-3.5 py-3 text-left text-13 text-ink">
+            <Icon name="lock" size={14} className="text-muted" />
+            <span className="flex-1"><b className="block font-semibold">Auto-dial the list</b><span className="text-muted">Calls one after another for you</span></span>
+            <Pill tone="brand">Starter</Pill>
+          </button>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <Button><Icon name="pause" size={16} />Pause</Button>
+            <Button onClick={() => { if (live) return; const n = nextOpen(current); if (n >= 0) setCurrent(n); }}>
+              <Icon name="skip" size={16} />Skip
+            </Button>
+          </div>
+        )}
+      </aside>
+
+      <main className="max-xl:contents xl:flex xl:min-h-0 xl:flex-col xl:gap-4 xl:overflow-hidden xl:bg-sunk xl:px-8 xl:py-6">
+        <section aria-label="Lead" className="flex flex-col gap-4 rounded-xl border border-line bg-surface px-4 py-4 shadow-card max-xl:order-1 sm:px-[22px] sm:py-5">
+          <div className="flex flex-wrap items-center gap-3.5">
+            <Avatar initials={lead.initials} tone={lead.tone} size={52} />
+            <div className="min-w-[150px] flex-1">
+              <h1 className="text-22 font-semibold tracking-[-0.03em] sm:text-26">{lead.name}</h1>
+              <p className="pt-0.5 text-13 text-muted">{detail.title}, {lead.company}</p>
+            </div>
+            {detail.lastCall && <Pill tone="success"><Icon name="up" size={14} />{RESULT_LABEL[detail.lastCall.result]} last time</Pill>}
+            <Pill>{ORDINAL[detail.attempt] ?? `${detail.attempt}th`} call</Pill>
+            {plan === 'pro' && <Pill tone="lemon"><Icon name="spark" size={14} />Summary on</Pill>}
+          </div>
+          <Facts items={[
+            { icon: 'call', label: 'Phone', value: detail.phone },
+            { icon: 'mail', label: 'Email', value: detail.email },
+            { icon: 'pin', label: 'Location', value: detail.location },
+            { icon: 'building', label: 'Company', value: detail.companyNote },
+            { icon: 'globe', label: 'Website', value: detail.website },
+            { icon: 'list', label: 'List', value: 'October leads' },
+          ]} />
+          {detail.lastCall && (
+            <div className="flex flex-wrap items-start gap-x-3 gap-y-1 rounded-md bg-warn-soft px-3.5 py-3 text-14 sm:flex-nowrap">
+              <Icon name="history" size={16} className="mt-0.5 text-warn-ink" />
+              <b className="whitespace-nowrap text-12 leading-5 font-medium text-warn-ink">Last call, {detail.lastCall.date}</b>
+              <span>{detail.lastCall.note}</span>
+            </div>
+          )}
+        </section>
+
+        <Paper className="max-xl:order-3 max-xl:after:hidden xl:min-h-0 xl:flex-1">
+          <div className="mb-[18px] flex flex-wrap items-center gap-1.5">
+            <span className={cn(label, 'flex-1')}>YOUR SCRIPT · {SCRIPT_NAME.toUpperCase()}</span>
+            {free && (scriptLocked ? <Pill><Icon name="lock" size={13} />Starter</Pill> : <Pill tone="brand">Free until 1 Dec</Pill>)}
+            <Link to="/scripts" className={buttonClass({ variant: 'quiet', size: 'sm' })}>Edit</Link>
+            <button type="button" aria-label="Smaller text" onClick={() => setScriptSize(s => Math.max(16, s - 2))} className="size-9 cursor-pointer rounded-sm border-0 bg-transparent text-13 text-muted hover:bg-sunk">A-</button>
+            <button type="button" aria-label="Bigger text" onClick={() => setScriptSize(s => Math.min(28, s + 2))} className="size-9 cursor-pointer rounded-sm border-0 bg-transparent text-13 text-muted hover:bg-sunk">A+</button>
+          </div>
+          <div className="relative">
+            <ScriptText size={scriptSize} className={cn(scriptLocked && 'pointer-events-none select-none blur-[6px]')}>
+              <div aria-hidden={scriptLocked || undefined}>
+                {SCRIPT_PARTS.map(p => (
+                  <div key={p.title}>
+                    <h4>{p.title}</h4>
+                    <p>{renderScript(p.body, t => <Merge>{merge[t]}</Merge>)}</p>
+                  </div>
+                ))}
+              </div>
+            </ScriptText>
+            {scriptLocked && (
+              <div className="absolute inset-x-0 top-6 mx-auto flex max-w-[420px] flex-col items-center gap-2 rounded-2xl border border-line bg-surface px-6 py-5 text-center shadow-[0_16px_40px_rgba(0,0,0,.12)]">
+                <Tile tone="brand"><Icon name="lock" /></Tile>
+                <b className="text-18">Your script is now a Starter feature</b>
+                <p className="text-13 text-muted">Your 2 free months of script on screen ended on 1 Dec. You can keep calling on Free. To see your script while you call, move to Starter.</p>
+                {live
+                  ? <b className="text-13 text-brand-ink">You can move to Starter from Plans after this call.</b>
+                  : <Button variant="primary" onClick={() => setUpgrade('See your script while you call')}>See Starter</Button>}
+              </div>
+            )}
+          </div>
+        </Paper>
+      </main>
+
+      <section className="flex flex-col gap-3.5 max-xl:order-2 xl:overflow-auto xl:border-l xl:border-line xl:p-5" aria-label="Call">
+        {isProblem(sim) ? (
+          <ProblemCard problem={sim} timer={clock} lead={merge.first_name} canUsePhone={!free} onFix={fixProblem} />
+        ) : (
+        <CallCard>
+          <div className="flex items-center justify-between">
+            <CallStatus live={live} />
+            {!live && <span className="text-12 text-zinc-400">US rate {formatRate(plan)} / min</span>}
+            {live && plan === 'pro' && <span className="inline-flex items-center gap-1.5 text-12 text-zinc-400"><i className="size-[7px] rounded-full bg-danger" />Recording{via === 'phone' ? ' · on your phone' : ''}</span>}
+            {live && plan !== 'pro' && <span className="inline-flex items-center gap-1.5 text-12 text-zinc-400"><Icon name="lock" size={13} />Not recorded · Pro</span>}
+          </div>
+          <CallTimer seconds={seconds} idle={!live} />
+          <CallFacts items={[
+            { label: `${lead.pronoun === 'her' ? 'Her' : 'His'} time`, value: detail.localTime },
+            { label: 'Your time', value: '8:14 pm' },
+            live ? { label: 'This call', value: formatUsd3(cost), hot: true } : { label: 'Balance', value: formatUsd(BALANCE) },
+          ]} />
+          {live && (via === 'phone'
+            ? <CallDevice icon="phone" title="Your phone" sub="Mic and speaker · Pixel 6a" battery="64%" />
+            : <CallDevice icon="headset" title="This laptop" sub="Headset plugged into the jack" />)}
+        </CallCard>
+        )}
+
+        {live ? (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="outline" size="lg" aria-pressed={muted} onClick={() => setMuted(m => !m)}>
+                <Icon name={muted ? 'micoff' : 'mic'} />{muted ? 'Unmute' : 'Mute'}<Kbd onColor={muted}>M</Kbd>
+              </Button>
+              <Button variant="danger" size="lg" onClick={hangUp}><Icon name="hangup" />Hang up<Kbd onColor>H</Kbd></Button>
+            </div>
+            <span className={cn(label, 'mt-1')}>HOW DID IT GO? <span className="font-normal">Keys 1 to 6</span></span>
+            <div className="grid grid-cols-2 gap-2">
+              {OUTCOMES.map(o => (
+                <OutcomeTile key={o.key} icon={o.icon} tone={o.tone} pressed={outcome === o.key} onClick={() => setOutcome(o.key)}>{o.label}</OutcomeTile>
+              ))}
+            </div>
+            {outcome === 'callback' && (
+              <>
+                <span className={cn(label, 'mt-0.5')}>CALL BACK WHEN?</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {WHEN.map(w => <Chip key={w} pressed={when === w} className="px-3" onClick={() => setWhen(w)}>{w}</Chip>)}
+                  <Chip aria-label="Pick a date" className="w-10 flex-none px-0"><Icon name="callback" size={16} /></Chip>
+                </div>
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <span className={cn(label, 'mt-1.5')}>HOW WILL YOU TALK?</span>
+            <div className="flex flex-col gap-2" role="radiogroup" aria-label="How will you talk">
+              <ChoiceCard checked={via === 'computer'} onClick={() => setTalkVia('computer')}>
+                <Tile tone="grey" size={36}><Icon name="laptop" /></Tile>
+                <span><b className="block text-14 font-semibold">On this computer</b><span className="block text-12 text-muted">Use this laptop's mic and speakers, or plug in a headset</span></span>
+                <Radio />
+              </ChoiceCard>
+              <ChoiceCard checked={via === 'phone'} locked={free} onClick={() => (free ? setUpgrade('Talk on your phone with Starter') : setTalkVia('phone'))}>
+                <Tile tone="brand" size={36}><Icon name="phone" /></Tile>
+                <span><b className="block text-14 font-semibold">Use my phone to talk</b><span className="block text-12 text-muted">Your phone is the mic and speaker. You watch the script here. No phone minutes used</span></span>
+                {free ? <Pill tone="brand" className="ml-auto flex-none"><Icon name="lock" size={14} />Starter</Pill> : <Radio />}
+              </ChoiceCard>
+            </div>
+            {free && (
+              <Note>
+                <Icon name="lock" size={14} />
+                <span className="flex-1 text-13">Talking on your phone while you read here comes with Starter.</span>
+                <Button variant="outline" className="h-[34px]" onClick={() => setUpgrade('Talk on your phone with Starter')}>See Starter</Button>
+              </Note>
+            )}
+            {!free && via === 'phone' && !phoneLinked && (
+              <Note tone="brand">
+                <Icon name="qr" className="text-brand-ink" />
+                {phase === 'pairing'
+                  ? <span className="flex flex-1 items-center gap-3 text-13">
+                      <img src="/qr-demo.svg" alt="Code to link your phone" className="size-20 flex-none rounded-lg bg-white p-1" />
+                      <span>Scan with your phone camera, or open <Link to="/link" className={linkClass}>dialer.app/link</Link> on your phone. Waiting…</span>
+                    </span>
+                  : <><span className="flex-1 text-13">Your phone isn't connected yet</span>
+                    <Button variant="outline" className="h-[34px]" onClick={() => setPhase('pairing')}>Scan code</Button></>}
+              </Note>
+            )}
+            <span className="flex-1 max-xl:hidden" />
+            <Button variant="primary" size="lg" block aria-disabled={!canStart} onClick={start}>
+              <Icon name="call" />{free ? `Call ${merge.first_name}` : 'Start calling'}{!free && <Kbd onColor>P</Kbd>}
+            </Button>
+            <p className="text-center text-12 text-muted">
+              {free ? 'On Free you call one lead at a time and pick who is next.'
+                : canStart ? 'Calls go out one after another. Pause any time.' : 'Starts once your phone is connected'}
+            </p>
+          </>
+        )}
+      </section>
+
+      <CallbackAlert open={sim === 'callback'} lead={LEADS.mark} sub="Reyes Home Care · you called him yesterday, 2:14 pm"
+        note="Asked for prices by email first. Sent Monday." onAnswer={answerCallback} onLater={() => setSim(null)} />
+      {block && <BlockedDialog copy={block} open={blockOpen} onPrimary={resolveBlock} onClose={() => { setBlockOpen(false); setSim(null); }} />}
+      <UpgradeDialog open={upgrade !== null} to={free ? 'starter' : 'pro'} reason={upgrade ?? ''} onClose={() => setUpgrade(null)} />
+      {peek && queue[peek.index] && (
+        <NextLeadPopover peek={peek} lead={queue[peek.index]!.lead} onClose={() => setPeek(null)}
+          onSkip={() => { setQueue(q => q.map((x, j) => (j === peek.index ? { ...x, done: 'Skipped' } : x))); setPeek(null); }}
+          onCallNext={() => { setNextPick(peek.index); setPeek(null); }} />
+      )}
     </div>
   );
 }

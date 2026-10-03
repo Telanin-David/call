@@ -24,7 +24,8 @@ This is **Dialer**, a low-cost web dialer. Backend: Go. Frontend: TypeScript (Re
 
 - Go: `gofmt`, standard library first, errors wrapped with `fmt.Errorf("...: %w", err)`.
 - TypeScript: strict mode, no `any`. Prefer `unknown` and narrow.
-- CSS: only `dialer.css` tokens (prefix `dl-`). No inline styles except dynamic values.
+- UI: React components + Tailwind CSS v4. Build screens from `@dialer/ui` components; use Tailwind utilities with the design tokens from `packages/ui/src/theme.css` (e.g. `bg-brand`, `text-muted`, `text-13`). No raw hex colours in screens when a token exists. No inline styles except dynamic values (widths, sizes computed at runtime).
+- A pattern used on two or more screens belongs in `packages/ui`; one-off layout stays in the screen.
 - Tests: table-driven in Go, Vitest in TypeScript. Every new package needs at least one test file.
 
 ## Directory guide
@@ -35,7 +36,7 @@ services/api/internal/telephony/  Telnyx adapter (real + fake)
 services/api/internal/billing/    Paystack + Stripe adapters
 services/api/internal/ledger/     all money: balance, hold, charge, release
 services/api/internal/calls/      call lifecycle, pre-dial checks
-packages/ui/                      dialer.css + component tokens — source of truth for design
+packages/ui/                      Tailwind theme (theme.css) + reusable React components — source of truth for design
 design/boards/                    43 canvas HTML boards — reference only, do not edit
 ```
 
@@ -52,4 +53,4 @@ design/boards/                    43 canvas HTML boards — reference only, do n
 
 ## Design tokens
 
-The canonical tokens are in `packages/ui/src/dialer.css`. Brand color: `--brand: #ff6b1a` (Tangerine). Font: Manrope. Flat UI — no glass, no neumorphism. Every component class is prefixed `dl-`.
+The canonical tokens are in `packages/ui/src/theme.css` (Tailwind v4 `@theme`), with light and dark values as CSS variables. Brand color: `brand` = #ff6b1a (Tangerine). Font: Manrope (`font-sans`), Geist Mono (`font-mono`). Text sizes are named by pixel size (`text-13` = 13px). Flat UI — no glass, no neumorphism. Merge classes with `cn()` from `@dialer/ui`, never by string concatenation.

@@ -1,0 +1,2 @@
+# Reference boards are design input, not app code; keep them out of GitHub language stats.
+design/** linguist-documentation

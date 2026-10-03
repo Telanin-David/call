@@ -22,6 +22,9 @@ dist/
 out/
 build/
 
+# TypeScript incremental build info
+*.tsbuildinfo
+
 # Editor
 .vscode/
 .idea/
