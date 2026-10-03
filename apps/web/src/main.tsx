@@ -2,10 +2,10 @@ import React, { Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
-import '@dialer/ui/dialer.css';
+import { IconSprite } from '@dialer/ui';
+import '@dialer/ui/theme.css';
 
 import { routes } from './routes';
-import Sprite from './components/Sprite';
 import { PlanProvider, DevPlanSwitcher } from './lib/plan';
 
 const queryClient = new QueryClient({
@@ -18,7 +18,7 @@ const router = createBrowserRouter(routes);
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <Sprite />
+    <IconSprite />
     <QueryClientProvider client={queryClient}>
       <PlanProvider>
         <Suspense fallback={null}>

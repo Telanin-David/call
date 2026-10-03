@@ -1,9 +1,10 @@
 import { useState } from 'react';
+import { AmountPicker, Button, Card, CardHead, DarkCard, DarkEyebrow, Icon, PageHeader, Progress, Tile, cn, linkClass, type BarTone } from '@dialer/ui';
+import { Page } from '@/components/Page';
 import { usePlan, PLAN_LABEL } from '@/lib/plan';
 import { BALANCE, ME } from '@/lib/fake';
 import { formatUsd, usd } from '@/lib/money';
 import { FEE_INTRO, NUMBER_MONTHLY, formatRate, minutesFor } from '@/lib/pricing';
-import Icon from '@/components/Icon';
 
 const AMOUNTS = [usd(10), usd(20), usd(50), usd(100)];
 const CALLS_SPENT = usd(18, 42);
@@ -15,10 +16,10 @@ export default function Wallet() {
   const [amount, setAmount] = useState(usd(20));
 
   const fee = FEE_INTRO[plan];
-  const spend = [
-    { label: 'Calls', amount: CALLS_SPENT, tone: '' },
-    ...(fee > 0 ? [{ label: `${PLAN_LABEL[plan]} plan`, amount: fee, tone: 'is-plan' }] : []),
-    { label: 'Number', amount: NUMBER_MONTHLY, tone: 'is-number' },
+  const spend: { label: string; amount: number; tone: BarTone }[] = [
+    { label: 'Calls', amount: CALLS_SPENT, tone: 'brand' },
+    ...(fee > 0 ? [{ label: `${PLAN_LABEL[plan]} plan`, amount: fee, tone: 'lemon' as const }] : []),
+    { label: 'Number', amount: NUMBER_MONTHLY, tone: 'ok' },
   ];
   const total = spend.reduce((s, x) => s + x.amount, 0);
 
@@ -31,56 +32,51 @@ export default function Wallet() {
   ];
 
   return (
-    <div className="dl-wrap">
-      <div>
-        <h1 className="dl-h1">Wallet</h1>
-        <p className="dl-lede">Everything is prepaid. Calls, your number and your plan come out of this balance.</p>
-      </div>
+    <Page>
+      <PageHeader title="Wallet" lede="Everything is prepaid. Calls, your number and your plan come out of this balance." />
 
-      <div className="dl-wallet">
-        <div className="dl-side">
-          <section className="dl-hero" aria-label="Balance">
-            <div className="dl-hero-eyebrow">BALANCE</div>
-            <div className="dl-hero-money dl-num">{formatUsd(BALANCE)}</div>
-            <div className="dl-hero-note">About {minutesFor(BALANCE, plan).toLocaleString('en-US')} minutes at {formatRate(plan)} on {PLAN_LABEL[plan]}</div>
-            <div className="dl-amounts dl-amounts--dark">
-              {AMOUNTS.map(a => (
-                <button key={a} className="dl-chip" aria-pressed={amount === a} onClick={() => setAmount(a)}>{formatUsd(a).replace('.00', '')}</button>
-              ))}
+      <div className="grid grid-cols-[420px_minmax(0,1fr)] items-start gap-[18px]">
+        <div className="flex flex-col gap-3.5">
+          <DarkCard as="section" aria-label="Balance">
+            <DarkEyebrow>BALANCE</DarkEyebrow>
+            <div className="mt-1.5 text-52 leading-[58px] font-extrabold tracking-[-0.04em] tabular-nums">{formatUsd(BALANCE)}</div>
+            <div className="text-14 text-zinc-400">About {minutesFor(BALANCE, plan).toLocaleString('en-US')} minutes at {formatRate(plan)} on {PLAN_LABEL[plan]}</div>
+            <div className="mt-[22px]">
+              <AmountPicker dark amounts={AMOUNTS} value={amount} onChange={setAmount} format={a => formatUsd(a).replace('.00', '')} />
             </div>
-            <button className="dl-btn dl-btn--primary dl-btn--lg dl-btn--block">Add {formatUsd(amount)} by card</button>
-            <div className="dl-hero-fine">Name on card must be {ME.name}.</div>
-          </section>
-          <div className="dl-notecard dl-notecard--14">
-            <span className="dl-tile t-lemon"><Icon name="i-wallet" size={17} /></span>
-            <div><b>Low balance alert</b>Email and on-screen alert when you drop below <b>$5.00</b>.</div>
+            <Button variant="primary" size="lg" block className="mt-3">Add {formatUsd(amount)} by card</Button>
+            <div className="mt-2.5 text-12 text-zinc-400">Name on card must be {ME.name}.</div>
+          </DarkCard>
+          <div className="flex gap-3 rounded-3xl border border-line bg-surface p-[18px] text-14">
+            <Tile tone="lemon" size={38}><Icon name="wallet" size={17} /></Tile>
+            <div><b>Low balance alert</b><p className="text-muted">Email and on-screen alert when you drop below <b className="text-ink">$5.00</b>.</p></div>
           </div>
         </div>
 
-        <div className="dl-side">
-          <section className="dl-panel">
-            <div className="dl-panel-head dl-panel-head--16"><b>Spent in October</b><b className="dl-num">{formatUsd(total)}</b></div>
-            <div className="dl-bars">
+        <div className="flex flex-col gap-3.5">
+          <Card as="section">
+            <CardHead title="Spent in October" className="mb-4"><b className="text-17 tabular-nums">{formatUsd(total)}</b></CardHead>
+            <div className="flex flex-col gap-3.5">
               {spend.map(s => (
-                <div key={s.label} className="dl-barrow">
-                  <div><span>{s.label}</span><b className="dl-num">{formatUsd(s.amount)}</b></div>
-                  <div className="dl-bar8b"><i className={s.tone} style={{ width: `${Math.round((s.amount / total) * 100)}%` }} /></div>
+                <div key={s.label} className="flex flex-col gap-1.5">
+                  <div className="flex text-14"><span className="flex-1">{s.label}</span><b className="tabular-nums">{formatUsd(s.amount)}</b></div>
+                  <Progress thick value={(s.amount / total) * 100} tone={s.tone} label={s.label} />
                 </div>
               ))}
             </div>
-          </section>
-          <section className="dl-panel">
-            <div className="dl-panel-head dl-panel-head--4"><b>Activity</b><a className="dl-link" href="#">Download statement</a></div>
+          </Card>
+          <Card as="section">
+            <CardHead title="Activity" className="mb-1"><a className={cn(linkClass, 'text-14')} href="#">Download statement</a></CardHead>
             {ledger.map((e, i) => (
-              <div key={i} className="dl-ledger-row">
-                <span>{e.date}</span>
-                <div><b>{e.title}</b><p>{e.sub}</p></div>
-                <b className={`dl-num${e.amount > 0 ? ' is-credit' : ''}`}>{e.amount > 0 ? '+' : '−'}{formatUsd(Math.abs(e.amount))}</b>
+              <div key={i} className="grid grid-cols-[90px_minmax(0,1fr)_120px] items-center gap-3.5 border-t border-line py-[13px] text-14">
+                <span className="text-muted">{e.date}</span>
+                <div><b>{e.title}</b><p className="text-13 text-muted">{e.sub}</p></div>
+                <b className={cn('text-right tabular-nums', e.amount > 0 && 'text-success-ink')}>{e.amount > 0 ? '+' : '−'}{formatUsd(Math.abs(e.amount))}</b>
               </div>
             ))}
-          </section>
+          </Card>
         </div>
       </div>
-    </div>
+    </Page>
   );
 }

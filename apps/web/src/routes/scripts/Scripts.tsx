@@ -1,7 +1,8 @@
 import { Fragment, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
+import { Button, Card, CardLabel, Icon, Input, LinkButton, Merge, PageHeader, Paper, ScriptText, Tile, cn } from '@dialer/ui';
+import { BackLink, Page } from '@/components/Page';
 import { usePlan, PLAN_LABEL } from '@/lib/plan';
-import Icon from '@/components/Icon';
 import { MERGE_TAGS, SCRIPT_NAME, SCRIPT_PARTS, renderScript, type MergeValues, type ScriptPart } from '@/lib/script';
 
 const SAMPLE: MergeValues = { first_name: 'Lena', company: 'Sparkle Offices', city: 'Brooklyn', her_time: '3:14 pm' };
@@ -11,6 +12,8 @@ const SCRIPTS = [
   { name: 'Office cleaning v1', note: 'Old', active: false },
   { name: 'Home cleaning', note: 'Not in use', active: false },
 ];
+
+const tag = 'inline-flex items-center rounded-[7px] bg-brand-soft px-2 font-mono text-13 font-bold text-brand-ink';
 
 export default function Scripts() {
   const { plan } = usePlan();
@@ -24,78 +27,77 @@ export default function Scripts() {
   const update = (i: number, patch: Partial<ScriptPart>) => setParts(ps => ps.map((p, j) => (j === i ? { ...p, ...patch } : p)));
 
   return (
-    <div className="dl-wrap dl-wrap--1240">
-      <div className="dl-pagehead">
-        <div className="dl-grow">
-          {fromSetup
-            ? <Link className="dl-link dl-back" to="/setup"><Icon name="i-left" size={16} />Setup · step 6 of 6</Link>
-            : <Link className="dl-link dl-back" to="/leads"><Icon name="i-left" size={16} />Leads</Link>}
-          <h1 className="dl-h1">Your script</h1>
-          <p className="dl-lede">Write it once. It shows on screen while you call, with each lead's details filled in.</p>
-        </div>
-        <button className="dl-btn dl-btn--outline"><Icon name="i-upload" size={16} />Upload a file</button>
-        <button className="dl-btn dl-btn--primary">Save script</button>
-      </div>
+    <Page width={1240}>
+      <PageHeader title="Your script" lede="Write it once. It shows on screen while you call, with each lead's details filled in."
+        back={fromSetup ? <BackLink to="/setup">Setup · step 6 of 6</BackLink> : <BackLink to="/leads">Leads</BackLink>}
+        aside={<>
+          <Button variant="outline"><Icon name="upload" size={16} />Upload a file</Button>
+          <Button variant="primary">Save script</Button>
+        </>} />
 
-      <div className="dl-grid-script">
-        <nav className="dl-panel dl-panel--14" aria-label="Scripts">
-          <div className="dl-cardlabel">Scripts</div>
-          <div className="dl-scriptlist">
+      <div className="grid grid-cols-[230px_minmax(0,1fr)_340px] items-start gap-[18px]">
+        <Card as="nav" aria-label="Scripts" className="p-3.5">
+          <CardLabel>Scripts</CardLabel>
+          <div className="flex flex-col gap-1">
             {SCRIPTS.map((s, i) => (
-              <button key={s.name} className="dl-scriptitem" aria-current={selected === i} onClick={() => setSelected(i)}>
-                <span className={`dl-tile ${s.active ? 't-orange' : 't-grey'}`}><Icon name="i-file" size={15} /></span>
-                <span className="dl-grow"><b>{s.name}</b><small>{s.note}</small></span>
+              <button key={s.name} type="button" aria-current={selected === i} onClick={() => setSelected(i)}
+                className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-0 bg-transparent px-3 py-2.5 text-left hover:bg-sunk aria-[current=true]:bg-brand-soft">
+                <Tile tone={s.active ? 'brand' : 'grey'} size={30}><Icon name="file" size={15} /></Tile>
+                <span className="min-w-0 flex-1"><b className="block text-14">{s.name}</b><small className="block text-12 text-muted">{s.note}</small></span>
               </button>
             ))}
           </div>
-          <button className="dl-link dl-link--new dl-start">+ New script</button>
-        </nav>
+          <LinkButton className="ml-3 mt-3 text-14">+ New script</LinkButton>
+        </Card>
 
-        <section className="dl-panel dl-panel--20" aria-label="Editor">
-          <div className="dl-tagbar">
-            <span>Add a detail:</span>
+        <Card as="section" aria-label="Editor" className="p-5">
+          <div className="mb-3.5 flex flex-wrap items-center gap-2 text-13 text-muted">
+            <span className="mr-1">Add a detail:</span>
             {MERGE_TAGS.map(t => (
-              <button key={t} className="dl-tag" onClick={() => update(lastPart, { body: `${parts[lastPart]?.body ?? ''} {${t}}` })}>{t}</button>
+              <button key={t} type="button" className={cn(tag, 'h-7 cursor-pointer rounded-sm border-0 px-2.5')}
+                onClick={() => update(lastPart, { body: `${parts[lastPart]?.body ?? ''} {${t}}` })}>{t}</button>
             ))}
           </div>
-          <div className="dl-parts">
+          <div className="flex flex-col gap-3.5">
             {parts.map((p, i) => (
-              <div key={i} className="dl-part">
-                <input className="dl-input dl-part-title" aria-label="Part title" value={p.title}
-                  onChange={e => update(i, { title: e.target.value })} />
+              <div key={i} className="flex flex-col gap-1.5">
+                <Input aria-label="Part title" value={p.title} onChange={e => update(i, { title: e.target.value })}
+                  className="h-9 border-transparent bg-sunk px-2.5 text-13 font-bold uppercase tracking-[.04em] text-muted" />
                 {editing === i ? (
-                  <textarea className="dl-input dl-part-edit" autoFocus aria-label={`${p.title} text`} value={p.body}
-                    onChange={e => update(i, { body: e.target.value })} onBlur={() => setEditing(null)} />
+                  <textarea autoFocus aria-label={`${p.title} text`} value={p.body}
+                    onChange={e => update(i, { body: e.target.value })} onBlur={() => setEditing(null)}
+                    className="min-h-[84px] w-full rounded-sm border border-line-strong bg-surface p-3 text-16 leading-[26px] text-ink" />
                 ) : (
-                  <button className="dl-part-body" onClick={() => { setEditing(i); setLastPart(i); }}>
-                    {renderScript(p.body, t => <span className="dl-tag dl-tag--inline">{t}</span>)}
+                  <button type="button" onClick={() => { setEditing(i); setLastPart(i); }}
+                    className="w-full cursor-text rounded-sm border-0 bg-transparent px-2.5 py-1 text-left text-16 leading-[26px] hover:bg-sunk">
+                    {renderScript(p.body, t => <span className={cn(tag, 'h-6')}>{t}</span>)}
                   </button>
                 )}
               </div>
             ))}
           </div>
-          <button className="dl-link dl-link--add dl-start" onClick={() => setParts(ps => [...ps, { title: 'New part', body: '' }])}>+ Add a part</button>
-        </section>
+          <LinkButton className="mt-3.5 text-14" onClick={() => setParts(ps => [...ps, { title: 'New part', body: '' }])}>+ Add a part</LinkButton>
+        </Card>
 
-        <aside className="dl-side dl-side--10">
-          <div className="dl-cardlabel">On a call with Lena, it looks like this</div>
-          <div className="dl-paper dl-paper--preview">
-            <div className="dl-sc dl-sc--sm">
+        <aside className="flex flex-col gap-2.5">
+          <CardLabel className="mb-0">On a call with Lena, it looks like this</CardLabel>
+          <Paper className="max-h-[580px] rounded-3xl p-[22px]">
+            <ScriptText className="text-17 leading-[27px]">
               {parts.map((p, i) => (
                 <Fragment key={i}>
                   <h4>{p.title}</h4>
-                  <p>{renderScript(p.body, t => <span className="dl-merge">{SAMPLE[t]}</span>)}</p>
+                  <p>{renderScript(p.body, t => <Merge>{SAMPLE[t]}</Merge>)}</p>
                 </Fragment>
               ))}
-            </div>
-          </div>
-          <p className="dl-sidenote">
+            </ScriptText>
+          </Paper>
+          <p className="px-1 text-13 leading-[19px] text-muted">
             {plan === 'free'
               ? "On Free, the script shows on screen for your first 2 months. After that it's part of Starter."
               : `On ${PLAN_LABEL[plan]}, your script always shows on screen.`}
           </p>
         </aside>
       </div>
-    </div>
+    </Page>
   );
 }

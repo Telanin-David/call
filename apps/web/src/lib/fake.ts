@@ -1,3 +1,4 @@
+import type { PillTone } from '@dialer/ui';
 import { usd } from './money';
 
 export const ME = { name: 'Tunde Bakare', first: 'Tunde', initials: 'TB', email: 'tunde.bakare@gmail.com' };
@@ -15,12 +16,12 @@ export const RESULT_LABEL: Record<Result, string> = {
   missed: 'Missed call',
 };
 
-export const RESULT_PILL: Record<Result, string> = {
-  interested: 'dl-pill dl-pill--success',
-  callback: 'dl-pill dl-pill--brand',
-  no_answer: 'dl-pill dl-pill--warn',
-  not_interested: 'dl-pill',
-  missed: 'dl-pill dl-pill--danger',
+export const RESULT_TONE: Record<Result, PillTone> = {
+  interested: 'success',
+  callback: 'brand',
+  no_answer: 'warn',
+  not_interested: 'neutral',
+  missed: 'danger',
 };
 
 export interface Lead {

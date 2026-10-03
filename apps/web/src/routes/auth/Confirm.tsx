@@ -1,35 +1,31 @@
 import { useNavigate } from 'react-router-dom';
-import AuthShell from '@/layouts/AuthShell';
-import Icon from '@/components/Icon';
-import CodeBoxes from '@/components/CodeBoxes';
+import { Button, CodeBoxes, Icon, Tile, cn, linkClass } from '@dialer/ui';
+import AuthShell, { AuthForm, AuthTitle } from '@/layouts/AuthShell';
 
 export default function Confirm() {
   const navigate = useNavigate();
   return (
     <AuthShell signupStep={{ n: 2, label: 'Confirm' }}>
-      <div className="dl-auth-form dl-auth-form--wide">
-        <div>
-          <h2 className="dl-auth-h2">Confirm it's you</h2>
-          <p className="dl-auth-sub">Two quick checks so leads only ever hear real people.</p>
+      <AuthForm wide onSubmit={() => navigate('/setup')}>
+        <AuthTitle title="Confirm it's you" sub="Two quick checks so leads only ever hear real people." />
+        <div className="flex items-center gap-3.5 rounded-2xl bg-success-soft px-[18px] py-4">
+          <span className="flex size-[38px] flex-none items-center justify-center rounded-full bg-success text-white"><Icon name="check" /></span>
+          <div className="flex-1"><b className="text-15">Email confirmed</b><p className="text-13 text-success-ink">tunde.bakare@gmail.com</p></div>
         </div>
-        <div className="dl-ok">
-          <span><Icon name="i-check" /></span>
-          <div className="dl-grow"><b>Email confirmed</b><p>tunde.bakare@gmail.com</p></div>
-        </div>
-        <div className="dl-box">
-          <div className="dl-rowhead">
-            <span className="dl-tile t-orange"><Icon name="i-phone" /></span>
-            <div className="dl-grow"><b>Enter your phone code</b><p>Sent by SMS to +234 803 123 4567</p></div>
-            <button type="button" className="dl-link dl-link--sm">Change</button>
+        <div className="flex flex-col gap-4 rounded-2xl border border-line p-[22px]">
+          <div className="flex items-center gap-3.5">
+            <Tile tone="brand" size={38}><Icon name="phone" /></Tile>
+            <div className="flex-1"><b className="text-15">Enter your phone code</b><p className="text-13 text-muted">Sent by SMS to +234 803 123 4567</p></div>
+            <button type="button" className={cn(linkClass, 'text-13')}>Change</button>
           </div>
           <CodeBoxes digits="3071" size="lg" />
-          <button className="dl-btn dl-btn--primary dl-btn--lg dl-btn--block dl-btn--xl" onClick={() => navigate('/setup')}>Confirm</button>
-          <div className="dl-split">
-            <span>Send again in <b className="dl-num">0:42</b></span>
-            <span>No SMS? <a className="dl-link" href="#">Send by WhatsApp</a></span>
+          <Button type="submit" variant="primary" size="xl" block>Confirm</Button>
+          <div className="flex justify-between text-13 text-muted">
+            <span>Send again in <b className="text-ink tabular-nums">0:42</b></span>
+            <span>No SMS? <a className={linkClass} href="#">Send by WhatsApp</a></span>
           </div>
         </div>
-      </div>
+      </AuthForm>
     </AuthShell>
   );
 }

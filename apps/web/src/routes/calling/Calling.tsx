@@ -1,30 +1,32 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import {
+  Avatar, Button, CallCard, CallDevice, CallFacts, CallStatus, CallTimer, ChoiceCard, Chip, Dot, Facts, Icon, Kbd, Merge, Note,
+  OutcomeTile, Paper, Pill, Progress, Radio, ScriptText, Tile, buttonClass, cn, type IconName, type OutcomeTone,
+} from '@dialer/ui';
 import { usePlan } from '@/lib/plan';
 import { useCallStore, useDeviceStore } from '@/lib/store';
 import { BALANCE, DETAILS, QUEUE, RESULT_LABEL, type QueueItem } from '@/lib/fake';
 import { formatUsd, formatUsd3 } from '@/lib/money';
 import { DIALS_PER_DAY, RATE_PER_MIN, formatRate } from '@/lib/pricing';
 import { SCRIPT_NAME, SCRIPT_PARTS, renderScript, type MergeValues } from '@/lib/script';
-import Icon, { type IconName } from '@/components/Icon';
 
 type Phase = 'ready' | 'pairing' | 'live';
 type Outcome = 'interested' | 'callback' | 'not_interested' | 'no_answer' | 'wrong' | 'dnc';
 
-const OUTCOMES: { key: Outcome; label: string; icon: IconName; tone: string }[] = [
-  { key: 'interested', label: 'Interested', icon: 'i-up', tone: 't-mint' },
-  { key: 'callback', label: 'Call back', icon: 'i-callback', tone: 't-orange' },
-  { key: 'not_interested', label: 'Not interested', icon: 'i-down', tone: 't-grey' },
-  { key: 'no_answer', label: 'No answer', icon: 'i-missed', tone: 't-lemon' },
-  { key: 'wrong', label: 'Wrong number', icon: 'i-wrong', tone: 't-grey' },
-  { key: 'dnc', label: 'Do not call', icon: 'i-ban', tone: 't-red' },
+const OUTCOMES: { key: Outcome; label: string; icon: IconName; tone: OutcomeTone }[] = [
+  { key: 'interested', label: 'Interested', icon: 'up', tone: 'mint' },
+  { key: 'callback', label: 'Call back', icon: 'callback', tone: 'orange' },
+  { key: 'not_interested', label: 'Not interested', icon: 'down', tone: 'grey' },
+  { key: 'no_answer', label: 'No answer', icon: 'missed', tone: 'lemon' },
+  { key: 'wrong', label: 'Wrong number', icon: 'wrong', tone: 'grey' },
+  { key: 'dnc', label: 'Do not call', icon: 'ban', tone: 'red' },
 ];
 
 const WHEN = ['Tomorrow', 'In 3 days', 'Next week'] as const;
 const ORDINAL = ['', '1st', '2nd', '3rd'];
 const FIRST_OPEN = QUEUE.findIndex(q => !q.done);
-
-const pad = (n: number) => String(n).padStart(2, '0');
+const label = 'text-12 font-medium tracking-[.02em] text-muted';
 
 export default function Calling() {
   const { plan } = usePlan();
@@ -108,7 +110,7 @@ export default function Calling() {
   });
 
   if (!lead || !detail) {
-    return <div className="dl-empty">Your list is done. Pick another list on the Leads page.</div>;
+    return <p className="px-6 py-12 text-center text-muted">Your list is done. Pick another list on the Leads page.</p>;
   }
 
   const merge: MergeValues = {
@@ -121,11 +123,13 @@ export default function Calling() {
   const cost = Math.round((RATE_PER_MIN[plan] * seconds) / 60);
 
   return (
-    <div className="dl-call">
-      <aside className="dl-queue" aria-label="Queue">
-        <div className="dl-queue-head">
-          <span className="dl-label dl-grow">{free ? 'YOUR LEADS' : 'UP NEXT'} <span className="dl-muted">{left} {free ? 'to call' : 'left'}</span></span>
-          <button className="dl-iconbtn" aria-label="Close queue"><Icon name="i-panel" /></button>
+    <div className="grid h-full min-h-0 grid-cols-[288px_minmax(0,1fr)_380px] bg-surface">
+      <aside className="flex flex-col gap-0.5 overflow-auto border-r border-line px-3 py-4" aria-label="Queue">
+        <div className="flex items-center gap-2 pb-3 pl-3 pr-1 pt-1">
+          <span className={cn(label, 'flex-1')}>{free ? 'YOUR LEADS' : 'UP NEXT'} <span className="font-normal">{left} {free ? 'to call' : 'left'}</span></span>
+          <button type="button" aria-label="Close queue" className="flex size-9 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent text-muted hover:bg-sunk hover:text-ink">
+            <Icon name="panel" />
+          </button>
         </div>
         {queue.map((q, i) => {
           const isCurrent = i === current;
@@ -134,176 +138,170 @@ export default function Calling() {
             ? (live ? 'On call now' : `${free ? 'Selected' : 'Up first'} · ${d?.localTime ?? ''}`)
             : `${q.lead.company} · ${d?.localTime ?? ''}`);
           return (
-            <button key={q.lead.id} className={`dl-q2${q.done ? ' is-done' : ''}${isCurrent ? ' is-current' : ''}`}
-              disabled={live || Boolean(q.done)} onClick={() => setCurrent(i)}>
-              <span className={`av${isCurrent ? '' : ` dl-av-${q.lead.tone}`}`}>{q.lead.initials}</span>
-              <div className="dl-grow"><div className="nm">{q.lead.name}</div><div className="sm">{sub}</div></div>
-              {isCurrent && <span className="dl-dot dl-dot--ok" />}
-              {free && !isCurrent && !q.done && <span className="dl-q2-call" aria-hidden="true"><Icon name="i-call" size={14} /></span>}
+            <button key={q.lead.id} type="button" aria-current={isCurrent || undefined} disabled={live || Boolean(q.done)} onClick={() => setCurrent(i)}
+              className={cn('flex w-full items-center gap-3 rounded-lg border-0 bg-transparent px-3 py-2.5 text-left',
+                isCurrent ? 'bg-brand-soft' : 'enabled:cursor-pointer enabled:hover:bg-sunk')}>
+              <Avatar initials={q.lead.initials} tone={isCurrent ? 'brand' : 'plain'} size={32} className="text-12 font-semibold" />
+              <div className="min-w-0 flex-1">
+                <div className={cn('text-14 font-medium', q.done && 'text-muted')}>{q.lead.name}</div>
+                <div className="truncate text-12 text-muted">{sub}</div>
+              </div>
+              {isCurrent && <Dot tone="ok" />}
+              {free && !isCurrent && !q.done && (
+                <span aria-hidden="true" className="flex size-[30px] flex-none items-center justify-center rounded-full bg-surface text-brand-ink shadow-[inset_0_0_0_1px_var(--line)]">
+                  <Icon name="call" size={14} />
+                </span>
+              )}
             </button>
           );
         })}
-        <span className="dl-push" />
-        <div className="dl-meter">
-          <div className="dl-meter-row"><span className="dl-muted">Dials today</span><b className="dl-num">{limit ? `${dials} of ${limit}` : `${dials}`}</b></div>
-          <div className="dl-progress"><span style={{ width: `${limit ? Math.min(100, Math.round((dials / limit) * 100)) : 0}%` }} /></div>
+        <span className="flex-1" />
+        <div className="flex flex-col gap-2 p-3">
+          <div className="flex justify-between text-13"><span className="text-muted">Dials today</span><b className="tabular-nums">{limit ? `${dials} of ${limit}` : `${dials}`}</b></div>
+          <Progress value={limit ? (dials / limit) * 100 : 0} label="Dials today" />
         </div>
         {free ? (
-          <Link to="/plans" className="dl-upsell dl-plainlink">
-            <Icon name="i-lock" size={14} />
-            <span className="dl-grow"><b>Auto-dial the list</b><p>Calls one after another for you</p></span>
-            <span className="dl-pill dl-pill--brand">Starter</span>
+          <Link to="/plans" className="flex items-center gap-2.5 rounded-lg bg-sunk px-3.5 py-3 text-13 text-ink no-underline">
+            <Icon name="lock" size={14} className="text-muted" />
+            <span className="flex-1"><b className="block font-semibold">Auto-dial the list</b><span className="text-muted">Calls one after another for you</span></span>
+            <Pill tone="brand">Starter</Pill>
           </Link>
         ) : (
-          <div className="dl-queue-acts">
-            <button className="dl-btn"><Icon name="i-pause" size={16} />Pause</button>
-            <button className="dl-btn" onClick={() => { if (live) return; const n = queue.findIndex((q, i) => i > current && !q.done); if (n >= 0) setCurrent(n); }}>
-              <Icon name="i-skip" size={16} />Skip
-            </button>
+          <div className="grid grid-cols-2 gap-2">
+            <Button><Icon name="pause" size={16} />Pause</Button>
+            <Button onClick={() => { if (live) return; const n = queue.findIndex((q, i) => i > current && !q.done); if (n >= 0) setCurrent(n); }}>
+              <Icon name="skip" size={16} />Skip
+            </Button>
           </div>
         )}
       </aside>
 
-      <main className="dl-call-main">
-        <section className="dl-card dl-leadcard" aria-label="Lead">
-          <div className="dl-leadhead">
-            <span className={`dl-avlg dl-avlg--52 dl-av-${lead.tone}`}>{lead.initials}</span>
-            <div className="dl-grow">
-              <h1 className="dl-lead-name dl-lead-name--26">{lead.name}</h1>
-              <p className="dl-muted dl-small">{detail.title}, {lead.company}</p>
+      <main className="flex min-h-0 flex-col gap-4 overflow-hidden bg-sunk px-8 py-6">
+        <section aria-label="Lead" className="flex flex-col gap-4 rounded-xl border border-line bg-surface px-[22px] py-5 shadow-card">
+          <div className="flex items-center gap-3.5">
+            <Avatar initials={lead.initials} tone={lead.tone} size={52} />
+            <div className="flex-1">
+              <h1 className="text-26 font-semibold tracking-[-0.03em]">{lead.name}</h1>
+              <p className="pt-0.5 text-13 text-muted">{detail.title}, {lead.company}</p>
             </div>
-            {detail.lastCall && <span className="dl-pill dl-pill--success"><Icon name="i-up" size={14} />{RESULT_LABEL[detail.lastCall.result]} last time</span>}
-            <span className="dl-pill">{ORDINAL[detail.attempt] ?? `${detail.attempt}th`} call</span>
+            {detail.lastCall && <Pill tone="success"><Icon name="up" size={14} />{RESULT_LABEL[detail.lastCall.result]} last time</Pill>}
+            <Pill>{ORDINAL[detail.attempt] ?? `${detail.attempt}th`} call</Pill>
           </div>
-          <div className="dl-facts">
-            <div className="dl-fact"><span><Icon name="i-call" size={16} />Phone</span><b>{detail.phone}</b></div>
-            <div className="dl-fact"><span><Icon name="i-mail" size={16} />Email</span><b>{detail.email}</b></div>
-            <div className="dl-fact"><span><Icon name="i-pin" size={16} />Location</span><b>{detail.location}</b></div>
-            <div className="dl-fact"><span><Icon name="i-building" size={16} />Company</span><b>{detail.companyNote}</b></div>
-            <div className="dl-fact"><span><Icon name="i-globe" size={16} />Website</span><b>{detail.website}</b></div>
-            <div className="dl-fact"><span><Icon name="i-list" size={16} />List</span><b>October leads</b></div>
-          </div>
+          <Facts items={[
+            { icon: 'call', label: 'Phone', value: detail.phone },
+            { icon: 'mail', label: 'Email', value: detail.email },
+            { icon: 'pin', label: 'Location', value: detail.location },
+            { icon: 'building', label: 'Company', value: detail.companyNote },
+            { icon: 'globe', label: 'Website', value: detail.website },
+            { icon: 'list', label: 'List', value: 'October leads' },
+          ]} />
           {detail.lastCall && (
-            <div className="dl-conclusion dl-conclusion--warn">
-              <Icon name="i-history" size={16} /><b>Last call, {detail.lastCall.date}</b><span>{detail.lastCall.note}</span>
+            <div className="flex items-start gap-3 rounded-md bg-warn-soft px-3.5 py-3 text-14">
+              <Icon name="history" size={16} className="mt-0.5 text-warn-ink" />
+              <b className="whitespace-nowrap text-12 leading-5 font-medium text-warn-ink">Last call, {detail.lastCall.date}</b>
+              <span>{detail.lastCall.note}</span>
             </div>
           )}
         </section>
 
-        <section className="dl-paper dl-paper--fill" aria-label="Script">
-          <div className="dl-paper-head">
-            <span className="dl-label dl-grow">YOUR SCRIPT · {SCRIPT_NAME.toUpperCase()}</span>
-            {free && <span className="dl-pill dl-pill--brand">Free until 1 Dec</span>}
-            <Link to="/scripts" className="dl-btn dl-btn--quiet dl-btn--32">Edit</Link>
-            <button className="dl-iconbtn" aria-label="Smaller text" onClick={() => setScriptSize(s => Math.max(16, s - 2))}>A-</button>
-            <button className="dl-iconbtn" aria-label="Bigger text" onClick={() => setScriptSize(s => Math.min(28, s + 2))}>A+</button>
+        <Paper className="min-h-0 flex-1">
+          <div className="mb-[18px] flex items-center gap-1.5">
+            <span className={cn(label, 'flex-1')}>YOUR SCRIPT · {SCRIPT_NAME.toUpperCase()}</span>
+            {free && <Pill tone="brand">Free until 1 Dec</Pill>}
+            <Link to="/scripts" className={buttonClass({ variant: 'quiet', size: 'sm' })}>Edit</Link>
+            <button type="button" aria-label="Smaller text" onClick={() => setScriptSize(s => Math.max(16, s - 2))} className="size-9 cursor-pointer rounded-sm border-0 bg-transparent text-13 text-muted hover:bg-sunk">A-</button>
+            <button type="button" aria-label="Bigger text" onClick={() => setScriptSize(s => Math.min(28, s + 2))} className="size-9 cursor-pointer rounded-sm border-0 bg-transparent text-13 text-muted hover:bg-sunk">A+</button>
           </div>
-          <div className="dl-sc" style={{ fontSize: scriptSize, lineHeight: `${Math.round(scriptSize * 1.6)}px` }}>
+          <ScriptText size={scriptSize}>
             {SCRIPT_PARTS.map(p => (
               <div key={p.title}>
                 <h4>{p.title}</h4>
-                <p>{renderScript(p.body, t => <span className="dl-merge">{merge[t]}</span>)}</p>
+                <p>{renderScript(p.body, t => <Merge>{merge[t]}</Merge>)}</p>
               </div>
             ))}
-          </div>
-        </section>
+          </ScriptText>
+        </Paper>
       </main>
 
-      <section className="dl-callpanel" aria-label="Call">
-        <div className="dl-callcard">
-          <div className="dl-callcard-top">
-            {live
-              ? <span className="lv"><span className="dl-dot dl-dot--ok dl-dot--pulse" />CONNECTED</span>
-              : <span className="lv is-idle">READY</span>}
-            {!live && <span className="rec">US rate {formatRate(plan)} / min</span>}
-            {live && plan === 'pro' && <span className="rec"><i />Recording</span>}
-            {live && plan !== 'pro' && <span className="rec"><Icon name="i-lock" size={13} />Not recorded · Pro</span>}
+      <section className="flex flex-col gap-3.5 overflow-auto border-l border-line p-5" aria-label="Call">
+        <CallCard>
+          <div className="flex items-center justify-between">
+            <CallStatus live={live} />
+            {!live && <span className="text-12 text-zinc-400">US rate {formatRate(plan)} / min</span>}
+            {live && plan === 'pro' && <span className="inline-flex items-center gap-1.5 text-12 text-zinc-400"><i className="size-[7px] rounded-full bg-[#ef4444]" />Recording</span>}
+            {live && plan !== 'pro' && <span className="inline-flex items-center gap-1.5 text-12 text-zinc-400"><Icon name="lock" size={13} />Not recorded · Pro</span>}
           </div>
-          <div className={`tm${live ? '' : ' is-idle'}`}>{pad(Math.floor(seconds / 60))}:{pad(seconds % 60)}</div>
-          <div className="row">
-            <div><span>{lead.pronoun === 'her' ? 'Her' : 'His'} time</span><b>{detail.localTime}</b></div>
-            <div><span>Your time</span><b>8:14 pm</b></div>
-            {live
-              ? <div className="hot"><span>This call</span><b>{formatUsd3(cost)}</b></div>
-              : <div><span>Balance</span><b>{formatUsd(BALANCE)}</b></div>}
-          </div>
-          {live && (via === 'phone' ? (
-            <div className="dev">
-              <span className="ico"><Icon name="i-phone" /></span>
-              <div><b>Your phone</b><span>Mic and speaker · Pixel 6a</span></div>
-              <span className="bat">64%</span>
-            </div>
-          ) : (
-            <div className="dev">
-              <span className="ico"><Icon name="i-headset" /></span>
-              <div><b>This laptop</b><span>Headset plugged into the jack</span></div>
-            </div>
-          ))}
-        </div>
+          <CallTimer seconds={seconds} idle={!live} />
+          <CallFacts items={[
+            { label: `${lead.pronoun === 'her' ? 'Her' : 'His'} time`, value: detail.localTime },
+            { label: 'Your time', value: '8:14 pm' },
+            live ? { label: 'This call', value: formatUsd3(cost), hot: true } : { label: 'Balance', value: formatUsd(BALANCE) },
+          ]} />
+          {live && (via === 'phone'
+            ? <CallDevice icon="phone" title="Your phone" sub="Mic and speaker · Pixel 6a" battery="64%" />
+            : <CallDevice icon="headset" title="This laptop" sub="Headset plugged into the jack" />)}
+        </CallCard>
 
         {live ? (
           <>
-            <div className="dl-callacts">
-              <button className="dl-btn dl-btn--lg dl-btn--outline" aria-pressed={muted} onClick={() => setMuted(m => !m)}>
-                <Icon name={muted ? 'i-micoff' : 'i-mic'} />{muted ? 'Unmute' : 'Mute'}<span className="dl-kbd">M</span>
-              </button>
-              <button className="dl-btn dl-btn--lg dl-btn--danger" onClick={hangUp}><Icon name="i-hangup" />Hang up<span className="dl-kbd">H</span></button>
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="outline" size="lg" aria-pressed={muted} onClick={() => setMuted(m => !m)}>
+                <Icon name={muted ? 'micoff' : 'mic'} />{muted ? 'Unmute' : 'Mute'}<Kbd onColor={muted}>M</Kbd>
+              </Button>
+              <Button variant="danger" size="lg" onClick={hangUp}><Icon name="hangup" />Hang up<Kbd onColor>H</Kbd></Button>
             </div>
-            <span className="dl-label dl-mt4">HOW DID IT GO? <span>Keys 1 to 6</span></span>
-            <div className="dl-otiles">
+            <span className={cn(label, 'mt-1')}>HOW DID IT GO? <span className="font-normal">Keys 1 to 6</span></span>
+            <div className="grid grid-cols-2 gap-2">
               {OUTCOMES.map(o => (
-                <button key={o.key} className="dl-otile" aria-pressed={outcome === o.key} onClick={() => setOutcome(o.key)}>
-                  <span className={`t ${o.tone}`}><Icon name={o.icon} /></span>{o.label}
-                </button>
+                <OutcomeTile key={o.key} icon={o.icon} tone={o.tone} pressed={outcome === o.key} onClick={() => setOutcome(o.key)}>{o.label}</OutcomeTile>
               ))}
             </div>
             {outcome === 'callback' && (
               <>
-                <span className="dl-label dl-mt2">CALL BACK WHEN?</span>
-                <div className="dl-chiprow dl-chiprow--nowrap">
-                  {WHEN.map(w => <button key={w} className="dl-chip" aria-pressed={when === w} onClick={() => setWhen(w)}>{w}</button>)}
-                  <button className="dl-chip dl-chip--icon" aria-label="Pick a date"><Icon name="i-callback" size={16} /></button>
+                <span className={cn(label, 'mt-0.5')}>CALL BACK WHEN?</span>
+                <div className="flex gap-1.5">
+                  {WHEN.map(w => <Chip key={w} pressed={when === w} className="px-3" onClick={() => setWhen(w)}>{w}</Chip>)}
+                  <Chip aria-label="Pick a date" className="w-10 flex-none px-0"><Icon name="callback" size={16} /></Chip>
                 </div>
               </>
             )}
           </>
         ) : (
           <>
-            <span className="dl-label dl-mt6">HOW WILL YOU TALK?</span>
-            <div className="dl-how" role="radiogroup" aria-label="How will you talk">
-              <button className="dl-choice" role="radio" aria-checked={via === 'computer'} onClick={() => setTalkVia('computer')}>
-                <span className="dl-tile t-grey"><Icon name="i-laptop" /></span>
-                <span><b className="dl-choice-title">On this computer</b><span className="dl-mini">Use this laptop's mic and speakers, or plug in a headset</span></span>
-                <span className="dl-radio" />
-              </button>
-              <button className={`dl-choice${free ? ' is-locked' : ''}`} role="radio" aria-checked={via === 'phone'} aria-disabled={free}
-                onClick={() => !free && setTalkVia('phone')}>
-                <span className="dl-tile t-orange"><Icon name="i-phone" /></span>
-                <span><b className="dl-choice-title">Use my phone to talk</b><span className="dl-mini">Your phone is the mic and speaker. You watch the script here. No phone minutes used</span></span>
-                {free ? <span className="dl-pill dl-pill--brand"><Icon name="i-lock" size={14} />Starter</span> : <span className="dl-radio" />}
-              </button>
+            <span className={cn(label, 'mt-1.5')}>HOW WILL YOU TALK?</span>
+            <div className="flex flex-col gap-2" role="radiogroup" aria-label="How will you talk">
+              <ChoiceCard checked={via === 'computer'} onClick={() => setTalkVia('computer')}>
+                <Tile tone="grey" size={36}><Icon name="laptop" /></Tile>
+                <span><b className="block text-14 font-semibold">On this computer</b><span className="block text-12 text-muted">Use this laptop's mic and speakers, or plug in a headset</span></span>
+                <Radio />
+              </ChoiceCard>
+              <ChoiceCard checked={via === 'phone'} locked={free} onClick={() => !free && setTalkVia('phone')}>
+                <Tile tone="brand" size={36}><Icon name="phone" /></Tile>
+                <span><b className="block text-14 font-semibold">Use my phone to talk</b><span className="block text-12 text-muted">Your phone is the mic and speaker. You watch the script here. No phone minutes used</span></span>
+                {free ? <Pill tone="brand" className="ml-auto flex-none"><Icon name="lock" size={14} />Starter</Pill> : <Radio />}
+              </ChoiceCard>
             </div>
             {free && (
-              <div className="dl-callnote dl-callnote--grey">
-                <Icon name="i-lock" size={14} />
-                <span className="dl-small dl-grow">Talking on your phone while you read here comes with Starter.</span>
-                <Link to="/plans" className="dl-btn dl-btn--outline dl-btn--34">See Starter</Link>
-              </div>
+              <Note>
+                <Icon name="lock" size={14} />
+                <span className="flex-1 text-13">Talking on your phone while you read here comes with Starter.</span>
+                <Link to="/plans" className={buttonClass({ variant: 'outline', className: 'h-[34px]' })}>See Starter</Link>
+              </Note>
             )}
             {!free && via === 'phone' && !phoneLinked && (
-              <div className="dl-callnote">
-                <Icon name="i-qr" />
+              <Note tone="brand">
+                <Icon name="qr" className="text-brand-ink" />
                 {phase === 'pairing'
-                  ? <span className="dl-small dl-grow">Waiting for your phone to scan</span>
-                  : <><span className="dl-small dl-grow">Your phone isn't connected yet</span>
-                    <button className="dl-btn dl-btn--outline dl-btn--34" onClick={() => setPhase('pairing')}>Scan code</button></>}
-              </div>
+                  ? <span className="flex-1 text-13">Waiting for your phone to scan</span>
+                  : <><span className="flex-1 text-13">Your phone isn't connected yet</span>
+                    <Button variant="outline" className="h-[34px]" onClick={() => setPhase('pairing')}>Scan code</Button></>}
+              </Note>
             )}
-            <span className="dl-push" />
-            <button className="dl-btn dl-btn--primary dl-btn--lg dl-btn--block" aria-disabled={!canStart} onClick={start}>
-              <Icon name="i-call" />{free ? `Call ${merge.first_name}` : 'Start calling'}{!free && <span className="dl-kbd">P</span>}
-            </button>
-            <p className="dl-mini dl-center">
+            <span className="flex-1" />
+            <Button variant="primary" size="lg" block aria-disabled={!canStart} onClick={start}>
+              <Icon name="call" />{free ? `Call ${merge.first_name}` : 'Start calling'}{!free && <Kbd onColor>P</Kbd>}
+            </Button>
+            <p className="text-center text-12 text-muted">
               {free ? 'On Free you call one lead at a time and pick who is next.'
                 : canStart ? 'Calls go out one after another. Pause any time.' : 'Starts once your phone is connected'}
             </p>

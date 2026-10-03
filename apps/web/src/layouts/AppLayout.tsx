@@ -1,9 +1,9 @@
 import { Link, Outlet, useMatches } from 'react-router-dom';
+import { Brand, Icon, Pill, Signal, buttonClass, cn, type PillTone } from '@dialer/ui';
 import { usePlan, PLAN_LABEL, type Plan } from '@/lib/plan';
 import { useDeviceStore, useCallStore } from '@/lib/store';
 import { formatUsd } from '@/lib/money';
 import { BALANCE, ME } from '@/lib/fake';
-import Icon from '@/components/Icon';
 
 export type Section = 'today' | 'calling' | 'followups' | 'leads' | 'history';
 
@@ -23,7 +23,7 @@ const NAV: { key: Section; to: string; label: string }[] = [
   { key: 'history', to: '/history', label: 'History' },
 ];
 
-const PILL: Record<Plan, string> = { free: 'dl-pill', starter: 'dl-pill dl-pill--brand', pro: 'dl-pill dl-pill--lemon' };
+const PLAN_PILL: Record<Plan, PillTone> = { free: 'neutral', starter: 'brand', pro: 'lemon' };
 
 function useShellHandle(): ShellHandle {
   const matches = useMatches();
@@ -38,29 +38,20 @@ function DeviceChip({ plan }: { plan: Plan }) {
   const { talkVia: chosen, phoneLinked } = useDeviceStore();
   const talkVia = plan === 'free' ? 'computer' : chosen;
   const live = useCallStore(s => s.status === 'answered');
-  if (talkVia === 'computer') {
-    return (
-      <button className="dl-device" type="button">
-        <span className="ico"><Icon name="i-headset" size={16} /></span>
-        {live
-          ? <span>Talking on this laptop<small>Headset in the jack</small></span>
-          : <span>Laptop sound ready<small>Mic and speaker</small></span>}
-      </button>
-    );
-  }
-  if (talkVia === 'phone' && phoneLinked) {
-    return (
-      <button className="dl-device" type="button" aria-label="Talking on your phone, Pixel 6a. Good signal">
-        <span className="ico"><Icon name="i-phone" size={16} /></span>
-        <span>Talking on your phone<small>Pixel 6a · good signal</small></span>
-        <span className="dl-signal dl-signal--good"><i /><i /><i /></span>
-      </button>
-    );
-  }
+  const ready = talkVia === 'computer' || (talkVia === 'phone' && phoneLinked);
+  const [title, sub] = talkVia === 'computer'
+    ? (live ? ['Talking on this laptop', 'Headset in the jack'] : ['Laptop sound ready', 'Mic and speaker'])
+    : ready ? ['Talking on your phone', 'Pixel 6a · good signal'] : ['Not connected', 'Choose how to talk'];
+
   return (
-    <button className="dl-device dl-device--off" type="button" aria-label="No sound device yet. Choose how to talk">
-      <span className="ico"><Icon name="i-phone" size={16} /></span>
-      <span>Not connected<small>Choose how to talk</small></span>
+    <button type="button" aria-label={`${title}. ${sub}`}
+      className={cn('inline-flex h-[42px] cursor-pointer items-center gap-2.5 rounded-full border-0 pl-1.5 pr-4 text-left text-13 font-semibold',
+        ready ? 'bg-success-soft text-success-ink' : 'bg-warn-soft text-warn-ink')}>
+      <span className={cn('flex size-[30px] flex-none items-center justify-center rounded-full', ready ? 'bg-success text-white' : 'bg-lemon text-on-lemon')}>
+        <Icon name={talkVia === 'computer' ? 'headset' : 'phone'} size={16} />
+      </span>
+      <span>{title}<small className="block text-11 leading-[14px] font-medium opacity-85">{sub}</small></span>
+      {ready && talkVia === 'phone' && <Signal bars={3} />}
     </button>
   );
 }
@@ -71,24 +62,33 @@ export default function AppLayout() {
   const onboarding = handle.onboarding === true;
 
   return (
-    <div className="dl-shell">
-      <header className="dl-topbar">
-        <Link to="/" className="dl-brand"><span className="dl-brand-mark" />Dialer</Link>
+    <div className="flex h-screen flex-col">
+      <header className="flex h-[60px] flex-none items-center gap-4 border-b border-line bg-surface px-7">
+        <Link to="/" className="text-ink no-underline"><Brand /></Link>
         {!onboarding && (
-          <nav className="dl-nav" aria-label="Main">
+          <nav className="ml-5 flex gap-0.5" aria-label="Main">
             {NAV.map(n => (
-              <Link key={n.key} to={n.to} aria-current={handle.section === n.key ? 'page' : undefined}>{n.label}</Link>
+              <Link key={n.key} to={n.to} aria-current={handle.section === n.key ? 'page' : undefined}
+                className="inline-flex h-9 items-center rounded-sm px-3 text-14 font-medium text-muted no-underline aria-[current=page]:bg-sunk aria-[current=page]:text-ink">
+                {n.label}
+              </Link>
             ))}
           </nav>
         )}
-        <span className="dl-grow" />
+        <span className="flex-1" />
         {handle.device && <DeviceChip plan={plan} />}
-        <span className={PILL[plan]}>{plan === 'free' ? 'Free plan' : PLAN_LABEL[plan]}</span>
-        <div className="dl-money"><b>{formatUsd(handle.balance ?? BALANCE)}</b><span>Balance</span></div>
-        {!onboarding && <Link to="/wallet" className="dl-btn dl-btn--outline">Top up</Link>}
-        <Link to="/settings" className="dl-avatar" aria-label="Settings">{ME.initials}</Link>
+        <Pill tone={PLAN_PILL[plan]} className="h-7">{plan === 'free' ? 'Free plan' : PLAN_LABEL[plan]}</Pill>
+        <div className="flex flex-col items-end leading-none">
+          <b className="text-15 font-semibold tabular-nums">{formatUsd(handle.balance ?? BALANCE)}</b>
+          <span className="mt-[3px] text-11 text-muted">Balance</span>
+        </div>
+        {!onboarding && <Link to="/wallet" className={buttonClass({ variant: 'outline' })}>Top up</Link>}
+        <Link to="/settings" aria-label="Settings"
+          className="flex size-[34px] items-center justify-center rounded-full bg-warn-soft text-13 font-semibold text-warn-ink no-underline">
+          {ME.initials}
+        </Link>
       </header>
-      <main className={`dl-shell-main${handle.white ? ' dl-shell-main--white' : ''}`}>
+      <main className={cn('min-h-0 flex-1 overflow-auto', handle.white ? 'bg-surface' : 'bg-sunk')}>
         <Outlet />
       </main>
     </div>

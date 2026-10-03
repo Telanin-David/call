@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Chip, Icon, Input, Kpis, LinkButton, List, ListRow, PageHeader, Person, Pill } from '@dialer/ui';
+import { Page } from '@/components/Page';
 import { usePlan } from '@/lib/plan';
-import { CALLS, RESULT_LABEL, RESULT_PILL, type Result } from '@/lib/fake';
+import { CALLS, RESULT_LABEL, RESULT_TONE, type Result } from '@/lib/fake';
 import { formatUsd } from '@/lib/money';
-import Icon from '@/components/Icon';
-import Avatar from '@/components/Avatar';
 
 type Filter = 'all' | Exclude<Result, 'missed'>;
 
@@ -16,6 +16,8 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: 'not_interested', label: 'Not interested' },
 ];
 
+const COLS = 'grid-cols-[150px_260px_150px_90px_90px_minmax(0,1fr)] py-3 text-14';
+
 export default function History() {
   const { plan } = usePlan();
   const [filter, setFilter] = useState<Filter>('all');
@@ -26,48 +28,40 @@ export default function History() {
     (!needle || c.lead.name.toLowerCase().includes(needle) || c.lead.company.toLowerCase().includes(needle)));
 
   return (
-    <div className="dl-wrap dl-wrap--wide dl-wrap--tight">
-      <div className="dl-pagehead">
-        <h1 className="dl-h1 dl-grow">History</h1>
-        <div className="dl-kpis dl-kpis--row">
-          <div>This week<b>412 calls</b></div>
-          <div>Talked<b>9h 40m</b></div>
-          <div>Spent<b>$11.60</b></div>
+    <Page width={1200} className="gap-[18px]">
+      <PageHeader title="History" aside={
+        <Kpis className="flex gap-7" items={[
+          { label: 'This week', value: '412 calls' }, { label: 'Talked', value: '9h 40m' }, { label: 'Spent', value: '$11.60' },
+        ]} />
+      } />
+
+      <div className="flex items-center gap-3">
+        <div className="flex gap-2">
+          {FILTERS.map(f => <Chip key={f.key} pressed={filter === f.key} className="h-9" onClick={() => setFilter(f.key)}>{f.label}</Chip>)}
+        </div>
+        <span className="flex-1" />
+        <div className="relative w-[260px]">
+          <Icon name="users" size={16} className="absolute left-3 top-3 text-faint" />
+          <Input placeholder="Search name or number" aria-label="Search calls" value={q} onChange={e => setQ(e.target.value)} className="h-10 pl-[38px]" />
         </div>
       </div>
 
-      <div className="dl-row dl-row--12">
-        <div className="dl-row">
-          {FILTERS.map(f => (
-            <button key={f.key} className="dl-chip dl-chip--36" aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>{f.label}</button>
-          ))}
-        </div>
-        <span className="dl-grow" />
-        <div className="dl-search">
-          <Icon name="i-users" size={16} />
-          <input className="dl-input" placeholder="Search name or number" aria-label="Search calls" value={q} onChange={e => setQ(e.target.value)} />
-        </div>
-      </div>
-
-      <div className="dl-list dl-list--history">
-        <div className="dl-list-row dl-list-head"><span>When</span><span>Lead</span><span>Result</span><span>Length</span><span>Cost</span><span /></div>
+      <List>
+        <ListRow cols={COLS} head><span>When</span><span>Lead</span><span>Result</span><span>Length</span><span>Cost</span><span /></ListRow>
         {rows.map(c => (
-          <div key={c.when + c.lead.id} className="dl-list-row">
-            <span className="dl-muted">{c.when}</span>
-            <div className="dl-who dl-who--sm">
-              <Avatar lead={c.lead} size={32} />
-              <div><b>{c.lead.name}</b><p>{c.lead.company}</p></div>
-            </div>
-            <span className={RESULT_PILL[c.result]}>{RESULT_LABEL[c.result]}</span>
-            <span className="dl-num">{c.length}</span>
-            <span className="dl-num">{formatUsd(c.cost)}</span>
+          <ListRow key={c.when + c.lead.id} cols={COLS}>
+            <span className="text-muted">{c.when}</span>
+            <Person initials={c.lead.initials} tone={c.lead.tone} size={32} name={c.lead.name} sub={c.lead.company} />
+            <Pill tone={RESULT_TONE[c.result]}>{RESULT_LABEL[c.result]}</Pill>
+            <span className="tabular-nums">{c.length}</span>
+            <span className="tabular-nums">{formatUsd(c.cost)}</span>
             {plan === 'pro'
-              ? <button className="dl-link dl-locknote"><Icon name="i-play" size={14} />Play recording</button>
-              : <Link to="/plans" className="dl-locknote dl-plainlink"><Icon name="i-lock" size={14} />Recording on Pro</Link>}
-          </div>
+              ? <LinkButton className="flex items-center gap-1.5 text-13"><Icon name="play" size={14} />Play recording</LinkButton>
+              : <Link to="/plans" className="flex items-center gap-1.5 text-13 text-faint no-underline"><Icon name="lock" size={14} />Recording on Pro</Link>}
+          </ListRow>
         ))}
-        {rows.length === 0 && <div className="dl-empty">No calls match.</div>}
-      </div>
-    </div>
+        {rows.length === 0 && <p className="px-6 py-12 text-center text-muted">No calls match.</p>}
+      </List>
+    </Page>
   );
 }

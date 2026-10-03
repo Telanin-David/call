@@ -1,9 +1,10 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { Blobs, Button, Icon, Note, PageHeader, Pill, cn, type ButtonVariant, type PillTone } from '@dialer/ui';
+import { BackLink, Page } from '@/components/Page';
 import { usePlan, PLAN_LABEL, type Plan } from '@/lib/plan';
 import { BALANCE } from '@/lib/fake';
 import { formatUsd } from '@/lib/money';
 import { FEE_INTRO, FEE_LATER, formatRate } from '@/lib/pricing';
-import Icon from '@/components/Icon';
 
 const PLANS: Plan[] = ['free', 'starter', 'pro'];
 
@@ -38,9 +39,19 @@ const COMPARE: [string, Cell, Cell, Cell][] = [
   ['Multi-dial (2 lines)', false, false, 'After ID check'],
 ];
 
+const CARD: Record<Plan, { card: string; check: string; base: string; note: string; pill: PillTone; pillClass: string; cta: ButtonVariant }> = {
+  free: { card: 'border border-line bg-surface text-ink', check: 'text-success', base: 'text-muted', note: 'text-muted', pill: 'neutral', pillClass: 'bg-well-2 text-ink', cta: 'primary' },
+  starter: { card: 'border-2 border-tangerine bg-brand-tint text-ink', check: 'text-brand-ink', base: 'text-muted', note: 'text-muted', pill: 'brand', pillClass: 'bg-tangerine text-night', cta: 'primary' },
+  pro: { card: 'bg-night text-white', check: 'text-sun', base: 'text-zinc-400', note: 'text-zinc-400', pill: 'lemon', pillClass: '', cta: 'lemon' },
+};
+
+const COLS = 'grid grid-cols-[minmax(0,1fr)_220px_220px_220px] items-center';
+const cell = 'flex justify-center font-semibold';
+const hl = 'self-stretch items-center bg-brand-tint';
+
 function CellView({ value }: { value: Cell }) {
-  if (value === true) return <Icon name="i-check" />;
-  if (value === false) return <span className="dl-dash">—</span>;
+  if (value === true) return <Icon name="check" className="text-success" />;
+  if (value === false) return <span className="text-off">—</span>;
   return <>{value}</>;
 }
 
@@ -49,39 +60,37 @@ export default function ComparePlans() {
   const { plan: current, setPlan } = usePlan();
 
   return (
-    <div className="dl-wrap dl-wrap--plans">
-      <div className="dl-plans-head">
-        <div className="dl-grow">
-          <Link className="dl-link dl-back dl-back--14" to="/call"><Icon name="i-left" size={16} />Back to calling</Link>
-          <h1 className="dl-h1 dl-h1--xl">Pick your plan</h1>
-          <p className="dl-lede dl-lede--lg">Free never ends. Every plan pays for calls from your balance, and the higher the plan, the less you pay a minute. Prices are in US dollars.</p>
-        </div>
-        <div className="dl-paidfrom"><Icon name="i-check" /><span>Paid from your balance<br /><b className="dl-num">{formatUsd(BALANCE)} available</b></span></div>
-      </div>
+    <Page className="gap-10 pb-16 pt-11">
+      <PageHeader size="xl" title="Pick your plan" back={<BackLink to="/call">Back to calling</BackLink>}
+        lede="Free never ends. Every plan pays for calls from your balance, and the higher the plan, the less you pay a minute. Prices are in US dollars."
+        className="gap-6"
+        aside={<Note className="text-14"><Icon name="check" className="text-muted" /><span>Paid from your balance<br /><b className="tabular-nums">{formatUsd(BALANCE)} available</b></span></Note>} />
 
-      <div className="dl-plans">
+      <div className="grid grid-cols-3 items-start gap-5">
         {PLANS.map(p => {
           const f = FEATURES[p];
+          const c = CARD[p];
           return (
-            <section key={p} className={`dl-plancard dl-plancard--${p}`} aria-label={`${PLAN_LABEL[p]} plan`}>
-              <div className="dl-plancard-tag"><span className="dl-pill">{PLAN_LABEL[p]}</span></div>
-              <div>
-                <div className="dl-plancard-price"><b>{formatUsd(FEE_INTRO[p]).replace('.00', '')}</b><span>a month</span></div>
-                <p className="dl-plancard-note">
+            <section key={p} aria-label={`${PLAN_LABEL[p]} plan`} className={cn('relative flex flex-col gap-5 overflow-hidden rounded-3xl px-[26px] pb-6 pt-[26px]', c.card)}>
+              {p === 'pro' && <Blobs layout="plan" />}
+              <div className="relative flex min-h-6 items-center"><Pill tone={c.pill} className={cn('font-bold', c.pillClass)}>{PLAN_LABEL[p]}</Pill></div>
+              <div className="relative">
+                <div className="flex items-baseline gap-2">
+                  <b className="text-52 font-extrabold tracking-[-0.04em]">{formatUsd(FEE_INTRO[p]).replace('.00', '')}</b>
+                  <span className={cn('text-14', c.note)}>a month</span>
+                </div>
+                <p className={cn('mt-1 text-14', c.note)}>
                   {p === 'free' ? 'No time limit. Keep calling as long as you like.' : `For your first 3 months. Then ${formatUsd(FEE_LATER[p])} a month after that.`}
                 </p>
               </div>
-              {p === current ? (
-                <button className="dl-btn dl-btn--lg dl-btn--block dl-btn--current" disabled><Icon name="i-check" />Your plan</button>
-              ) : (
-                <button className={`dl-btn dl-btn--lg dl-btn--block ${p === 'pro' ? 'dl-btn--lemon' : 'dl-btn--primary'}`}
-                  onClick={() => { setPlan(p); navigate('/settings'); }}>
-                  Move to {PLAN_LABEL[p]}
-                </button>
-              )}
-              <ul>
-                {f.base && <li className="is-base"><Icon name="i-check" /><span>{f.base}</span></li>}
-                {f.items.map(item => <li key={item}><Icon name="i-check" /><span>{item}</span></li>)}
+              <div className="relative">
+                {p === current
+                  ? <Button variant="current" size="lg" block disabled><Icon name="check" />Your plan</Button>
+                  : <Button variant={c.cta} size="lg" block onClick={() => { setPlan(p); navigate('/settings'); }}>Move to {PLAN_LABEL[p]}</Button>}
+              </div>
+              <ul className={cn('relative flex list-none flex-col gap-3 border-t pt-[18px]', p === 'pro' ? 'border-white/12' : 'border-night/8')}>
+                {f.base && <li className="flex items-start gap-2.5 text-14"><Icon name="check" className={cn('mt-px', c.check)} /><span className={c.base}>{f.base}</span></li>}
+                {f.items.map(item => <li key={item} className="flex items-start gap-2.5 text-14"><Icon name="check" className={cn('mt-px', c.check)} /><span>{item}</span></li>)}
               </ul>
             </section>
           );
@@ -89,26 +98,41 @@ export default function ComparePlans() {
       </div>
 
       <section>
-        <h2 className="dl-h2">Compare everything</h2>
-        <div className="dl-ctable">
-          <div className="dl-crow dl-crow--head"><span>What you get</span><span>Free</span><span className="is-hl">Starter</span><span>Pro</span></div>
+        <h2 className="pb-4 text-24 font-extrabold tracking-[-0.03em]">Compare everything</h2>
+        <div className="overflow-hidden rounded-2xl border border-line pt-1.5">
+          <div className={cn(COLS, 'h-14 text-14 font-bold')}>
+            <span className="pl-5 font-semibold text-muted">What you get</span>
+            <span className={cell}>Free</span>
+            <span className={cn(cell, hl, 'rounded-t-xl text-brand-ink')}>Starter</span>
+            <span className={cell}>Pro</span>
+          </div>
           {COMPARE.map(([label, free, starter, pro]) => (
-            <div key={label} className="dl-crow">
-              <span>{label}</span>
-              <span><CellView value={free} /></span>
-              <span className="is-hl"><CellView value={starter} /></span>
-              <span><CellView value={pro} /></span>
+            <div key={label} className={cn(COLS, 'min-h-[52px] border-t border-line text-14')}>
+              <span className="pl-5 text-ink-2">{label}</span>
+              <span className={cell}><CellView value={free} /></span>
+              <span className={cn(cell, hl)}><CellView value={starter} /></span>
+              <span className={cell}><CellView value={pro} /></span>
             </div>
           ))}
-          <div className="dl-crow"><span>How you pay for calls and numbers</span><span className="dl-span3">From your balance, on every plan</span></div>
+          <div className={cn(COLS, 'min-h-[52px] border-t border-line text-14')}>
+            <span className="pl-5 text-ink-2">How you pay for calls and numbers</span>
+            <span className="col-span-3 text-center text-muted">From your balance, on every plan</span>
+          </div>
         </div>
       </section>
 
-      <div className="dl-howgrid">
-        <div className="dl-how3"><span className="is-a"><Icon name="i-up" size={17} /></span><div><b>Upgrade starts now</b><p>You pay the difference for the rest of this month, shown before you confirm.</p></div></div>
-        <div className="dl-how3"><span className="is-b"><Icon name="i-callback" size={17} /></span><div><b>Downgrade at renewal</b><p>You keep what you paid for until your next renewal date.</p></div></div>
-        <div className="dl-how3"><span className="is-c"><Icon name="i-lock" size={17} /></span><div><b>New accounts have limits</b><p>Verify your ID to remove the new-account dial limits on any plan.</p></div></div>
+      <div className="grid grid-cols-3 gap-6 rounded-2xl bg-sunk px-6 py-[22px]">
+        {([
+          ['up', 'bg-[#ffe3cc]', 'Upgrade starts now', 'You pay the difference for the rest of this month, shown before you confirm.'],
+          ['callback', 'bg-[#fff3a3]', 'Downgrade at renewal', 'You keep what you paid for until your next renewal date.'],
+          ['lock', 'bg-[#d1fadf]', 'New accounts have limits', 'Verify your ID to remove the new-account dial limits on any plan.'],
+        ] as const).map(([icon, bg, title, body]) => (
+          <div key={title} className="flex items-start gap-3 text-14">
+            <span className={cn('flex size-[34px] flex-none items-center justify-center rounded-md text-night', bg)}><Icon name={icon} size={17} /></span>
+            <div><b className="block font-bold">{title}</b><p className="text-muted">{body}</p></div>
+          </div>
+        ))}
       </div>
-    </div>
+    </Page>
   );
 }

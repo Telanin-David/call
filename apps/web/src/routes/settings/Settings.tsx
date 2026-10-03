@@ -1,20 +1,20 @@
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Button, Card, CardHead, DarkCard, DarkEyebrow, Icon, LinkButton, cn, type IconName } from '@dialer/ui';
 import { usePlan, PLAN_LABEL } from '@/lib/plan';
 import { BALANCE, ME } from '@/lib/fake';
 import { formatUsd } from '@/lib/money';
 import { FEE_INTRO, FEE_LATER, NUMBER_MONTHLY } from '@/lib/pricing';
-import Icon, { type IconName } from '@/components/Icon';
 
 type Section = 'account' | 'billing' | 'numbers' | 'calling' | 'verify' | 'rules';
 
 const NAV: { key: Section; label: string; icon: IconName }[] = [
-  { key: 'account', label: 'Account', icon: 'i-users' },
-  { key: 'billing', label: 'Plan and billing', icon: 'i-wallet' },
-  { key: 'numbers', label: 'Numbers', icon: 'i-phone' },
-  { key: 'calling', label: 'Calling', icon: 'i-call' },
-  { key: 'verify', label: 'Verify your ID', icon: 'i-shield' },
-  { key: 'rules', label: 'Rules', icon: 'i-file' },
+  { key: 'account', label: 'Account', icon: 'users' },
+  { key: 'billing', label: 'Plan and billing', icon: 'wallet' },
+  { key: 'numbers', label: 'Numbers', icon: 'phone' },
+  { key: 'calling', label: 'Calling', icon: 'call' },
+  { key: 'verify', label: 'Verify your ID', icon: 'shield' },
+  { key: 'rules', label: 'Rules', icon: 'file' },
 ];
 
 const NUMBERS = [
@@ -25,24 +25,30 @@ const NUMBERS = [
 
 function Kv({ label, children, action }: { label: string; children: ReactNode; action?: string }) {
   return (
-    <div className="dl-kv">
-      <span>{label}</span>
-      <span className="dl-kv-val">{children}</span>
-      {action && <button className="dl-link dl-link--14">{action}</button>}
+    <div className="flex items-center gap-4 border-t border-line py-3.5 text-14">
+      <span className="w-[200px] flex-none text-muted">{label}</span>
+      <span className="flex-1 font-semibold">{children}</span>
+      {action && <LinkButton className="text-14">{action}</LinkButton>}
     </div>
+  );
+}
+
+function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
+  return (
+    <Card as="section">
+      <CardHead title={title} className="mb-0">{aside}</CardHead>
+      <div className="mt-2.5">{children}</div>
+    </Card>
   );
 }
 
 function NumbersPanel() {
   return (
-    <section className="dl-panel">
-      <div className="dl-panel-head"><b>Numbers</b><span className="dl-aside-note">{NUMBERS.length} numbers · {formatUsd(NUMBER_MONTHLY * NUMBERS.length)} a month</span></div>
-      <div className="dl-kvs">
-        {NUMBERS.map(n => <Kv key={n.number} label={n.number} action="Cancel">{n.detail} · {formatUsd(NUMBER_MONTHLY)}</Kv>)}
-        <Kv label="Calls go out from" action="Change">The number closest to the lead. If none is close, your default.</Kv>
-      </div>
-      <button className="dl-btn dl-btn--outline">Get another number</button>
-    </section>
+    <Section title="Numbers" aside={<span className="text-14 text-muted">{NUMBERS.length} numbers · {formatUsd(NUMBER_MONTHLY * NUMBERS.length)} a month</span>}>
+      {NUMBERS.map(n => <Kv key={n.number} label={n.number} action="Cancel">{n.detail} · {formatUsd(NUMBER_MONTHLY)}</Kv>)}
+      <Kv label="Calls go out from" action="Change">The number closest to the lead. If none is close, your default.</Kv>
+      <Button variant="outline" className="mt-3">Get another number</Button>
+    </Section>
   );
 }
 
@@ -52,43 +58,45 @@ export default function Settings() {
   const [section, setSection] = useState<Section>('billing');
 
   return (
-    <div className="dl-settings">
-      <nav className="dl-snav" aria-label="Settings">
-        <h1>Settings</h1>
-        {NAV.map(n => (
-          <button key={n.key} aria-current={section === n.key ? 'page' : undefined} onClick={() => setSection(n.key)}>
-            <Icon name={n.icon} size={17} />{n.label}
-          </button>
-        ))}
+    <div className="mx-auto grid max-w-[1168px] grid-cols-[240px_minmax(0,1fr)] items-start gap-8 px-6 py-8">
+      <nav className="flex flex-col gap-1" aria-label="Settings">
+        <h1 className="pb-4 pl-3 text-30 font-extrabold tracking-[-0.04em]">Settings</h1>
+        {NAV.map(n => {
+          const current = section === n.key;
+          return (
+            <button key={n.key} type="button" aria-current={current ? 'page' : undefined} onClick={() => setSection(n.key)}
+              className={cn('flex cursor-pointer items-center gap-2.5 rounded-lg border-0 bg-transparent px-3 py-2.5 text-left text-15 font-medium text-ink',
+                current && 'bg-surface font-bold shadow-[0_1px_3px_rgba(0,0,0,.06)]')}>
+              <Icon name={n.icon} size={17} className={current ? 'text-brand-ink' : 'text-faint'} />{n.label}
+            </button>
+          );
+        })}
       </nav>
 
-      <div className="dl-col dl-col--16">
+      <div className="flex flex-col gap-4">
         {section === 'billing' && (
           <>
-            <section className="dl-hero" aria-label="Your plan">
-              <div className="dl-hero-row">
-                <div className="dl-grow">
-                  <div className="dl-hero-eyebrow">YOUR PLAN</div>
-                  <div className="dl-hero-plan">{PLAN_LABEL[plan]}</div>
-                  <div className="dl-hero-meta">
+            <DarkCard as="section" aria-label="Your plan">
+              <div className="flex items-end gap-5">
+                <div className="flex-1">
+                  <DarkEyebrow>YOUR PLAN</DarkEyebrow>
+                  <div className="mt-1 text-32 font-extrabold tracking-[-0.03em]">{PLAN_LABEL[plan]}</div>
+                  <div className="mt-0.5 text-14 text-zinc-300">
                     {plan === 'free'
                       ? 'Call by hand, 30 dials a day. No monthly fee.'
                       : `${formatUsd(FEE_INTRO[plan])} a month · month 1 of 3 · then ${formatUsd(FEE_LATER[plan])} from 1 Jan 2027`}
                   </div>
                 </div>
-                {plan !== 'pro' && <button className="dl-btn dl-btn--lg dl-btn--lemon" onClick={() => navigate('/plans')}>See {plan === 'free' ? 'Starter' : 'Pro'}</button>}
-                <button className="dl-btn dl-btn--lg dl-btn--glass" onClick={() => navigate('/plans')}>Change plan</button>
+                {plan !== 'pro' && <Button variant="lemon" size="lg" onClick={() => navigate('/plans')}>See {plan === 'free' ? 'Starter' : 'Pro'}</Button>}
+                <Button variant="glass" size="lg" onClick={() => navigate('/plans')}>Change plan</Button>
               </div>
-            </section>
-            <section className="dl-panel">
-              <b className="dl-heading">Billing</b>
-              <div className="dl-kvs">
-                {plan !== 'free' && <Kv label="Next plan charge">1 Nov 2026 · {formatUsd(FEE_INTRO[plan])}</Kv>}
-                <Kv label="Paid from">Your balance · {formatUsd(BALANCE)}</Kv>
-                <Kv label="Low balance alert" action="Change">Below $5.00</Kv>
-                {plan !== 'free' && <Kv label="Move to Free" action="Move to Free">Starts at your next renewal, 1 Nov. You keep {PLAN_LABEL[plan]} until then.</Kv>}
-              </div>
-            </section>
+            </DarkCard>
+            <Section title="Billing">
+              {plan !== 'free' && <Kv label="Next plan charge">1 Nov 2026 · {formatUsd(FEE_INTRO[plan])}</Kv>}
+              <Kv label="Paid from">Your balance · {formatUsd(BALANCE)}</Kv>
+              <Kv label="Low balance alert" action="Change">Below $5.00</Kv>
+              {plan !== 'free' && <Kv label="Move to Free" action="Move to Free">Starts at your next renewal, 1 Nov. You keep {PLAN_LABEL[plan]} until then.</Kv>}
+            </Section>
             <NumbersPanel />
           </>
         )}
@@ -96,49 +104,37 @@ export default function Settings() {
         {section === 'numbers' && <NumbersPanel />}
 
         {section === 'account' && (
-          <section className="dl-panel">
-            <b className="dl-heading">Account</b>
-            <div className="dl-kvs">
-              <Kv label="Name" action="Change">{ME.name}</Kv>
-              <Kv label="Email" action="Change">{ME.email}</Kv>
-              <Kv label="Phone" action="Change">+234 803 123 4567</Kv>
-              <Kv label="Password" action="Change">Last changed 12 Sep</Kv>
-            </div>
-          </section>
+          <Section title="Account">
+            <Kv label="Name" action="Change">{ME.name}</Kv>
+            <Kv label="Email" action="Change">{ME.email}</Kv>
+            <Kv label="Phone" action="Change">+234 803 123 4567</Kv>
+            <Kv label="Password" action="Change">Last changed 12 Sep</Kv>
+          </Section>
         )}
 
         {section === 'calling' && (
-          <section className="dl-panel">
-            <b className="dl-heading">Calling</b>
-            <div className="dl-kvs">
-              <Kv label="How you talk" action="Change">Your phone, Pixel 6a</Kv>
-              <Kv label="Script text size" action="Change">Large</Kv>
-              <Kv label="Auto-dial gap" action="Change">{plan === 'free' ? 'Tap to call on Free' : '5 seconds after you pick a result'}</Kv>
-            </div>
-          </section>
+          <Section title="Calling">
+            <Kv label="How you talk" action="Change">Your phone, Pixel 6a</Kv>
+            <Kv label="Script text size" action="Change">Large</Kv>
+            <Kv label="Auto-dial gap" action="Change">{plan === 'free' ? 'Tap to call on Free' : '5 seconds after you pick a result'}</Kv>
+          </Section>
         )}
 
         {section === 'verify' && (
-          <section className="dl-panel">
-            <b className="dl-heading">Verify your ID</b>
-            <div className="dl-kvs">
-              <Kv label="Status">Not verified · new account limits apply</Kv>
-              <Kv label="What it changes">Removes new-account dial limits and the $3 a day cap on calls outside the US and Canada. On Starter, raises your limit from 120 to 500 dials a day.</Kv>
-            </div>
-            <button className="dl-btn dl-btn--primary">Verify my ID</button>
-          </section>
+          <Section title="Verify your ID">
+            <Kv label="Status">Not verified · new account limits apply</Kv>
+            <Kv label="What it changes">Removes new-account dial limits and the $3 a day cap on calls outside the US and Canada. On Starter, raises your limit from 120 to 500 dials a day.</Kv>
+            <Button variant="primary" className="mt-3">Verify my ID</Button>
+          </Section>
         )}
 
         {section === 'rules' && (
-          <section className="dl-panel">
-            <b className="dl-heading">Rules</b>
-            <div className="dl-kvs">
-              <Kv label="One account">One account per person. The card name must match your account name.</Kv>
-              <Kv label="Same number">Each phone number can be called at most 3 times.</Kv>
-              <Kv label="Do not call">Numbers on the do-not-call list are skipped and never charged.</Kv>
-              <Kv label="Premium numbers">900, 976 and other premium-rate numbers are never dialled.</Kv>
-            </div>
-          </section>
+          <Section title="Rules">
+            <Kv label="One account">One account per person. The card name must match your account name.</Kv>
+            <Kv label="Same number">Each phone number can be called at most 3 times.</Kv>
+            <Kv label="Do not call">Numbers on the do-not-call list are skipped and never charged.</Kv>
+            <Kv label="Premium numbers">900, 976 and other premium-rate numbers are never dialled.</Kv>
+          </Section>
         )}
       </div>
     </div>

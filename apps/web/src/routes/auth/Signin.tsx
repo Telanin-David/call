@@ -1,34 +1,23 @@
 import { Link, useNavigate } from 'react-router-dom';
-import AuthShell from '@/layouts/AuthShell';
-import PasswordInput from '@/components/PasswordInput';
+import { Button, Checkbox, Field, Input, PasswordInput, cn, linkClass } from '@dialer/ui';
+import AuthShell, { AuthFoot, AuthForm, AuthTitle } from '@/layouts/AuthShell';
 
 export default function Signin() {
   const navigate = useNavigate();
   return (
     <AuthShell headline="Welcome back. Your leads are waiting.">
-      <form className="dl-auth-form" onSubmit={e => { e.preventDefault(); navigate('/'); }}>
-        <div>
-          <h2 className="dl-auth-h2">Sign in</h2>
-          <p className="dl-auth-sub">Use the email or phone number on your account.</p>
-        </div>
-        <div className="dl-field">
-          <label htmlFor="si-id">Email or phone</label>
-          <input id="si-id" className="dl-input" defaultValue="tunde.bakare@gmail.com" />
-        </div>
-        <div className="dl-field">
-          <div className="dl-field-head">
-            <label htmlFor="si-pw">Password</label>
-            <Link className="dl-link dl-link--sm" to="/forgot">Forgot password?</Link>
-          </div>
+      <AuthForm onSubmit={() => navigate('/')}>
+        <AuthTitle title="Sign in" sub="Use the email or phone number on your account." />
+        <Field label="Email or phone" htmlFor="si-id">
+          <Input id="si-id" defaultValue="tunde.bakare@gmail.com" />
+        </Field>
+        <Field label="Password" htmlFor="si-pw" end={<Link className={cn(linkClass, 'text-13')} to="/forgot">Forgot password?</Link>}>
           <PasswordInput id="si-pw" defaultValue="correct-horse" />
-        </div>
-        <label className="dl-check dl-check--sm">
-          <input type="checkbox" defaultChecked />
-          <span>Keep me signed in on this laptop</span>
-        </label>
-        <button type="submit" className="dl-btn dl-btn--primary dl-btn--lg dl-btn--block dl-btn--xl">Sign in</button>
-        <p className="dl-auth-foot">New here? <Link className="dl-link" to="/signup">Create an account</Link></p>
-      </form>
+        </Field>
+        <Checkbox defaultChecked>Keep me signed in on this laptop</Checkbox>
+        <Button type="submit" variant="primary" size="xl" block>Sign in</Button>
+        <AuthFoot>New here? <Link className={linkClass} to="/signup">Create an account</Link></AuthFoot>
+      </AuthForm>
     </AuthShell>
   );
 }
