@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Chip, Icon, Input, Kpis, LinkButton, List, ListRow, PageHeader, Person, Pill } from '@dialer/ui';
+import { Chip, Icon, Input, Kpis, List, ListRow, PageHeader, Person, Pill, cn, linkClass } from '@dialer/ui';
 import { Page } from '@/components/Page';
 import { usePlan } from '@/lib/plan';
 import { CALLS, RESULT_LABEL, RESULT_TONE, type Result } from '@/lib/fake';
@@ -57,7 +57,7 @@ export default function History() {
             <span className="tabular-nums max-lg:order-2 max-lg:font-semibold">{formatUsd(c.cost)}</span>
             <span aria-hidden="true" className="order-2 basis-full lg:hidden" />
             {plan === 'pro'
-              ? <LinkButton className="flex items-center gap-1.5 text-13 max-lg:order-3 max-lg:ml-auto"><Icon name="play" size={14} /><span className="max-sm:sr-only">Play recording</span></LinkButton>
+              ? <Link to={`/history/${c.lead.id}`} className={cn(linkClass, 'flex items-center gap-1.5 text-13 max-lg:order-3 max-lg:ml-auto')}><Icon name="play" size={14} /><span className="max-sm:sr-only">Play recording</span></Link>
               : <Link to="/plans" className="flex items-center gap-1.5 text-13 text-faint no-underline max-lg:order-3 max-lg:ml-auto"><Icon name="lock" size={14} /><span className="max-sm:sr-only">Recording on Pro</span></Link>}
           </ListRow>
         ))}

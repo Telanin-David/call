@@ -4,11 +4,11 @@ import { Icon, type IconName } from './icons/Icon';
 
 export function ChoiceCard({ checked, locked, className, children, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { checked: boolean; locked?: boolean }) {
   return (
-    <button type="button" role="radio" aria-checked={checked} aria-disabled={locked || undefined}
+    <button type="button" role="radio" aria-checked={checked}
       className={cn(
         'group flex w-full cursor-pointer items-center gap-3 rounded-xl border border-line bg-surface px-3.5 py-3 text-left text-ink',
         'aria-checked:border-brand aria-checked:bg-brand-soft aria-checked:shadow-[0_0_0_1px_var(--brand)]',
-        locked && 'cursor-not-allowed opacity-75',
+        locked && 'opacity-75 hover:opacity-100',
         className,
       )}
       {...rest}>

@@ -26,7 +26,7 @@ export default function Signup() {
           <PasswordInput id="su-pw" defaultValue="correct-horse" />
         </Field>
         <Checkbox defaultChecked>
-          I agree to the <a className={linkClass} href="#">rules</a> and <a className={linkClass} href="#">terms</a>. One account per person.
+          I agree to the <Link className={linkClass} to="/rules">rules</Link> and <a className={linkClass} href="#">terms</a>. One account per person.
         </Checkbox>
         <Button type="submit" variant="primary" size="xl" block>Create account</Button>
         <AuthFoot>Have an account? <Link className={linkClass} to="/signin">Sign in</Link></AuthFoot>

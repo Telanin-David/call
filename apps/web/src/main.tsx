@@ -6,7 +6,7 @@ import { IconSprite } from '@dialer/ui';
 import '@dialer/ui/theme.css';
 
 import { routes } from './routes';
-import { PlanProvider, DevPlanSwitcher } from './lib/plan';
+import { PlanProvider } from './lib/plan';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,7 +24,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Suspense fallback={null}>
           <RouterProvider router={router} />
         </Suspense>
-        {import.meta.env.DEV && <DevPlanSwitcher />}
       </PlanProvider>
     </QueryClientProvider>
   </React.StrictMode>,

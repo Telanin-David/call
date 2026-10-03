@@ -3,7 +3,9 @@ import { cleanup, render, screen, fireEvent } from '@testing-library/react';
 import { RouterProvider, createMemoryRouter } from 'react-router-dom';
 import { Suspense } from 'react';
 import { routes } from './index';
-import { PlanProvider, DevPlanSwitcher, type Plan } from '@/lib/plan';
+import { PlanProvider, type Plan } from '@/lib/plan';
+import { useSimStore } from '@/lib/sim';
+import { act } from 'react';
 
 afterEach(cleanup);
 
@@ -12,7 +14,6 @@ function renderAt(path: string, plan: Plan = 'starter') {
   return render(
     <PlanProvider initial={plan}>
       <Suspense fallback={null}><RouterProvider router={router} /></Suspense>
-      <DevPlanSwitcher />
     </PlanProvider>,
   );
 }
@@ -35,6 +36,9 @@ describe('every route renders its screen', () => {
     ['/wallet', 'Wallet'],
     ['/settings', 'Settings'],
     ['/plans', 'Pick your plan'],
+    ['/rules', 'The rules'],
+    ['/verify', 'Verify your ID'],
+    ['/link', 'Use with laptop'],
   ])('%s', async (path, heading) => {
     renderAt(path);
     expect(await screen.findByRole('heading', { name: heading })).toBeTruthy();
@@ -78,5 +82,58 @@ describe('app shell navigation', () => {
     renderAt('/setup');
     await screen.findByRole('heading', { name: "Let's get you calling, Tunde" });
     expect(screen.queryAllByRole('navigation', { name: 'Main' })).toHaveLength(0);
+  });
+});
+
+describe('D1 states', () => {
+  afterEach(() => useSimStore.setState({ sim: null }));
+
+  it('shows a recording with its transcript on Pro, and an upsell otherwise', async () => {
+    renderAt('/history/ada', 'pro');
+    expect(await screen.findByRole('heading', { name: 'Ada Obi' })).toBeTruthy();
+    expect(screen.getByText('Thursday works. After 10 am, my time.')).toBeTruthy();
+    cleanup();
+    renderAt('/history/ada', 'starter');
+    expect(await screen.findByRole('heading', { name: 'Recordings come with Pro' })).toBeTruthy();
+  });
+
+  it('walks a Free user from the locked phone option to a paid upgrade', async () => {
+    renderAt('/call', 'free');
+    fireEvent.click(await screen.findByRole('radio', { name: /Use my phone to talk/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Upgrade for $10.00' }));
+    expect(screen.getByText('Balance after')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Pay $10.00 and upgrade' }));
+    expect(await screen.findByRole('button', { name: /Start calling/ })).toBeTruthy();
+  });
+
+  it('confirms before moving to Free and keeps the plan until renewal', async () => {
+    renderAt('/settings', 'starter');
+    fireEvent.click(await screen.findByRole('button', { name: 'Move to Free' }));
+    const dialog = screen.getByRole('dialog', { name: 'Move to Free on 1 Nov?' });
+    expect(dialog.textContent).toContain('Auto-dial');
+    fireEvent.click(screen.getByRole('button', { name: 'Move to Free on 1 Nov' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByText('Moving to Free')).toBeTruthy();
+  });
+
+  it.each([
+    ['callback', /Mark Reyes is calling you back/],
+    ['limit', /You've used your 120 dials for today/],
+    ['dnc', /Skipped Mark Reyes/],
+  ] as const)('simulated %s opens its dialog on the call screen', async (sim, name) => {
+    renderAt('/call', 'starter');
+    await screen.findByRole('heading', { name: 'Lena Park' });
+    act(() => useSimStore.setState({ sim }));
+    expect(await screen.findByRole('dialog', { name })).toBeTruthy();
+  });
+
+  it('replaces the call card when the phone drops mid-call', async () => {
+    renderAt('/call', 'starter');
+    await screen.findByRole('heading', { name: 'Lena Park' });
+    act(() => useSimStore.setState({ sim: 'phone' }));
+    const alert = await screen.findByRole('alert', { name: 'Call problem' });
+    expect(alert.textContent).toContain('Lena is still on the line');
+    fireEvent.click(screen.getByRole('button', { name: 'Use this laptop for sound' }));
+    expect(screen.queryByRole('alert', { name: 'Call problem' })).toBeNull();
   });
 });

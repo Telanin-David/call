@@ -1,13 +1,14 @@
 import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import { cn } from './cn';
 
-export type ButtonVariant = 'secondary' | 'primary' | 'outline' | 'quiet' | 'danger' | 'lemon' | 'glass' | 'current';
+export type ButtonVariant = 'secondary' | 'primary' | 'outline' | 'outlineDanger' | 'quiet' | 'danger' | 'lemon' | 'glass' | 'current';
 export type ButtonSize = 'sm' | 'md' | 'lg' | 'xl';
 
 const VARIANT: Record<ButtonVariant, string> = {
   secondary: 'bg-sunk text-ink hover:bg-hover',
   primary: 'bg-brand text-on-brand font-semibold hover:bg-brand-hover',
   outline: 'bg-surface text-ink border-line hover:bg-sunk',
+  outlineDanger: 'bg-surface text-danger-ink font-semibold border-line hover:bg-danger-tint',
   quiet: 'bg-transparent text-brand-ink hover:bg-brand-soft',
   danger: 'bg-danger text-on-danger font-semibold hover:bg-danger-hover',
   lemon: 'bg-sun text-night font-bold hover:bg-[#f5cc00]',

@@ -1,9 +1,10 @@
 import { describe, expect, it, afterEach } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { cn } from './cn';
 import { buttonClass } from './Button';
 import { Progress } from './Badge';
 import { CodeBoxes } from './Form';
+import { Modal, Toggle } from './Overlay';
 
 afterEach(cleanup);
 
@@ -45,5 +46,32 @@ describe('CodeBoxes', () => {
     const boxes = container.querySelectorAll('[aria-label="6-digit code"] > span');
     expect(boxes).toHaveLength(6);
     expect([...boxes].map(b => b.textContent).join('')).toBe('307');
+  });
+});
+
+describe('Modal', () => {
+  it('renders nothing when closed', () => {
+    render(<Modal open={false} onClose={() => {}} title="Hidden">x</Modal>);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('is labelled by its title and closes on Escape and the close button', () => {
+    let closed = 0;
+    render(<Modal open onClose={() => { closed++; }} title="Move to Free?">body</Modal>);
+    expect(screen.getByRole('dialog', { name: 'Move to Free?' })).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(closed).toBe(2);
+  });
+});
+
+describe('Toggle', () => {
+  it('reports the flipped value', () => {
+    const seen: boolean[] = [];
+    render(<Toggle checked={false} onChange={v => seen.push(v)} label="Dial 2 at once" />);
+    const sw = screen.getByRole('switch', { name: 'Dial 2 at once' });
+    expect(sw.getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(sw);
+    expect(seen).toEqual([true]);
   });
 });

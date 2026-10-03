@@ -1,4 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { SIMS, useSimStore, type Sim } from './sim';
 
 export type Plan = 'free' | 'starter' | 'pro';
 
@@ -22,6 +24,8 @@ export function usePlan() {
 
 export function DevPlanSwitcher() {
   const { plan, setPlan } = usePlan();
+  const { sim, setSim } = useSimStore();
+  const navigate = useNavigate();
   return (
     <details className="group fixed left-1/2 top-3.5 z-50 -translate-x-1/2 text-12 font-semibold max-lg:left-auto max-lg:right-2 max-lg:top-[calc(4rem+env(safe-area-inset-top))] max-lg:translate-x-0 max-lg:opacity-90">
       <summary className="cursor-pointer list-none rounded-full bg-night px-2.5 py-1.5 text-center text-white group-open:rounded-b-none [&::-webkit-details-marker]:hidden">
@@ -34,6 +38,17 @@ export function DevPlanSwitcher() {
             {PLAN_LABEL[p]}
           </button>
         ))}
+        <select aria-label="Simulate" value={sim ?? ''}
+          onChange={e => {
+            const v = e.target.value;
+            setSim(v ? (v as Sim) : null);
+            if (v && v !== 'script') navigate('/call');
+            if (v === 'script') { setPlan('free'); navigate('/call'); }
+          }}
+          className="ml-1 h-7 cursor-pointer rounded-[7px] border-0 bg-white/10 px-2 text-12 text-zinc-200">
+          <option value="">Simulate…</option>
+          {(Object.keys(SIMS) as Sim[]).map(k => <option key={k} value={k}>{SIMS[k]}</option>)}
+        </select>
       </div>
     </details>
   );

@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Card, CardHead, DarkCard, DarkEyebrow, Icon, LinkButton, cn, type IconName } from '@dialer/ui';
+import { Button, Card, CardHead, DarkCard, DarkEyebrow, Icon, LinkButton, Modal, cn, type IconName } from '@dialer/ui';
 import { usePlan, PLAN_LABEL } from '@/lib/plan';
 import { BALANCE, ME } from '@/lib/fake';
 import { formatUsd } from '@/lib/money';
-import { FEE_INTRO, FEE_LATER, NUMBER_MONTHLY } from '@/lib/pricing';
+import { DIALS_PER_DAY, FEE_INTRO, FEE_LATER, NUMBER_MONTHLY, formatRate } from '@/lib/pricing';
 
 type Section = 'account' | 'billing' | 'numbers' | 'calling' | 'verify' | 'rules';
 
@@ -23,12 +23,12 @@ const NUMBERS = [
   { number: '+1 (416) 555-0123', detail: 'Toronto · renews 14 Nov' },
 ];
 
-function Kv({ label, children, action }: { label: string; children: ReactNode; action?: string }) {
+function Kv({ label, children, action, onAction }: { label: string; children: ReactNode; action?: string; onAction?: () => void }) {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 border-t border-line py-3.5 text-14">
       <span className="w-full flex-none text-muted sm:w-[200px]">{label}</span>
       <span className="min-w-0 flex-1 font-semibold">{children}</span>
-      {action && <LinkButton className="text-14">{action}</LinkButton>}
+      {action && <LinkButton className="text-14" onClick={onAction}>{action}</LinkButton>}
     </div>
   );
 }
@@ -56,6 +56,17 @@ export default function Settings() {
   const navigate = useNavigate();
   const { plan } = usePlan();
   const [section, setSection] = useState<Section>('billing');
+  const [askFree, setAskFree] = useState(false);
+  const [movingToFree, setMovingToFree] = useState(false);
+  const paid = PLAN_LABEL[plan];
+  const loses = [
+    'Auto-dial. You tap Call on each lead',
+    'Phone and laptop together',
+    'Callback alerts',
+    ...(plan === 'pro' ? ['Recording, transcripts and summaries', 'Dialling 2 lines at once'] : []),
+    `Calls go up to ${formatRate('free')} a minute`,
+    `Dials drop to ${DIALS_PER_DAY.free} a day`,
+  ];
 
   return (
     <div className="mx-auto grid max-w-[1168px] items-start gap-4 px-4 py-5 sm:px-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-8 lg:py-8">
@@ -97,7 +108,9 @@ export default function Settings() {
               {plan !== 'free' && <Kv label="Next plan charge">1 Nov 2026 · {formatUsd(FEE_INTRO[plan])}</Kv>}
               <Kv label="Paid from">Your balance · {formatUsd(BALANCE)}</Kv>
               <Kv label="Low balance alert" action="Change">Below $5.00</Kv>
-              {plan !== 'free' && <Kv label="Move to Free" action="Move to Free">Starts at your next renewal, 1 Nov. You keep {PLAN_LABEL[plan]} until then.</Kv>}
+              {plan !== 'free' && (movingToFree
+                ? <Kv label="Moving to Free" action="Stay on plan" onAction={() => setMovingToFree(false)}>On 1 Nov. You keep {paid} until 31 Oct.</Kv>
+                : <Kv label="Move to Free" action="Move to Free" onAction={() => setAskFree(true)}>Starts at your next renewal, 1 Nov. You keep {paid} until then.</Kv>)}
             </Section>
             <NumbersPanel />
           </>
@@ -126,7 +139,7 @@ export default function Settings() {
           <Section title="Verify your ID">
             <Kv label="Status">Not verified · new account limits apply</Kv>
             <Kv label="What it changes">Removes new-account dial limits and the $3 a day cap on calls outside the US and Canada. On Starter, raises your limit from 120 to 500 dials a day.</Kv>
-            <Button variant="primary" className="mt-3">Verify my ID</Button>
+            <Button variant="primary" className="mt-3" onClick={() => navigate('/verify')}>Verify my ID</Button>
           </Section>
         )}
 
@@ -136,9 +149,24 @@ export default function Settings() {
             <Kv label="Same number">Each phone number can be called at most 3 times.</Kv>
             <Kv label="Do not call">Numbers on the do-not-call list are skipped and never charged.</Kv>
             <Kv label="Premium numbers">900, 976 and other premium-rate numbers are never dialled.</Kv>
+            <Button variant="outline" className="mt-3" onClick={() => navigate('/rules')}>Read all the rules</Button>
           </Section>
         )}
       </div>
+
+      <Modal open={askFree} onClose={() => setAskFree(false)} title="Move to Free on 1 Nov?">
+        <p className="mt-3 text-15 text-muted">You keep {paid} until <b className="text-ink">31 Oct</b>, because you've paid for it. On 1 Nov you lose:</p>
+        <ul className="mt-4 flex list-none flex-col gap-3 rounded-2xl bg-danger-tint px-[18px] py-4 text-14">
+          {loses.map(l => <li key={l} className="flex items-start gap-2.5"><Icon name="x" size={16} className="mt-0.5 text-danger" />{l}</li>)}
+        </ul>
+        <p className="mt-4 text-13 text-muted">
+          Your leads, follow-ups, history and number stay. Your intro price ends, so coming back later costs {formatUsd(FEE_LATER[plan]).replace('.00', '')} a month.
+        </p>
+        <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
+          <Button size="lg" onClick={() => setAskFree(false)}>Stay on {paid}</Button>
+          <Button variant="outlineDanger" size="lg" onClick={() => { setMovingToFree(true); setAskFree(false); }}>Move to Free on 1 Nov</Button>
+        </div>
+      </Modal>
     </div>
   );
 }
