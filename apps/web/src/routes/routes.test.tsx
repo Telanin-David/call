@@ -235,3 +235,16 @@ describe('laptop queue hover card', () => {
     expect(screen.getByRole('heading', { name: 'Rosa Diaz' })).toBeTruthy();
   });
 });
+
+describe('lead details on the laptop call screen', () => {
+  afterEach(() => window.localStorage.clear());
+
+  it('start shrunk so the script leads, and open on request', async () => {
+    renderAt('/call', 'starter');
+    const lead = await screen.findByRole('region', { name: 'Lead' });
+    expect(within(lead).queryByText('lena@sparkleoffices.com')).toBeNull();
+    fireEvent.click(within(lead).getByRole('button', { name: /Show details/ }));
+    expect(within(lead).getByText('lena@sparkleoffices.com')).toBeTruthy();
+    expect(window.localStorage.getItem('dialer.leadDetails')).toBe('open');
+  });
+});

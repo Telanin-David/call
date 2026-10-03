@@ -16,6 +16,8 @@ import { SCRIPT_NAME, SCRIPT_PARTS, renderScript } from '@/lib/script';
 
 const ORDINAL = ['', '1st', '2nd', '3rd'];
 const label = 'text-12 font-medium tracking-[.02em] text-muted';
+/** Remembers whether the rep last left the lead details open or shrunk. */
+const DETAILS_KEY = 'dialer.leadDetails';
 
 /** Laptop and tablet layout: queue, lead and script, call panel side by side from 1280px. */
 export default function CallingDesk({ s }: { s: CallSession }) {
@@ -42,6 +44,14 @@ export default function CallingDesk({ s }: { s: CallSession }) {
   });
 
   const [queueOpen, setQueueOpen] = useState(true);
+  const [detailsOpen, setDetailsOpen] = useState(() => {
+    try { return window.localStorage.getItem(DETAILS_KEY) === 'open'; } catch { return false; }
+  });
+  const toggleDetails = () => {
+    const next = !detailsOpen;
+    setDetailsOpen(next);
+    try { window.localStorage.setItem(DETAILS_KEY, next ? 'open' : 'closed'); } catch { /* private window: just don't remember */ }
+  };
   const closeTimer = useRef<number | null>(null);
   const cancelClose = () => { if (closeTimer.current !== null) { window.clearTimeout(closeTimer.current); closeTimer.current = null; } };
   const scheduleClose = () => { cancelClose(); closeTimer.current = window.setTimeout(() => setPeek(null), 160); };
@@ -139,31 +149,48 @@ export default function CallingDesk({ s }: { s: CallSession }) {
       )}
 
       <main className="max-xl:contents xl:flex xl:min-h-0 xl:flex-col xl:gap-4 xl:overflow-y-auto xl:bg-sunk xl:px-8 xl:py-6">
-        <section aria-label="Lead" className="flex flex-col gap-4 rounded-xl border border-line bg-surface px-4 py-4 shadow-card max-xl:order-1 sm:px-[22px] sm:py-5">
-          <div className="flex flex-wrap items-center gap-3.5">
-            <Avatar initials={lead.initials} tone={lead.tone} size={52} />
-            <div className="min-w-[150px] flex-1">
-              <h1 className="text-22 font-semibold tracking-[-0.03em] sm:text-26">{lead.name}</h1>
-              <p className="pt-0.5 text-13 text-muted">{detail.title}, {lead.company}</p>
+        <section aria-label="Lead" className={cn('flex flex-col rounded-xl border border-line bg-surface shadow-card max-xl:order-1',
+          detailsOpen ? 'gap-4 px-4 py-4 sm:px-[22px] sm:py-5' : 'gap-2 px-4 py-3 sm:px-5')}>
+          <div className={cn('flex items-center gap-x-3.5 gap-y-2', detailsOpen && 'flex-wrap')}>
+            <Avatar initials={lead.initials} tone={lead.tone} size={detailsOpen ? 52 : 38} />
+            <div className={detailsOpen ? 'min-w-[150px] flex-1' : 'min-w-0 flex-1'}>
+              <h1 className={cn('font-semibold tracking-[-0.03em]', detailsOpen ? 'text-22 sm:text-26' : 'text-20')}>{lead.name}</h1>
+              <p className={cn('pt-0.5 text-13 text-muted', !detailsOpen && 'truncate')}>
+                {detail.title}, {lead.company}{!detailsOpen && <> · {detail.localTime} {lead.pronoun} time</>}
+              </p>
             </div>
             {detail.lastCall && <Pill tone="success"><Icon name="up" size={14} />{RESULT_LABEL[detail.lastCall.result]} last time</Pill>}
             <Pill>{ORDINAL[detail.attempt] ?? `${detail.attempt}th`} call</Pill>
             {plan === 'pro' && <Pill tone="lemon"><Icon name="spark" size={14} />Summary on</Pill>}
+            <Button variant="quiet" size="sm" className="flex-none" aria-expanded={detailsOpen} aria-controls="lead-details" onClick={toggleDetails}>
+              {detailsOpen ? 'Hide details' : 'Show details'}
+              <Icon name="right" size={14} className={detailsOpen ? '-rotate-90' : 'rotate-90'} />
+            </Button>
           </div>
-          <Facts items={[
-            { icon: 'call', label: 'Phone', value: detail.phone },
-            { icon: 'mail', label: 'Email', value: detail.email },
-            { icon: 'pin', label: 'Location', value: detail.location },
-            { icon: 'building', label: 'Company', value: detail.companyNote },
-            { icon: 'globe', label: 'Website', value: detail.website },
-            { icon: 'list', label: 'List', value: 'October leads' },
-          ]} />
-          {detail.lastCall && (
-            <div className="flex flex-wrap items-start gap-x-3 gap-y-1 rounded-md bg-warn-soft px-3.5 py-3 text-14 sm:flex-nowrap">
-              <Icon name="history" size={16} className="mt-0.5 text-warn-ink" />
-              <b className="whitespace-nowrap text-12 leading-5 font-medium text-warn-ink">Last call, {detail.lastCall.date}</b>
-              <span>{detail.lastCall.note}</span>
+          {detailsOpen ? (
+            <div id="lead-details" className="flex flex-col gap-4">
+              <Facts items={[
+                { icon: 'call', label: 'Phone', value: detail.phone },
+                { icon: 'mail', label: 'Email', value: detail.email },
+                { icon: 'pin', label: 'Location', value: detail.location },
+                { icon: 'building', label: 'Company', value: detail.companyNote },
+                { icon: 'globe', label: 'Website', value: detail.website },
+                { icon: 'list', label: 'List', value: 'October leads' },
+              ]} />
+              {detail.lastCall && (
+                <div className="flex flex-wrap items-start gap-x-3 gap-y-1 rounded-md bg-warn-soft px-3.5 py-3 text-14 sm:flex-nowrap">
+                  <Icon name="history" size={16} className="mt-0.5 text-warn-ink" />
+                  <b className="whitespace-nowrap text-12 leading-5 font-medium text-warn-ink">Last call, {detail.lastCall.date}</b>
+                  <span>{detail.lastCall.note}</span>
+                </div>
+              )}
             </div>
+          ) : detail.lastCall && (
+            <p className="flex items-center gap-2 rounded-md bg-warn-soft px-3 py-1.5 text-13" title={detail.lastCall.note}>
+              <Icon name="history" size={14} className="flex-none text-warn-ink" />
+              <b className="whitespace-nowrap font-medium text-warn-ink">Last call, {detail.lastCall.date}</b>
+              <span className="truncate">{detail.lastCall.note}</span>
+            </p>
           )}
         </section>
 
