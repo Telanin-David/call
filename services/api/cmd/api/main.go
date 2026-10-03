@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,8 +20,10 @@ import (
 
 	"github.com/telanin-david/call/services/api/internal/accounts"
 	"github.com/telanin-david/call/services/api/internal/auth"
+	"github.com/telanin-david/call/services/api/internal/billing"
 	"github.com/telanin-david/call/services/api/internal/notify"
 	"github.com/telanin-david/call/services/api/internal/platform"
+	"github.com/telanin-david/call/services/api/internal/wallet"
 )
 
 func main() {
@@ -55,6 +60,13 @@ func main() {
 		Limiter: platform.ValkeyLimiter{Client: cache}, WebURL: cfg.WebURL, Log: logger,
 	}
 
+	providers, charges, err := payments(cfg)
+	if err != nil {
+		slog.Error("payments", "err", err)
+		os.Exit(1)
+	}
+	wal := &wallet.Service{DB: db, Providers: providers, Charges: charges, WebURL: cfg.WebURL, Log: logger}
+
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -69,12 +81,19 @@ func main() {
 		})
 	})
 
-	// Everything the web app calls. Webhooks will mount outside this group:
-	// they check provider signatures instead of cookies.
+	// Provider webhooks: no cookie, no JSON rule; the provider's signature
+	// is checked before anything else.
+	wal.WebhookRoutes(r)
+
+	// Everything the web app calls.
 	r.Group(func(r chi.Router) {
 		r.Use(platform.RequireJSON)
 		r.Use(sessions.Load)
 		acct.Routes(r)
+		wal.Routes(r)
+		if cfg.Env == "development" {
+			wal.DevRoutes(r)
+		}
 	})
 
 	srv := &http.Server{
@@ -121,4 +140,34 @@ func notifiers(cfg platform.Config, logger *slog.Logger) (notify.Mailer, notify.
 		return nil, nil, errors.New("TERMII_API_KEY must be set in production")
 	}
 	return mail, text, nil
+}
+
+// payments picks the real payment providers when their keys are set. In
+// development, missing keys mean fake providers (pay with POST
+// /dev/topups/{reference}/pay); elsewhere, missing keys mean card top-ups
+// are switched off for that provider's reps.
+func payments(cfg platform.Config) (map[string]billing.Provider, map[string]wallet.Charge, error) {
+	providers := map[string]billing.Provider{}
+	charges := map[string]wallet.Charge{"stripe": {Currency: "USD", MinorPerUSD: 100}}
+
+	rate, err := strconv.ParseInt(cfg.PaystackMinorPerUSD, 10, 64)
+	if err != nil || rate <= 0 {
+		return nil, nil, fmt.Errorf("PAYSTACK_MINOR_PER_USD must be a whole number above 0, got %q", cfg.PaystackMinorPerUSD)
+	}
+	charges["paystack"] = wallet.Charge{Currency: strings.ToUpper(cfg.PaystackCurrency), MinorPerUSD: rate}
+
+	if cfg.PaystackSecretKey != "" {
+		providers["paystack"] = billing.Paystack{SecretKey: cfg.PaystackSecretKey}
+	} else if cfg.Env == "development" {
+		providers["paystack"] = &billing.Fake{ProviderName: "paystack", Secret: cfg.SessionKey}
+	}
+	if cfg.StripeSecretKey != "" {
+		if cfg.StripeWebhookSecret == "" {
+			return nil, nil, errors.New("STRIPE_WEBHOOK_SECRET must be set with STRIPE_SECRET_KEY")
+		}
+		providers["stripe"] = billing.Stripe{SecretKey: cfg.StripeSecretKey, WebhookSecret: cfg.StripeWebhookSecret}
+	} else if cfg.Env == "development" {
+		providers["stripe"] = &billing.Fake{ProviderName: "stripe", Secret: cfg.SessionKey}
+	}
+	return providers, charges, nil
 }
