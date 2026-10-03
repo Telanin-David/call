@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Avatar, Button, CallCard, CallDevice, CallFacts, CallStatus, CallTimer, ChoiceCard, Chip, Dot, Facts, Icon, Kbd, Merge, Note,
   OutcomeTile, Paper, Pill, Progress, Radio, ScriptText, Tile, Toggle, buttonClass, cn,
 } from '@dialer/ui';
 import { ProblemCard } from './CallAlerts';
-import { NextLeadPopover, peekAt } from './NextLead';
+import { LeadPeek, peekAt, type PeekAction } from './NextLead';
 import { PairDialog } from './Pairing';
 import { OUTCOMES, WHEN, type CallSession } from './useCallSession';
 import { isProblem } from '@/lib/sim';
@@ -22,7 +22,7 @@ export default function CallingDesk({ s }: { s: CallSession }) {
   const {
     plan, free, sim, via, phoneLinked, setTalkVia, canStart, queue, current, setCurrent, lead, detail, merge, left, dials, limit, made,
     phase, setPhase, live, seconds, cost, clock, muted, setMuted, outcome, setOutcome, when, setWhen, scriptSize, setScriptSize,
-    scriptLocked, setUpgrade, peek, setPeek, nextPick, setNextPick, multiDial, setMultiDial, pauseAfter, setPauseAfter, nextOpen, start, hangUp, skip, fixProblem,
+    scriptLocked, setUpgrade, peek, setPeek, nextPick, setNextPick, multiDial, setMultiDial, pauseAfter, setPauseAfter, nextOpen, start, startAt, hangUp, skip, fixProblem,
   } = s;
 
   useEffect(() => {
@@ -42,6 +42,10 @@ export default function CallingDesk({ s }: { s: CallSession }) {
   });
 
   const [queueOpen, setQueueOpen] = useState(true);
+  const closeTimer = useRef<number | null>(null);
+  const cancelClose = () => { if (closeTimer.current !== null) { window.clearTimeout(closeTimer.current); closeTimer.current = null; } };
+  const scheduleClose = () => { cancelClose(); closeTimer.current = window.setTimeout(() => setPeek(null), 160); };
+  const openPeek = (i: number, el: HTMLElement) => { cancelClose(); setPeek(peekAt(i, el)); };
   if (!lead || !detail || !merge) return null;
 
   return (
@@ -76,15 +80,14 @@ export default function CallingDesk({ s }: { s: CallSession }) {
             ? (live ? 'On call now' : `${free ? 'Selected' : 'Up first'} · ${d?.localTime ?? ''}`)
             : nextPick === i ? 'Next up' : `${q.lead.company} · ${d?.localTime ?? ''}`);
           return (
-            <button key={q.lead.id} type="button" aria-current={isCurrent || undefined} aria-expanded={live && !free && !isCurrent ? peek?.index === i : undefined}
-              disabled={Boolean(q.done) || (live && (free || isCurrent))}
-              onClick={e => {
-                if (!live) { setCurrent(i); return; }
-                const row = e.currentTarget;
-                setPeek(p => (p?.index === i ? null : peekAt(i, row)));
-              }}
+            <div key={q.lead.id}
+              onMouseEnter={e => { if (!isCurrent) openPeek(i, e.currentTarget); }} onMouseLeave={scheduleClose}
+              onFocus={e => { if (!isCurrent) openPeek(i, e.currentTarget); }} onBlur={scheduleClose}>
+            <button type="button" aria-current={isCurrent || undefined} aria-expanded={isCurrent ? undefined : peek?.index === i}
+              aria-disabled={Boolean(q.done) || live || undefined}
+              onClick={() => { if (q.done || live) return; setCurrent(i); setPeek(null); }}
               className={cn('flex w-full items-center gap-3 rounded-lg border-0 bg-transparent px-3 py-2.5 text-left',
-                isCurrent ? 'bg-brand-soft' : 'enabled:cursor-pointer enabled:hover:bg-sunk')}>
+                isCurrent ? 'bg-brand-soft' : 'cursor-pointer hover:bg-sunk aria-disabled:cursor-default')}>
               <Avatar initials={q.lead.initials} tone={isCurrent ? 'brand' : 'plain'} size={32} className="text-12 font-semibold" />
               <div className="min-w-0 flex-1">
                 <div className={cn('text-14 font-medium', q.done && 'text-muted')}>{q.lead.name}</div>
@@ -97,6 +100,7 @@ export default function CallingDesk({ s }: { s: CallSession }) {
                 </span>
               )}
             </button>
+            </div>
           );
         })}
         <span className="flex-1" />
@@ -134,7 +138,7 @@ export default function CallingDesk({ s }: { s: CallSession }) {
       </aside>
       )}
 
-      <main className="max-xl:contents xl:flex xl:min-h-0 xl:flex-col xl:gap-4 xl:overflow-hidden xl:bg-sunk xl:px-8 xl:py-6">
+      <main className="max-xl:contents xl:flex xl:min-h-0 xl:flex-col xl:gap-4 xl:overflow-y-auto xl:bg-sunk xl:px-8 xl:py-6">
         <section aria-label="Lead" className="flex flex-col gap-4 rounded-xl border border-line bg-surface px-4 py-4 shadow-card max-xl:order-1 sm:px-[22px] sm:py-5">
           <div className="flex flex-wrap items-center gap-3.5">
             <Avatar initials={lead.initials} tone={lead.tone} size={52} />
@@ -163,7 +167,7 @@ export default function CallingDesk({ s }: { s: CallSession }) {
           )}
         </section>
 
-        <Paper className="max-xl:order-3 max-xl:after:hidden xl:min-h-0 xl:flex-1">
+        <Paper className="max-xl:order-3 max-xl:after:hidden xl:flex xl:min-h-[380px] xl:flex-1 xl:flex-col">
           <div className="mb-[18px] flex flex-wrap items-center gap-1.5">
             <span className={cn(label, 'flex-1')}>YOUR SCRIPT · {SCRIPT_NAME.toUpperCase()}</span>
             {free && (scriptLocked ? <Pill><Icon name="lock" size={13} />Starter</Pill> : <Pill tone="brand">Free until 1 Dec</Pill>)}
@@ -171,7 +175,7 @@ export default function CallingDesk({ s }: { s: CallSession }) {
             <button type="button" aria-label="Smaller text" onClick={() => setScriptSize(s => Math.max(16, s - 2))} className="size-9 cursor-pointer rounded-sm border-0 bg-transparent text-13 text-muted hover:bg-sunk">A-</button>
             <button type="button" aria-label="Bigger text" onClick={() => setScriptSize(s => Math.min(28, s + 2))} className="size-9 cursor-pointer rounded-sm border-0 bg-transparent text-13 text-muted hover:bg-sunk">A+</button>
           </div>
-          <div className="relative">
+          <div className="relative xl:-mr-3 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:pb-14 xl:pr-3" tabIndex={0} aria-label="Script">
             <ScriptText size={scriptSize} className={cn(scriptLocked && 'pointer-events-none select-none blur-[6px]')}>
               <div aria-hidden={scriptLocked || undefined}>
                 {SCRIPT_PARTS.map(p => (
@@ -293,11 +297,31 @@ export default function CallingDesk({ s }: { s: CallSession }) {
       </section>
 
       <PairDialog open={phase === 'pairing'} onCancel={() => setPhase('ready')} onChange={() => { setTalkVia('computer'); setPhase('ready'); }} />
-      {peek && queue[peek.index] && (
-        <NextLeadPopover peek={peek} lead={queue[peek.index]!.lead} onClose={() => setPeek(null)}
-          onSkip={() => { skip(peek.index); setPeek(null); }}
-          onCallNext={() => { setNextPick(peek.index); setPeek(null); }} />
-      )}
+      {peek && queue[peek.index] && (() => {
+        const q = queue[peek.index]!;
+        const him = q.lead.pronoun === 'her' ? 'her' : 'him';
+        const first = q.lead.name.split(' ')[0] ?? q.lead.name;
+        const done = () => setPeek(null);
+        let tag = 'In list';
+        let actions: PeekAction[] = [];
+        if (q.done) tag = 'Done';
+        else if (live && !free) {
+          tag = peek.index === nextOpen(current) ? 'Next' : 'In queue';
+          actions = [
+            { label: `Skip ${him}`, onClick: () => { skip(peek.index); done(); } },
+            { label: 'Call next', primary: true, onClick: () => { setNextPick(peek.index); done(); } },
+          ];
+        } else if (!live && free) {
+          actions = [{ label: `Call ${first}`, primary: true, onClick: () => { startAt(peek.index); done(); } }];
+        } else if (!live) {
+          tag = 'In queue';
+          actions = [
+            { label: `Skip ${him}`, onClick: () => { skip(peek.index); done(); } },
+            { label: 'Call first', primary: true, onClick: () => { setCurrent(peek.index); done(); } },
+          ];
+        }
+        return <LeadPeek peek={peek} lead={q.lead} tag={tag} actions={actions} onClose={done} onEnter={cancelClose} onLeave={scheduleClose} />;
+      })()}
     </div>
   );
 }
