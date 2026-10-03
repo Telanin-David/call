@@ -25,7 +25,8 @@ export const OUTCOMES: { key: Outcome; label: string; icon: IconName; tone: Outc
 ];
 
 export const WHEN = ['Tomorrow', 'In 3 days', 'Next week'] as const;
-export type When = (typeof WHEN)[number];
+/** A preset from WHEN, or a date picked by the rep ("Thu 9 Oct"). */
+export type When = string;
 
 const FIRST_OPEN = QUEUE.findIndex(q => !q.done);
 

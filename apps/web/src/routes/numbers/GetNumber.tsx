@@ -14,6 +14,7 @@ const AREAS: Record<Country, { code: string; city: string }> = {
 
 const COUNTRIES = [{ value: 'us', label: 'United States' }, { value: 'ca', label: 'Canada' }] as const;
 const SUFFIXES = ['0142', '0187', '0123', '0199', '0176', '0158'];
+const MORE_SUFFIXES = ['0168', '0177', '0185', '0193'];
 const BALANCE_NOW = usd(10);
 
 export default function GetNumber() {
@@ -22,7 +23,8 @@ export default function GetNumber() {
   const [area, setArea] = useState(AREAS.us.code);
   const [picked, setPicked] = useState(0);
   const city = area === AREAS[country].code ? AREAS[country].city : '';
-  const numbers = SUFFIXES.map(s => `+1 (${area}) 555-${s}`);
+  const [more, setMore] = useState(false);
+  const numbers = (more ? [...SUFFIXES, ...MORE_SUFFIXES] : SUFFIXES).map(s => `+1 (${area}) 555-${s}`);
   const chosen = numbers[picked] ?? numbers[0] ?? '';
 
   function switchCountry(c: Country) {
@@ -60,7 +62,7 @@ export default function GetNumber() {
         ) : (
           <p className="text-13 text-muted">Type a 3-digit area code.</p>
         )}
-        <LinkButton className="self-start text-14">Show more numbers</LinkButton>
+        {area.length === 3 && !more && <LinkButton className="self-start text-14" onClick={() => setMore(true)}>Show more numbers</LinkButton>}
       </div>
 
       <aside className="flex flex-col gap-3.5">

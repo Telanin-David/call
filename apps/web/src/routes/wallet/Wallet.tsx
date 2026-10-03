@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AmountPicker, Button, Card, CardHead, DarkCard, DarkEyebrow, Icon, PageHeader, Progress, Tile, cn, linkClass, type BarTone } from '@dialer/ui';
+import { AmountPicker, Button, Card, CardHead, DarkCard, DarkEyebrow, Field, Icon, Input, LinkButton, Modal, PageHeader, Progress, Tile, cn, useToast, type BarTone } from '@dialer/ui';
 import { Page } from '@/components/Page';
 import { usePlan, PLAN_LABEL } from '@/lib/plan';
 import { BALANCE, ME } from '@/lib/fake';
@@ -11,9 +11,25 @@ const CALLS_SPENT = usd(18, 42);
 
 interface Entry { date: string; title: string; sub: string; amount: number }
 
+/** Builds the activity list as a CSV file and hands it to the browser. */
+function downloadStatement(entries: Entry[]) {
+  const rows = [['Date', 'Item', 'Detail', 'Amount (USD)'], ...entries.map(e => [e.date, e.title, e.sub, (e.amount / 1_000_000).toFixed(2)])];
+  const csv = rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'dialer-statement-october-2026.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function Wallet() {
   const { plan } = usePlan();
   const [amount, setAmount] = useState(usd(20));
+  const [added, setAdded] = useState(0);
+  const [paying, setPaying] = useState(false);
+  const toast = useToast();
+  const balance = BALANCE + added;
 
   const fee = FEE_INTRO[plan];
   const spend: { label: string; amount: number; tone: BarTone }[] = [
@@ -39,12 +55,12 @@ export default function Wallet() {
         <div className="flex flex-col gap-3.5">
           <DarkCard as="section" aria-label="Balance">
             <DarkEyebrow>BALANCE</DarkEyebrow>
-            <div className="mt-1.5 text-44 leading-[50px] font-extrabold sm:text-52 sm:leading-[58px] tracking-[-0.04em] tabular-nums">{formatUsd(BALANCE)}</div>
-            <div className="text-14 text-zinc-400">About {minutesFor(BALANCE, plan).toLocaleString('en-US')} minutes at {formatRate(plan)} on {PLAN_LABEL[plan]}</div>
+            <div className="mt-1.5 text-44 leading-[50px] font-extrabold sm:text-52 sm:leading-[58px] tracking-[-0.04em] tabular-nums">{formatUsd(balance)}</div>
+            <div className="text-14 text-zinc-400">About {minutesFor(balance, plan).toLocaleString('en-US')} minutes at {formatRate(plan)} on {PLAN_LABEL[plan]}</div>
             <div className="mt-[22px]">
               <AmountPicker dark amounts={AMOUNTS} value={amount} onChange={setAmount} format={a => formatUsd(a).replace('.00', '')} />
             </div>
-            <Button variant="primary" size="lg" block className="mt-3">Add {formatUsd(amount)} by card</Button>
+            <Button variant="primary" size="lg" block className="mt-3" onClick={() => setPaying(true)}>Add {formatUsd(amount)} by card</Button>
             <div className="mt-2.5 text-12 text-zinc-400">Name on card must be {ME.name}.</div>
           </DarkCard>
           <div className="flex gap-3 rounded-3xl border border-line bg-surface p-[18px] text-14">
@@ -66,7 +82,7 @@ export default function Wallet() {
             </div>
           </Card>
           <Card as="section">
-            <CardHead title="Activity" className="mb-1"><a className={cn(linkClass, 'text-14')} href="#">Download statement</a></CardHead>
+            <CardHead title="Activity" className="mb-1"><LinkButton className="text-14" onClick={() => downloadStatement(ledger)}>Download statement</LinkButton></CardHead>
             {ledger.map((e, i) => (
               <div key={i} className="grid grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-3 border-t border-line py-[13px] text-14 sm:grid-cols-[90px_minmax(0,1fr)_120px] sm:gap-3.5">
                 <span className="text-muted">{e.date}</span>
@@ -77,6 +93,15 @@ export default function Wallet() {
           </Card>
         </div>
       </div>
+
+      <Modal open={paying} onClose={() => setPaying(false)} title={`Add ${formatUsd(amount)}`}>
+        <p className="mt-2 text-14 text-muted">The name on the card must be {ME.name}. Real card payments (Paystack and Stripe) arrive in D2; this one is pretend.</p>
+        <form className="mt-4 flex flex-col gap-3" onSubmit={e => { e.preventDefault(); setAdded(a => a + amount); setPaying(false); toast(`Added ${formatUsd(amount)} to your balance`); }}>
+          <Field label="Name on card" htmlFor="pay-name"><Input id="pay-name" defaultValue={ME.name} /></Field>
+          <Field label="Card number" htmlFor="pay-card"><Input id="pay-card" inputMode="numeric" placeholder="1234 5678 9012 3456" /></Field>
+          <Button type="submit" variant="primary" size="lg" block>Pay {formatUsd(amount)}</Button>
+        </form>
+      </Modal>
     </Page>
   );
 }

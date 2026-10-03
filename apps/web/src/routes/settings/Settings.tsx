@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Card, CardHead, DarkCard, DarkEyebrow, Icon, LinkButton, Modal, cn, type IconName } from '@dialer/ui';
+import { Button, Card, CardHead, DarkCard, DarkEyebrow, Field, Icon, Input, LinkButton, Modal, Select, cn, useToast, type IconName } from '@dialer/ui';
 import { usePlan, PLAN_LABEL } from '@/lib/plan';
 import { BALANCE, ME } from '@/lib/fake';
 import { formatUsd } from '@/lib/money';
@@ -42,12 +42,28 @@ function Section({ title, aside, children }: { title: string; aside?: ReactNode;
   );
 }
 
-function NumbersPanel() {
+interface Edit { label: string; value: string; options?: string[]; secret?: boolean }
+
+const OUT_FROM = ['The number closest to the lead. If none is close, your default.', 'Always your default number'];
+
+function NumbersPanel({ onEdit, values }: { onEdit: (e: Edit) => void; values: Record<string, string> }) {
+  const navigate = useNavigate();
+  const toast = useToast();
+  const [numbers, setNumbers] = useState(NUMBERS);
+  const [cancel, setCancel] = useState<string | null>(null);
+  const outFrom = values['Calls go out from'] ?? OUT_FROM[0] ?? '';
   return (
-    <Section title="Numbers" aside={<span className="text-14 text-muted">{NUMBERS.length} numbers · {formatUsd(NUMBER_MONTHLY * NUMBERS.length)} a month</span>}>
-      {NUMBERS.map(n => <Kv key={n.number} label={n.number} action="Cancel">{n.detail} · {formatUsd(NUMBER_MONTHLY)}</Kv>)}
-      <Kv label="Calls go out from" action="Change">The number closest to the lead. If none is close, your default.</Kv>
-      <Button variant="outline" className="mt-3">Get another number</Button>
+    <Section title="Numbers" aside={<span className="text-14 text-muted">{numbers.length} numbers · {formatUsd(NUMBER_MONTHLY * numbers.length)} a month</span>}>
+      {numbers.map(n => <Kv key={n.number} label={n.number} action="Cancel" onAction={() => setCancel(n.number)}>{n.detail} · {formatUsd(NUMBER_MONTHLY)}</Kv>)}
+      <Kv label="Calls go out from" action="Change" onAction={() => onEdit({ label: 'Calls go out from', value: outFrom, options: OUT_FROM })}>{outFrom}</Kv>
+      <Button variant="outline" className="mt-3" onClick={() => navigate('/numbers')}>Get another number</Button>
+      <Modal open={cancel !== null} onClose={() => setCancel(null)} title={`Cancel ${cancel ?? ''}?`} width="sm">
+        <p className="mt-2 text-15 text-muted">You keep it until the end of the month you paid for. Leads who call it after that won't reach you.</p>
+        <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
+          <Button size="lg" onClick={() => setCancel(null)}>Keep it</Button>
+          <Button variant="outlineDanger" size="lg" onClick={() => { setNumbers(ns => ns.filter(x => x.number !== cancel)); toast(`${cancel ?? 'Number'} cancelled`); setCancel(null); }}>Cancel number</Button>
+        </div>
+      </Modal>
     </Section>
   );
 }
@@ -57,6 +73,11 @@ export default function Settings() {
   const { plan } = usePlan();
   const [section, setSection] = useState<Section>('billing');
   const [askFree, setAskFree] = useState(false);
+  const [edit, setEdit] = useState<Edit | null>(null);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const toast = useToast();
+  const v = (label: string, fallback: string) => values[label] ?? fallback;
+  const change = (label: string, fallback: string, extra?: Partial<Edit>) => () => setEdit({ label, value: v(label, fallback), ...extra });
   const [movingToFree, setMovingToFree] = useState(false);
   const paid = PLAN_LABEL[plan];
   const loses = [
@@ -107,31 +128,33 @@ export default function Settings() {
             <Section title="Billing">
               {plan !== 'free' && <Kv label="Next plan charge">1 Nov 2026 · {formatUsd(FEE_INTRO[plan])}</Kv>}
               <Kv label="Paid from">Your balance · {formatUsd(BALANCE)}</Kv>
-              <Kv label="Low balance alert" action="Change">Below $5.00</Kv>
+              <Kv label="Low balance alert" action="Change" onAction={change('Low balance alert', 'Below $5.00', { options: ['Below $2.00', 'Below $5.00', 'Below $10.00', 'Off'] })}>{v('Low balance alert', 'Below $5.00')}</Kv>
               {plan !== 'free' && (movingToFree
                 ? <Kv label="Moving to Free" action="Stay on plan" onAction={() => setMovingToFree(false)}>On 1 Nov. You keep {paid} until 31 Oct.</Kv>
                 : <Kv label="Move to Free" action="Move to Free" onAction={() => setAskFree(true)}>Starts at your next renewal, 1 Nov. You keep {paid} until then.</Kv>)}
             </Section>
-            <NumbersPanel />
+            <NumbersPanel onEdit={setEdit} values={values} />
           </>
         )}
 
-        {section === 'numbers' && <NumbersPanel />}
+        {section === 'numbers' && <NumbersPanel onEdit={setEdit} values={values} />}
 
         {section === 'account' && (
           <Section title="Account">
-            <Kv label="Name" action="Change">{ME.name}</Kv>
-            <Kv label="Email" action="Change">{ME.email}</Kv>
-            <Kv label="Phone" action="Change">+234 803 123 4567</Kv>
-            <Kv label="Password" action="Change">Last changed 12 Sep</Kv>
+            <Kv label="Name" action="Change" onAction={change('Name', ME.name)}>{v('Name', ME.name)}</Kv>
+            <Kv label="Email" action="Change" onAction={change('Email', ME.email)}>{v('Email', ME.email)}</Kv>
+            <Kv label="Phone" action="Change" onAction={change('Phone', '+234 803 123 4567')}>{v('Phone', '+234 803 123 4567')}</Kv>
+            <Kv label="Password" action="Change" onAction={() => setEdit({ label: 'Password', value: '', secret: true })}>{v('Password', 'Last changed 12 Sep')}</Kv>
           </Section>
         )}
 
         {section === 'calling' && (
           <Section title="Calling">
-            <Kv label="How you talk" action="Change">Your phone, Pixel 6a</Kv>
-            <Kv label="Script text size" action="Change">Large</Kv>
-            <Kv label="Auto-dial gap" action="Change">{plan === 'free' ? 'Tap to call on Free' : '5 seconds after you pick a result'}</Kv>
+            <Kv label="How you talk" action="Change" onAction={change('How you talk', 'Your phone, Pixel 6a', { options: ['Your phone, Pixel 6a', 'This laptop'] })}>{v('How you talk', 'Your phone, Pixel 6a')}</Kv>
+            <Kv label="Script text size" action="Change" onAction={change('Script text size', 'Large', { options: ['Medium', 'Large', 'Extra large'] })}>{v('Script text size', 'Large')}</Kv>
+            {plan === 'free'
+              ? <Kv label="Auto-dial gap">Tap to call on Free</Kv>
+              : <Kv label="Auto-dial gap" action="Change" onAction={change('Auto-dial gap', '5 seconds after you pick a result', { options: ['3 seconds after you pick a result', '5 seconds after you pick a result', '10 seconds after you pick a result'] })}>{v('Auto-dial gap', '5 seconds after you pick a result')}</Kv>}
           </Section>
         )}
 
@@ -153,6 +176,26 @@ export default function Settings() {
           </Section>
         )}
       </div>
+
+      <Modal open={edit !== null} onClose={() => setEdit(null)} title={`Change ${edit?.label.toLowerCase() ?? ''}`} width="sm">
+        {edit && (
+          <form className="mt-4 flex flex-col gap-4" onSubmit={e => {
+            e.preventDefault();
+            const value = String(new FormData(e.currentTarget).get('value') ?? '').trim();
+            if (!value) return;
+            setValues(vs => ({ ...vs, [edit.label]: edit.secret ? 'Changed just now' : value }));
+            toast(`${edit.label} updated`);
+            setEdit(null);
+          }}>
+            <Field label={edit.secret ? 'New password' : edit.label} htmlFor="edit-value">
+              {edit.options
+                ? <Select id="edit-value" name="value" defaultValue={edit.value}>{edit.options.map(o => <option key={o}>{o}</option>)}</Select>
+                : <Input id="edit-value" name="value" type={edit.secret ? 'password' : 'text'} defaultValue={edit.value} autoFocus minLength={edit.secret ? 10 : undefined} />}
+            </Field>
+            <Button type="submit" variant="primary" size="lg" block>Save</Button>
+          </form>
+        )}
+      </Modal>
 
       <Modal open={askFree} onClose={() => setAskFree(false)} title="Move to Free on 1 Nov?">
         <p className="mt-3 text-15 text-muted">You keep {paid} until <b className="text-ink">31 Oct</b>, because you've paid for it. On 1 Nov you lose:</p>

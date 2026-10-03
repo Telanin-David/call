@@ -5,9 +5,13 @@ import { Suspense } from 'react';
 import { routes } from './index';
 import { PlanProvider, type Plan } from '@/lib/plan';
 import { useSimStore } from '@/lib/sim';
+import { useDeviceStore } from '@/lib/store';
 import { act } from 'react';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  useDeviceStore.setState({ talkVia: 'phone', phoneLinked: false });
+});
 
 function renderAt(path: string, plan: Plan = 'starter') {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
@@ -39,6 +43,8 @@ describe('every route renders its screen', () => {
     ['/rules', 'The rules'],
     ['/verify', 'Verify your ID'],
     ['/link', 'Use with laptop'],
+    ['/pair', 'Use with laptop'],
+    ['/check-email', 'Check your email'],
   ])('%s', async (path, heading) => {
     renderAt(path);
     expect(await screen.findByRole('heading', { name: heading })).toBeTruthy();
@@ -161,5 +167,42 @@ describe('phone calling flow', () => {
     renderAt('/call', 'free');
     fireEvent.click(await screen.findByRole('button', { name: 'Call Rosa Diaz' }));
     expect(screen.getByRole('heading', { name: 'Rosa Diaz' })).toBeTruthy();
+  });
+});
+
+describe('finished flows', () => {
+  it('goes from sign-up to check email to confirm', async () => {
+    renderAt('/signup');
+    fireEvent.click(await screen.findByRole('button', { name: 'Create account' }));
+    fireEvent.click(await screen.findByRole('button', { name: "I've opened the link" }));
+    expect(await screen.findByRole('heading', { name: "Confirm it's you" })).toBeTruthy();
+  });
+
+  it('walks Verify ID through photo and face check', async () => {
+    renderAt('/verify');
+    fireEvent.click(await screen.findByRole('button', { name: 'Use this laptop instead' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Start on this laptop' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Take photo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use this photo' }));
+    expect(screen.getByText('Look at the camera')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: "We're checking your ID" }, { timeout: 6000 })).toBeTruthy();
+  }, 10000);
+
+  it('changes a setting and confirms with a toast', async () => {
+    renderAt('/settings');
+    fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
+    const nameRow = screen.getByText('Name').closest('div')!;
+    fireEvent.click(within(nameRow).getByRole('button', { name: 'Change' }));
+    fireEvent.change(screen.getByLabelText('Name', { selector: 'input' }), { target: { value: 'Tunde B. Bakare' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.getByText('Tunde B. Bakare')).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('Name updated');
+  });
+
+  it('opens the pairing dialog from Scan code', async () => {
+    renderAt('/call', 'starter');
+    fireEvent.click(await screen.findByRole('button', { name: 'Scan code' }));
+    expect(screen.getByRole('dialog', { name: 'Scan with your phone' })).toBeTruthy();
+    expect(screen.getByText('482 913')).toBeTruthy();
   });
 });

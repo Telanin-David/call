@@ -1,11 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Avatar, Button, CallCard, CallDevice, CallFacts, CallStatus, CallTimer, ChoiceCard, Chip, Dot, Facts, Icon, Kbd, Merge, Note,
-  OutcomeTile, Paper, Pill, Progress, Radio, ScriptText, Tile, Toggle, buttonClass, cn, linkClass,
+  OutcomeTile, Paper, Pill, Progress, Radio, ScriptText, Tile, Toggle, buttonClass, cn,
 } from '@dialer/ui';
 import { ProblemCard } from './CallAlerts';
 import { NextLeadPopover, peekAt } from './NextLead';
+import { PairDialog } from './Pairing';
 import { OUTCOMES, WHEN, type CallSession } from './useCallSession';
 import { isProblem } from '@/lib/sim';
 import { BALANCE, DETAILS, RESULT_LABEL } from '@/lib/fake';
@@ -21,7 +22,7 @@ export default function CallingDesk({ s }: { s: CallSession }) {
   const {
     plan, free, sim, via, phoneLinked, setTalkVia, canStart, queue, current, setCurrent, lead, detail, merge, left, dials, limit, made,
     phase, setPhase, live, seconds, cost, clock, muted, setMuted, outcome, setOutcome, when, setWhen, scriptSize, setScriptSize,
-    scriptLocked, setUpgrade, peek, setPeek, nextPick, setNextPick, multiDial, setMultiDial, nextOpen, start, hangUp, skip, fixProblem,
+    scriptLocked, setUpgrade, peek, setPeek, nextPick, setNextPick, multiDial, setMultiDial, pauseAfter, setPauseAfter, nextOpen, start, hangUp, skip, fixProblem,
   } = s;
 
   useEffect(() => {
@@ -40,14 +41,31 @@ export default function CallingDesk({ s }: { s: CallSession }) {
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  const [queueOpen, setQueueOpen] = useState(true);
   if (!lead || !detail || !merge) return null;
 
   return (
-    <div className="flex flex-col gap-3.5 bg-sunk p-4 sm:p-6 xl:grid xl:h-full xl:min-h-0 xl:grid-cols-[288px_minmax(0,1fr)_380px] xl:gap-0 xl:bg-surface xl:p-0">
+    <div className={cn('flex flex-col gap-3.5 bg-sunk p-4 sm:p-6 xl:grid xl:h-full xl:min-h-0 xl:gap-0 xl:bg-surface xl:p-0',
+      queueOpen ? 'xl:grid-cols-[288px_minmax(0,1fr)_380px]' : 'xl:grid-cols-[64px_minmax(0,1fr)_380px]')}>
+      {!queueOpen ? (
+        <aside className="flex flex-col items-center gap-2 border-line py-4 max-xl:order-4 max-xl:flex-row max-xl:rounded-xl max-xl:border max-xl:bg-surface max-xl:px-3 xl:border-r" aria-label="Queue">
+          <button type="button" aria-label="Open queue" aria-expanded={false} onClick={() => setQueueOpen(true)}
+            className="mb-1 flex size-9 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent text-muted hover:bg-sunk hover:text-ink">
+            <Icon name="panel" />
+          </button>
+          {queue.slice(0, 7).map((q, i) => (
+            <span key={q.lead.id} title={q.lead.name} className={cn(q.done && 'opacity-50')}>
+              <Avatar initials={q.lead.initials} tone={i === current ? 'brand' : 'plain'} size={32} className="text-12 font-semibold" />
+            </span>
+          ))}
+          <span className="text-12 font-semibold text-muted">+{Math.max(0, left - 7)}</span>
+        </aside>
+      ) : (
       <aside className="flex flex-col gap-0.5 border-line px-3 py-4 max-xl:order-4 max-xl:rounded-xl max-xl:border max-xl:bg-surface xl:overflow-auto xl:border-r" aria-label="Queue">
         <div className="flex items-center gap-2 pb-3 pl-3 pr-1 pt-1">
           <span className={cn(label, 'flex-1')}>{free ? 'YOUR LEADS' : 'UP NEXT'} <span className="font-normal">{left} {free ? 'to call' : 'left'}</span></span>
-          <button type="button" aria-label="Close queue" className="flex size-9 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent text-muted hover:bg-sunk hover:text-ink">
+          <button type="button" aria-label="Close queue" aria-expanded onClick={() => setQueueOpen(false)}
+            className="flex size-9 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent text-muted hover:bg-sunk hover:text-ink">
             <Icon name="panel" />
           </button>
         </div>
@@ -107,13 +125,14 @@ export default function CallingDesk({ s }: { s: CallSession }) {
           </button>
         ) : (
           <div className="grid grid-cols-2 gap-2">
-            <Button><Icon name="pause" size={16} />Pause</Button>
+            <Button aria-pressed={pauseAfter} onClick={() => setPauseAfter(v => !v)}><Icon name={pauseAfter ? 'play' : 'pause'} size={16} />{pauseAfter ? 'Paused' : 'Pause'}</Button>
             <Button onClick={() => { if (live) return; const n = nextOpen(current); if (n >= 0) setCurrent(n); }}>
               <Icon name="skip" size={16} />Skip
             </Button>
           </div>
         )}
       </aside>
+      )}
 
       <main className="max-xl:contents xl:flex xl:min-h-0 xl:flex-col xl:gap-4 xl:overflow-hidden xl:bg-sunk xl:px-8 xl:py-6">
         <section aria-label="Lead" className="flex flex-col gap-4 rounded-xl border border-line bg-surface px-4 py-4 shadow-card max-xl:order-1 sm:px-[22px] sm:py-5">
@@ -219,7 +238,13 @@ export default function CallingDesk({ s }: { s: CallSession }) {
                 <span className={cn(label, 'mt-0.5')}>CALL BACK WHEN?</span>
                 <div className="flex flex-wrap gap-1.5">
                   {WHEN.map(w => <Chip key={w} pressed={when === w} className="px-3" onClick={() => setWhen(w)}>{w}</Chip>)}
-                  <Chip aria-label="Pick a date" className="w-10 flex-none px-0"><Icon name="callback" size={16} /></Chip>
+                  <label className={cn('relative inline-flex h-10 flex-none cursor-pointer items-center gap-1.5 rounded-full border border-transparent bg-sunk px-3 text-14 font-medium',
+                    !(WHEN as readonly string[]).includes(when) && 'border-brand bg-brand-soft text-brand-ink')}>
+                    <Icon name="callback" size={16} />
+                    {!(WHEN as readonly string[]).includes(when) && when}
+                    <input type="date" aria-label="Pick a date" className="absolute inset-0 cursor-pointer opacity-0"
+                      onChange={e => { const d = e.target.valueAsDate; if (d) setWhen(d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })); }} />
+                  </label>
                 </div>
               </>
             )}
@@ -250,10 +275,7 @@ export default function CallingDesk({ s }: { s: CallSession }) {
               <Note tone="brand">
                 <Icon name="qr" className="text-brand-ink" />
                 {phase === 'pairing'
-                  ? <span className="flex flex-1 items-center gap-3 text-13">
-                      <img src="/qr-demo.svg" alt="Code to link your phone" className="size-20 flex-none rounded-lg bg-white p-1" />
-                      <span>Scan with your phone camera, or open <Link to="/link" className={linkClass}>dialer.app/link</Link> on your phone. Waiting…</span>
-                    </span>
+                  ? <span className="flex-1 text-13">Waiting for your phone to scan</span>
                   : <><span className="flex-1 text-13">Your phone isn't connected yet</span>
                     <Button variant="outline" className="h-[34px]" onClick={() => setPhase('pairing')}>Scan code</Button></>}
               </Note>
@@ -270,6 +292,7 @@ export default function CallingDesk({ s }: { s: CallSession }) {
         )}
       </section>
 
+      <PairDialog open={phase === 'pairing'} onCancel={() => setPhase('ready')} onChange={() => { setTalkVia('computer'); setPhase('ready'); }} />
       {peek && queue[peek.index] && (
         <NextLeadPopover peek={peek} lead={queue[peek.index]!.lead} onClose={() => setPeek(null)}
           onSkip={() => { skip(peek.index); setPeek(null); }}

@@ -1,12 +1,13 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Button, Checkbox, Field, Icon, Input, PasswordInput, linkClass } from '@dialer/ui';
+import { Button, Checkbox, Field, Icon, Input, PasswordInput, linkClass, useToast } from '@dialer/ui';
 import AuthShell, { AuthFoot, AuthForm, AuthTitle } from '@/layouts/AuthShell';
 
 export default function Signup() {
   const navigate = useNavigate();
+  const toast = useToast();
   return (
     <AuthShell signupStep={{ n: 1, label: 'Create account' }}>
-      <AuthForm onSubmit={() => navigate('/confirm')}>
+      <AuthForm onSubmit={() => navigate('/check-email')}>
         <AuthTitle title="Create your account" sub="Free to start. No card needed." />
         <Field label="Full name" htmlFor="su-name" hint="Use the name on your ID. Your card name must match it later.">
           <Input id="su-name" defaultValue="Tunde Bakare" />
@@ -26,7 +27,7 @@ export default function Signup() {
           <PasswordInput id="su-pw" defaultValue="correct-horse" />
         </Field>
         <Checkbox defaultChecked>
-          I agree to the <Link className={linkClass} to="/rules">rules</Link> and <a className={linkClass} href="#">terms</a>. One account per person.
+          I agree to the <Link className={linkClass} to="/rules">rules</Link> and <button type="button" className={linkClass} onClick={() => toast('The full terms are added before launch. The rules cover how the app works.')}>terms</button>. One account per person.
         </Checkbox>
         <Button type="submit" variant="primary" size="xl" block>Create account</Button>
         <AuthFoot>Have an account? <Link className={linkClass} to="/signin">Sign in</Link></AuthFoot>

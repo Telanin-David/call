@@ -18,7 +18,7 @@ interface AuthShellProps {
 
 export default function AuthShell({ headline: title, signupStep, children }: AuthShellProps) {
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[600px_minmax(0,1fr)]">
+    <div className="grid min-h-dvh grid-rows-[auto_1fr] lg:grid-cols-[600px_minmax(0,1fr)] lg:grid-rows-1">
       <header className="flex flex-col gap-3 bg-night px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))] text-white lg:hidden">
         <Brand dark className="text-16" />
         {signupStep && (

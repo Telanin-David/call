@@ -9,5 +9,5 @@ export {
   ChoiceCard, Radio, OutcomeTile, CallCard, CallStatus, CallTimer, CallFacts, CallDevice, Facts, Paper, ScriptText, Merge,
   type OutcomeTone,
 } from './Call';
-export { Modal, Toggle } from './Overlay';
+export { Modal, Toggle, ToastProvider, useToast } from './Overlay';
 export * as tokens from './tokens';
