@@ -6,6 +6,8 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
+	"math/big"
 	"os"
 	"testing"
 
@@ -29,6 +31,16 @@ func Pool(t testing.TB) *pgxpool.Pool {
 	return pool
 }
 
+// Phone returns a random +1 555 number, so
+// tests never collide on the one-account-per-phone rule.
+func Phone() string {
+	n, err := rand.Int(rand.Reader, big.NewInt(1_000_000_000))
+	if err != nil {
+		panic(err)
+	}
+	return fmt.Sprintf("+1555%09d", n.Int64())
+}
+
 // NewUser inserts a user with a unique email and returns its id, so tests
 // never share money or rows with each other.
 func NewUser(t testing.TB, pool *pgxpool.Pool) string {
@@ -40,8 +52,8 @@ func NewUser(t testing.TB, pool *pgxpool.Pool) string {
 	var id string
 	err := pool.QueryRow(context.Background(), `
 		INSERT INTO users (name, email, phone, password_hash, country)
-		VALUES ('Test Rep', $1, '+15550100', 'x', 'US') RETURNING id`,
-		"test-"+hex.EncodeToString(b)+"@example.test").Scan(&id)
+		VALUES ('Test Rep', $1, $2, 'x', 'US') RETURNING id`,
+		"test-"+hex.EncodeToString(b)+"@example.test", Phone()).Scan(&id)
 	if err != nil {
 		t.Fatalf("insert user: %v", err)
 	}
