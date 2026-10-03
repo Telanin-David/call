@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Avatar, Button, CallCard, CallDevice, CallFacts, CallStatus, CallTimer, ChoiceCard, Chip, Dot, Facts, Icon, Kbd, Merge, Note,
+  Avatar, Button, CallCard, CallFacts, CallStatus, CallTimer, ChoiceCard, Chip, Dot, Facts, Icon, Kbd, Merge, Note,
   OutcomeTile, Paper, Pill, Progress, Radio, ScriptText, Tile, Toggle, buttonClass, cn,
 } from '@dialer/ui';
 import { ProblemCard } from './CallAlerts';
@@ -227,7 +227,7 @@ export default function CallingDesk({ s }: { s: CallSession }) {
         </Paper>
       </main>
 
-      <section className="flex flex-col gap-3.5 max-xl:order-2 xl:overflow-auto xl:border-l xl:border-line xl:p-5" aria-label="Call">
+      <section className="flex flex-col gap-3.5 max-xl:order-2 xl:overflow-auto xl:border-l xl:border-line xl:p-5 [&>*]:shrink-0" aria-label="Call">
         {isProblem(sim) ? (
           <ProblemCard problem={sim} timer={clock} lead={merge.first_name} canUsePhone={!free} onFix={fixProblem} />
         ) : (
@@ -244,9 +244,6 @@ export default function CallingDesk({ s }: { s: CallSession }) {
             { label: 'Your time', value: '8:14 pm' },
             live ? { label: 'This call', value: formatUsd3(cost), hot: true } : { label: 'Balance', value: formatUsd(BALANCE) },
           ]} />
-          {live && (via === 'phone'
-            ? <CallDevice icon="phone" title="Your phone" sub="Mic and speaker · Pixel 6a" battery="64%" />
-            : <CallDevice icon="headset" title="This laptop" sub="Headset plugged into the jack" />)}
         </CallCard>
         )}
 
