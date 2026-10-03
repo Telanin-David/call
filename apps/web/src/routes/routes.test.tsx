@@ -222,3 +222,29 @@ describe('All screens page', () => {
     expect(await screen.findByRole('dialog', { name: 'Move to Free on 1 Nov?' })).toBeTruthy();
   });
 });
+
+describe('laptop queue hover card', () => {
+  it('shows a lead’s details on hover and lets you call them first', async () => {
+    renderAt('/call', 'starter');
+    const queue = await screen.findByRole('complementary', { name: 'Queue' });
+    // The hover handlers sit on the row's wrapper, around the row button.
+    fireEvent.mouseEnter(within(queue).getByRole('button', { name: /Rosa Diaz/ }).parentElement!);
+    const card = await screen.findByRole('dialog', { name: 'Rosa Diaz details' });
+    expect(card.textContent).toContain('+1 (718) 555-0162');
+    fireEvent.click(within(card).getByRole('button', { name: 'Call first' }));
+    expect(screen.getByRole('heading', { name: 'Rosa Diaz' })).toBeTruthy();
+  });
+});
+
+describe('lead details on the laptop call screen', () => {
+  afterEach(() => window.localStorage.clear());
+
+  it('start shrunk so the script leads, and open on request', async () => {
+    renderAt('/call', 'starter');
+    const lead = await screen.findByRole('region', { name: 'Lead' });
+    expect(within(lead).queryByText('lena@sparkleoffices.com')).toBeNull();
+    fireEvent.click(within(lead).getByRole('button', { name: /Show details/ }));
+    expect(within(lead).getByText('lena@sparkleoffices.com')).toBeTruthy();
+    expect(window.localStorage.getItem('dialer.leadDetails')).toBe('open');
+  });
+});
