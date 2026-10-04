@@ -42,10 +42,10 @@ Intro pricing applies to first-time subscribers only (open decision 9: whether r
 1. Free plan daily dials: 30 (confirmed by screens).
 2. New-account limits — do they apply to Starter too?
 3. Same-number cap: 3 or 4 tries.
-4. What happens when balance can't cover plan fee or number renewal: suggested 3-day warning then drop to Free / pause number.
+4. What happens when balance can't cover plan fee or number renewal: suggested 3-day warning then drop to Free / pause number. *Built with this default for plans (`plans.GraceDays`); numbers come in D3.*
 5. International cap for unverified reps: $3 or $5 a day (screens use $3).
 6. How long recordings are kept (screens use 90 days).
 7. Low-balance alert level (screens use $5).
 8. Calls go out from closest number, or rep always picks.
-9. Do returning reps get the intro price again after moving to Free?
+9. Do returning reps get the intro price again after moving to Free? *Built as no (`users.intro_used`); one line to change.*
 10. Brand name and logo (needed before D6).
