@@ -8,6 +8,8 @@ import { PlanProvider } from '@/lib/plan';
 import { fullPhone, problemOf } from '@/lib/forms';
 import { ApiError } from '@/lib/api';
 import { leftOutLine, listNameFromFile, readCsvFile, remap } from '@/lib/leads';
+import { freshName, partsFromText } from '@/lib/scripts';
+import { renderScript } from '@/lib/script';
 
 // Live mode: the screens talk to an api. Here the api is a table of answers.
 type Answer = { status: number; body?: unknown };
@@ -216,6 +218,94 @@ describe('live leads', () => {
     expect(await screen.findByLabelText('Save Mobile as')).toBeTruthy();
     expect(screen.queryByLabelText('Save Business as')).toBeNull();
     expect(screen.getByText('second.csv')).toBeTruthy();
+  });
+});
+
+describe('live scripts', () => {
+  const V2 = {
+    id: 's2', name: 'Office cleaning v2', updated_at: '2026-10-04T09:00:00Z',
+    parts: [{ title: 'Opening', body: 'Hi {first_name}, this is Tunde.' }],
+    lists: [{ id: 'l1', name: 'October leads' }],
+  };
+  const LISTS = [
+    { id: 'l1', name: 'October leads', region: 'us_ca', status: 'new', lead_count: 4, called_count: 0, followup_count: 0, script: { id: 's2', name: 'Office cleaning v2' }, created_at: '2026-10-04T09:00:00Z' },
+    { id: 'l2', name: 'Dental offices', region: 'us_ca', status: 'new', lead_count: 9, called_count: 0, followup_count: 0, script: null, created_at: '2026-10-04T09:05:00Z' },
+  ];
+
+  it('loads saved scripts and saves changes with the lists that use them', async () => {
+    answers['GET /me'] = { status: 200, body: ME };
+    answers['GET /scripts'] = { status: 200, body: { scripts: [V2], fields: ['first_name', 'company', 'city', 'her_time'], on_screen_free_until: '2026-12-04' } };
+    answers['GET /lists'] = { status: 200, body: { lists: LISTS } };
+    answers['PUT /scripts/s2'] = { status: 200, body: { ...V2, name: 'Office cleaning v3', lists: [{ id: 'l1', name: 'October leads' }, { id: 'l2', name: 'Dental offices' }] } };
+    renderAt('/scripts');
+    expect(await screen.findByText('In use · October leads')).toBeTruthy();
+    expect(screen.getByText(/shows on screen until 4 Dec/)).toBeTruthy();
+    const october = screen.getByRole('checkbox', { name: /October leads/ }) as HTMLInputElement;
+    const dental = screen.getByRole('checkbox', { name: /Dental offices/ }) as HTMLInputElement;
+    expect(october.checked).toBe(true);
+    expect(dental.checked).toBe(false);
+
+    fireEvent.change(screen.getByLabelText('Script name'), { target: { value: 'Office cleaning v3' } });
+    fireEvent.click(dental);
+    expect(screen.getByText('Changes not saved')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save script' }));
+    expect(await screen.findByText('Office cleaning v3 saved')).toBeTruthy();
+    expect(calls.find(c => c.method === 'PUT')?.body).toEqual({ name: 'Office cleaning v3', parts: V2.parts, list_ids: ['l1', 'l2'] });
+    expect(await screen.findByText('In use · October leads, Dental offices')).toBeTruthy();
+  });
+
+  it('a first script starts blank, uses the lists without a script, and shows server errors', async () => {
+    answers['GET /me'] = { status: 200, body: ME };
+    answers['GET /scripts'] = { status: 200, body: { scripts: [], fields: [], on_screen_free_until: null } };
+    answers['GET /lists'] = { status: 200, body: { lists: LISTS } };
+    answers['POST /scripts'] = { status: 422, body: { code: 'unknown_field', error: "{firstname} isn't a detail we can fill in." } };
+    renderAt('/scripts');
+    expect(await screen.findByText('Not saved yet')).toBeTruthy();
+    expect((screen.getByLabelText('Script name') as HTMLInputElement).value).toBe('New script');
+    expect((screen.getByRole('checkbox', { name: /Dental offices/ }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByText(/uses Office cleaning v2/)).toBeTruthy();
+    expect(screen.getByText(/always shows on screen/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tap to write this part' }));
+    fireEvent.change(screen.getByLabelText('Opening text'), { target: { value: 'Hi {firstname}' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save script' }));
+    expect(await screen.findByText("{firstname} isn't a detail we can fill in.")).toBeTruthy();
+    expect(calls.find(c => c.method === 'POST' && c.path === '/scripts')?.body).toEqual({
+      name: 'New script', parts: [{ title: 'Opening', body: 'Hi {firstname}' }], list_ids: ['l2'],
+    });
+  });
+
+  it('deletes a script after asking', async () => {
+    answers['GET /me'] = { status: 200, body: ME };
+    answers['GET /scripts'] = { status: 200, body: { scripts: [V2], fields: [], on_screen_free_until: null } };
+    answers['GET /lists'] = { status: 200, body: { lists: LISTS } };
+    answers['DELETE /scripts/s2'] = { status: 204 };
+    renderAt('/scripts');
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete script' }));
+    expect(screen.getByText('Lists that use it will have no script until you pick another.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(await screen.findByText('Office cleaning v2 deleted')).toBeTruthy();
+    expect(calls.some(c => c.method === 'DELETE' && c.path === '/scripts/s2')).toBe(true);
+    expect(screen.getByText('Not saved yet')).toBeTruthy();
+  });
+});
+
+describe('script helpers', () => {
+  it('names new scripts so they never clash', () => {
+    expect(freshName([])).toBe('New script');
+    expect(freshName(['new script', 'New script 2'])).toBe('New script 3');
+  });
+
+  it('splits pasted text into parts at blank lines', () => {
+    expect(partsFromText('Hi {first_name}.\r\n\r\n  \nWhy I call.\nSecond line.\n\n')).toEqual([
+      { title: 'Part 1', body: 'Hi {first_name}.' },
+      { title: 'Part 2', body: 'Why I call.\nSecond line.' },
+    ]);
+  });
+
+  it('fills known words and leaves unknown ones as written', () => {
+    const { container } = render(<p>{renderScript('Hi {first_name} at {firm}.', t => t.toUpperCase())}</p>);
+    expect(container.textContent).toBe('Hi FIRST_NAME at {firm}.');
   });
 });
 

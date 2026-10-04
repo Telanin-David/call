@@ -516,12 +516,32 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List scripts */
+        /** The rep's scripts, most recently changed first */
         get: operations["listScripts"];
         put?: never;
-        /** Create a script */
+        /** Save a new script */
         post: operations["createScript"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scripts/{scriptId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scriptId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace a script's name and parts, and which lists use it */
+        put: operations["updateScript"];
+        post?: never;
+        /** Delete a script; lists that used it are left without one */
+        delete: operations["deleteScript"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1132,18 +1152,30 @@ export interface components {
             /** @description For a number already listed, the list it's in */
             list_name: string | null;
         };
+        ScriptPart: {
+            title: string;
+            /** @description Text with fill-in words in curly brackets, like {first_name} */
+            body: string;
+        };
         Script: {
             /** Format: uuid */
-            id?: string;
-            name?: string;
-            parts?: {
-                label?: string;
-                body?: string;
+            id: string;
+            name: string;
+            parts: components["schemas"]["ScriptPart"][];
+            /** @description Lead lists that use this script */
+            lists: {
+                /** Format: uuid */
+                id: string;
+                name: string;
             }[];
+            /** Format: date-time */
+            updated_at: string;
         };
         ScriptRequest: {
             name: string;
-            parts: Record<string, never>[];
+            parts: components["schemas"]["ScriptPart"][];
+            /** @description Exactly the lists that use the script after saving. Leave out to keep them as they are. */
+            list_ids?: string[];
         };
         StartCallRequest: {
             /** Format: uuid */
@@ -2021,10 +2053,18 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        scripts?: components["schemas"]["Script"][];
+                        scripts: components["schemas"]["Script"][];
+                        /** @description The fill-in words a script can use, like {first_name} */
+                        fields: string[];
+                        /**
+                         * Format: date
+                         * @description On Free, the day the script stops showing on the call screen (2 months after sign-up). Null on Starter and Pro.
+                         */
+                        on_screen_free_until: string | null;
                     };
                 };
             };
+            401: components["responses"]["Unauthorized"];
         };
     };
     createScript: {
@@ -2047,6 +2087,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Script"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    updateScript: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scriptId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScriptRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Script"];
+                };
+            };
+            /** @description No such script, or one of the lists doesn't exist */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    deleteScript: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scriptId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such script */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
