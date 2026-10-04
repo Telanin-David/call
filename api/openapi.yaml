@@ -1319,33 +1319,50 @@ paths:
               schema:
                 $ref: "#/components/schemas/Recording"
 
-  /kyc:
-    post:
-      tags: [kyc]
-      summary: Start ID and face check
-      operationId: startKyc
-      responses:
-        "200":
-          description: Smile ID session URL
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  url:
-                    type: string
-
+  /verification:
     get:
       tags: [kyc]
-      summary: Get KYC status
-      operationId: getKycStatus
+      summary: The rep's latest ID check
+      operationId: getVerification
       responses:
         "200":
-          description: OK
+          description: OK (status none when there has been no check)
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/KycStatus"
+                $ref: "#/components/schemas/Verification"
+    post:
+      tags: [kyc]
+      summary: Send a photo of an ID and a selfie for the ID check
+      description: |
+        Images are JPEG or PNG, base64 or data URLs, up to 3 MB each (face
+        frames 1 MB, at most 8). They go straight to the provider and are not
+        stored. One check at a time, 3 a day; an approved check lifts the
+        new-account limits.
+      operationId: startVerification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerificationRequest"
+      responses:
+        "202":
+          description: Sent; the result comes later
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Verification"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          description: Too big
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          description: The ID check is unavailable
 
   /pairing:
     post:
@@ -1437,7 +1454,11 @@ paths:
   /webhooks/smileid:
     post:
       tags: [webhooks]
-      summary: Smile ID result webhook
+      summary: Smile ID says an ID check has a result
+      description: |
+        The signature (HMAC-SHA256 of timestamp + partner id + "sid_request")
+        is checked first. Smile ID signs only the timestamp, so the body is
+        never trusted: the result is read back from Smile ID's job_status.
       operationId: smileidWebhook
       responses:
         "200":
@@ -2352,23 +2373,50 @@ components:
           format: date
           nullable: true
 
-    KycStatus:
+    Verification:
       type: object
+      required: [status, id_type, country, reason, submitted_at, decided_at]
       properties:
         status:
           type: string
-          enum: [none, pending, approved, rejected]
+          enum: [none, pending, review, approved, rejected]
+          description: review means the provider approved it but the name doesn't match, so a person checks it
+        id_type:
+          type: string
+        country:
+          type: string
+        reason:
+          type: string
+          description: The provider's words for a rejection
         submitted_at:
           type: string
           format: date-time
           nullable: true
-        result_at:
+        decided_at:
           type: string
           format: date-time
           nullable: true
-        rejection_reason:
+
+    VerificationRequest:
+      type: object
+      required: [id_type, country, id_image, selfie]
+      properties:
+        id_type:
           type: string
-          nullable: true
+          enum: [national_id, passport, drivers_licence, ghana_card, kenya_id]
+        country:
+          type: string
+          pattern: "^[A-Z]{2}$"
+        id_image:
+          type: string
+          description: Front of the ID, JPEG or PNG, base64 or a data URL
+        selfie:
+          type: string
+        liveness:
+          type: array
+          maxItems: 8
+          items:
+            type: string
 
   responses:
     Unauthorized:

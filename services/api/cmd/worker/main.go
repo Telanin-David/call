@@ -9,6 +9,7 @@ import (
 	"time"
 	_ "time/tzdata"
 
+	"github.com/telanin-david/call/services/api/internal/kyc"
 	"github.com/telanin-david/call/services/api/internal/notify"
 	"github.com/telanin-david/call/services/api/internal/numbers"
 	"github.com/telanin-david/call/services/api/internal/plans"
@@ -20,7 +21,12 @@ import (
 // Renewals are idempotent, so running more than one worker is safe.
 const renewEvery = time.Hour
 
-// worker handles background jobs. Today: plan and number renewals. Later:
+// idCheckEvery is how often ID checks whose callback never came are looked
+// up at the provider.
+const idCheckEvery = 5 * time.Minute
+
+// worker handles background jobs. Today: plan and number renewals, and ID
+// checks the provider never called back about. Later:
 // transcripts, summaries, emails, cleanup.
 func main() {
 	cfg := platform.MustLoadConfig()
@@ -43,8 +49,27 @@ func main() {
 	}
 	renewals := &plans.Service{DB: db, Mail: mail, Log: logger}
 	numberRenewals := &numbers.Service{DB: db, Provider: telephony.NumbersFromConfig(cfg), Mail: mail, Log: logger}
+	idChecks := &kyc.Service{DB: db, Provider: kyc.FromConfig(cfg), Mail: mail, Log: logger}
 
 	slog.Info("worker started")
+	if _, real := idChecks.Provider.(kyc.SmileID); real {
+		go func() {
+			t := time.NewTicker(idCheckEvery)
+			defer t.Stop()
+			for {
+				if n, err := idChecks.CheckPending(ctx); err != nil {
+					slog.Error("id checks", "err", err)
+				} else if n > 0 {
+					slog.Info("id checks", "looked_up", n)
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+				}
+			}
+		}()
+	}
 	tick := time.NewTicker(renewEvery)
 	defer tick.Stop()
 	for {

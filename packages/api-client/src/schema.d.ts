@@ -817,18 +817,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/kyc": {
+    "/verification": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get KYC status */
-        get: operations["getKycStatus"];
+        /** The rep's latest ID check */
+        get: operations["getVerification"];
         put?: never;
-        /** Start ID and face check */
-        post: operations["startKyc"];
+        /**
+         * Send a photo of an ID and a selfie for the ID check
+         * @description Images are JPEG or PNG, base64 or data URLs, up to 3 MB each (face
+         *     frames 1 MB, at most 8). They go straight to the provider and are not
+         *     stored. One check at a time, 3 a day; an approved check lifts the
+         *     new-account limits.
+         */
+        post: operations["startVerification"];
         delete?: never;
         options?: never;
         head?: never;
@@ -941,7 +947,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Smile ID result webhook */
+        /**
+         * Smile ID says an ID check has a result
+         * @description The signature (HMAC-SHA256 of timestamp + partner id + "sid_request")
+         *     is checked first. Smile ID signs only the timestamp, so the body is
+         *     never trusted: the result is read back from Smile ID's job_status.
+         */
         post: operations["smileidWebhook"];
         delete?: never;
         options?: never;
@@ -1482,14 +1493,29 @@ export interface components {
             /** Format: date */
             suggested_followup_at?: string | null;
         };
-        KycStatus: {
+        Verification: {
+            /**
+             * @description review means the provider approved it but the name doesn't match, so a person checks it
+             * @enum {string}
+             */
+            status: "none" | "pending" | "review" | "approved" | "rejected";
+            id_type: string;
+            country: string;
+            /** @description The provider's words for a rejection */
+            reason: string;
+            /** Format: date-time */
+            submitted_at: string | null;
+            /** Format: date-time */
+            decided_at: string | null;
+        };
+        VerificationRequest: {
             /** @enum {string} */
-            status?: "none" | "pending" | "approved" | "rejected";
-            /** Format: date-time */
-            submitted_at?: string | null;
-            /** Format: date-time */
-            result_at?: string | null;
-            rejection_reason?: string | null;
+            id_type: "national_id" | "passport" | "drivers_licence" | "ghana_card" | "kenya_id";
+            country: string;
+            /** @description Front of the ID, JPEG or PNG, base64 or a data URL */
+            id_image: string;
+            selfie: string;
+            liveness?: string[];
         };
     };
     responses: {
@@ -2947,7 +2973,7 @@ export interface operations {
             };
         };
     };
-    getKycStatus: {
+    getVerification: {
         parameters: {
             query?: never;
             header?: never;
@@ -2956,36 +2982,55 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description OK (status none when there has been no check) */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["KycStatus"];
+                    "application/json": components["schemas"]["Verification"];
                 };
             };
         };
     };
-    startKyc: {
+    startVerification: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerificationRequest"];
+            };
+        };
         responses: {
-            /** @description Smile ID session URL */
-            200: {
+            /** @description Sent; the result comes later */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        url?: string;
-                    };
+                    "application/json": components["schemas"]["Verification"];
                 };
+            };
+            409: components["responses"]["Conflict"];
+            /** @description Too big */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            422: components["responses"]["ValidationError"];
+            429: components["responses"]["TooManyRequests"];
+            /** @description The ID check is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
