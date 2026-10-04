@@ -22,6 +22,7 @@ import (
 	"github.com/telanin-david/call/services/api/internal/auth"
 	"github.com/telanin-david/call/services/api/internal/billing"
 	"github.com/telanin-david/call/services/api/internal/notify"
+	"github.com/telanin-david/call/services/api/internal/plans"
 	"github.com/telanin-david/call/services/api/internal/platform"
 	"github.com/telanin-david/call/services/api/internal/wallet"
 )
@@ -48,7 +49,7 @@ func main() {
 	}
 	defer cache.Close()
 
-	mail, text, err := notifiers(cfg, logger)
+	mail, text, err := notify.FromConfig(cfg, logger)
 	if err != nil {
 		slog.Error("notify", "err", err)
 		os.Exit(1)
@@ -66,6 +67,7 @@ func main() {
 		os.Exit(1)
 	}
 	wal := &wallet.Service{DB: db, Providers: providers, Charges: charges, WebURL: cfg.WebURL, Log: logger}
+	planSvc := &plans.Service{DB: db, Mail: mail, Log: logger}
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -91,6 +93,7 @@ func main() {
 		r.Use(sessions.Load)
 		acct.Routes(r)
 		wal.Routes(r)
+		planSvc.Routes(r)
 		if cfg.Env == "development" {
 			wal.DevRoutes(r)
 		}
@@ -122,24 +125,6 @@ func main() {
 		slog.Error("shutdown", "err", err)
 	}
 	slog.Info("api stopped")
-}
-
-// notifiers picks real senders when their keys are set. Without keys,
-// development logs codes instead of sending them; production refuses to start.
-func notifiers(cfg platform.Config, logger *slog.Logger) (notify.Mailer, notify.Texter, error) {
-	var mail notify.Mailer = notify.Log{Logger: logger}
-	var text notify.Texter = notify.Log{Logger: logger}
-	if cfg.ResendAPIKey != "" {
-		mail = notify.Resend{APIKey: cfg.ResendAPIKey, From: cfg.EmailFrom}
-	} else if cfg.Production() {
-		return nil, nil, errors.New("RESEND_API_KEY must be set in production")
-	}
-	if cfg.TermiiAPIKey != "" {
-		text = notify.Termii{APIKey: cfg.TermiiAPIKey, SenderID: cfg.TermiiSenderID, BaseURL: cfg.TermiiBaseURL}
-	} else if cfg.Production() {
-		return nil, nil, errors.New("TERMII_API_KEY must be set in production")
-	}
-	return mail, text, nil
 }
 
 // payments picks the real payment providers when their keys are set. In

@@ -300,7 +300,8 @@ paths:
   /plans:
     get:
       tags: [plans]
-      summary: List all plans
+      summary: Free, Starter and Pro with their prices
+      description: Signed-in reps also get intro_eligible (the intro price is for a first paid plan only).
       operationId: listPlans
       responses:
         "200":
@@ -314,43 +315,72 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Plan"
+                  intro_eligible:
+                    type: boolean
 
   /subscription:
     get:
       tags: [plans]
-      summary: Get current subscription
+      summary: The rep's plan, next renewal and any booked change
       operationId: getSubscription
       responses:
         "200":
-          description: OK
+          description: OK. Only `plan` is set on Free.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Subscription"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
     post:
       tags: [plans]
-      summary: Upgrade or downgrade plan
+      summary: Change plan
+      description: |
+        Moving up starts now and is paid from the balance today: the first
+        month from Free, or the difference for the rest of the month between
+        paid plans. Moving down (including to Free) is booked for the next
+        renewal; the rep keeps what they paid for until then. Choosing the
+        current plan cancels a booked move.
       operationId: changeSubscription
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [plan_id]
-              properties:
-                plan_id:
-                  type: string
+              $ref: "#/components/schemas/PlanChangeRequest"
       responses:
         "200":
-          description: Updated
+          description: Done
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Subscription"
+                $ref: "#/components/schemas/PlanQuote"
         "402":
           $ref: "#/components/responses/PaymentRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /subscription/quote:
+    post:
+      tags: [plans]
+      summary: What a change of plan would cost, without making it
+      operationId: quoteSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlanChangeRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlanQuote"
 
   /wallet:
     get:
@@ -1111,17 +1141,21 @@ components:
       properties:
         id:
           type: string
-        name:
-          type: string
           enum: [free, starter, pro]
-        monthly_fee_usd:
-          type: number
+        monthly_fee_microdollars:
+          type: integer
+          format: int64
+        intro_fee_microdollars:
+          type: integer
+          format: int64
         intro_months:
           type: integer
-        intro_fee_usd:
-          type: number
-        call_rate_multiplier:
-          type: number
+        rate_multiplier_pct:
+          type: integer
+          description: Call price = provider cost × this ÷ 100
+        us_price_per_minute_microdollars:
+          type: integer
+          format: int64
         dials_per_day:
           type: integer
           nullable: true
@@ -1133,18 +1167,75 @@ components:
     Subscription:
       type: object
       properties:
-        plan_id:
+        plan:
           type: string
+          enum: [free, starter, pro]
         started_at:
           type: string
           format: date-time
-        intro_ends_at:
+        intro_ends_on:
           type: string
-          format: date-time
+          format: date
           nullable: true
         next_renewal:
           type: string
           format: date
+        pending_change:
+          type: string
+          nullable: true
+          description: Plan the rep moves to at next_renewal
+        next_charge_microdollars:
+          type: integer
+          format: int64
+        renewal_failed_at:
+          type: string
+          format: date-time
+          nullable: true
+        grace_ends_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Top up before this or move to Free
+
+    PlanChangeRequest:
+      type: object
+      required: [plan_id]
+      properties:
+        plan_id:
+          type: string
+          enum: [free, starter, pro]
+
+    PlanQuote:
+      type: object
+      properties:
+        from:
+          type: string
+        to:
+          type: string
+        kind:
+          type: string
+          enum: [upgrade, downgrade, stay]
+        due_today_microdollars:
+          type: integer
+          format: int64
+        intro_price:
+          type: boolean
+        starts_on:
+          type: string
+          format: date
+        next_renewal:
+          type: string
+          format: date
+          nullable: true
+        next_charge_microdollars:
+          type: integer
+          format: int64
+        balance_microdollars:
+          type: integer
+          format: int64
+        balance_after_microdollars:
+          type: integer
+          format: int64
 
     WalletResponse:
       type: object
