@@ -1,6 +1,9 @@
 import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from 'react';
 import { cn } from './cn';
 import { Icon, type IconName } from './icons/Icon';
+import { Avatar, type AvatarTone } from './Badge';
+import { Button } from './Button';
+import { Modal } from './Overlay';
 
 export function ChoiceCard({ checked, locked, className, children, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { checked: boolean; locked?: boolean }) {
   return (
@@ -147,4 +150,33 @@ export function ScriptText({ size, className, children }: { size?: number; class
 
 export function Merge({ children }: { children: ReactNode }) {
   return <span className="mx-[-1px] rounded-[5px] bg-brand-soft px-[3px] font-bold text-brand-ink">{children}</span>;
+}
+
+/**
+ * Board 29: a lead rings the rep's number back. A card over any screen on a
+ * laptop, the whole screen on a phone. Closing it is "Not now".
+ */
+export function CallbackAlert({ open, lead, sub, note, onAnswer, onLater }: {
+  open: boolean; lead: { name: string; initials: string; tone: AvatarTone }; sub: string; note: string; onAnswer: () => void; onLater: () => void;
+}) {
+  return (
+    <Modal open={open} onClose={onLater} label={`${lead.name} is calling you back`} bare width="md"
+      className="bg-night px-[22px] pb-[max(22px,env(safe-area-inset-bottom))] pt-[22px] text-white max-sm:flex max-sm:h-dvh max-sm:max-h-none max-sm:flex-col max-sm:justify-center max-sm:rounded-none">
+      <div className="flex items-center gap-3.5 max-sm:flex-col max-sm:text-center">
+        <span className="rounded-full p-[3px] shadow-[0_0_0_3px_var(--success)]">
+          <Avatar initials={lead.initials} tone={lead.tone} size={52} />
+        </span>
+        <div className="min-w-0">
+          <span className="text-12 font-extrabold uppercase tracking-[.08em] text-success">Calling you back</span>
+          <b className="block text-24 font-extrabold tracking-[-0.02em]">{lead.name}</b>
+          <span className="text-14 text-zinc-400">{sub}</span>
+        </div>
+      </div>
+      {note && <p className="mt-4 text-15 text-zinc-200"><b className="text-sun">Last note:</b> {note}</p>}
+      <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
+        <Button variant="glass" size="lg" onClick={onLater}>Not now, add to follow-ups</Button>
+        <Button size="lg" className="bg-success font-bold text-white hover:bg-success" onClick={onAnswer}><Icon name="call" />Answer</Button>
+      </div>
+    </Modal>
+  );
 }

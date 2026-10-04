@@ -19,6 +19,7 @@ function greeting(zone: string): string {
 }
 
 function dueText(f: Followup): string {
+  if (f.missed) return `Missed call ${new Date(f.due_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase()}`;
   const her = clockIn(f.lead.her_time_zone, new Date(f.due_at));
   return her ? `${her} their time` : new Date(f.due_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
 }
@@ -91,7 +92,9 @@ export default function Today() {
                 <div key={f.id} className="flex items-center gap-3 border-t border-line py-3">
                   <Person initials={initialsOf(f.lead.name)} tone={toneOf(f.lead.id)} size={36} name={f.lead.name}
                     sub={[f.lead.company, dueText(f)].filter(Boolean).join(' · ')} className="flex-1" />
-                  {isOutcome(f.last_outcome) && <Pill tone={OUTCOME_TONE[f.last_outcome]}>{OUTCOME_LABEL[f.last_outcome]}</Pill>}
+                  {f.missed
+                    ? <Pill tone="danger">Missed call</Pill>
+                    : isOutcome(f.last_outcome) && <Pill tone={OUTCOME_TONE[f.last_outcome]}>{OUTCOME_LABEL[f.last_outcome]}</Pill>}
                   <button type="button" aria-label={`Call ${f.lead.name}`} onClick={() => navigate(`/call/${f.lead.id}`)}
                     className="flex size-9 cursor-pointer items-center justify-center rounded-full border-0 bg-brand-soft text-brand-ink hover:bg-brand hover:text-on-brand">
                     <Icon name="call" size={16} />

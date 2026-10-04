@@ -14,10 +14,11 @@ import { prettyNumber } from '@/lib/numbers';
 import { formatUsd } from '@/lib/money';
 import {
   OUTCOME_KEY, autodialGap, callbackAt, callbackLabel, callingKeys, costOf, dial, getCall, hangupCall, refusalCopy, saveOutcome, useQueue,
-  type LiveCall, type QueueLead, type Refusal,
+  type LiveCall, type QueueLead, type QueueScript, type Refusal,
 } from '@/lib/calling';
 import { fakeLeadHangsUp, phoneFor, type Softphone } from '@/lib/phone';
 import { createPairing, mutePairing, usePairing } from '@/lib/pairing';
+import { useIncomingStore } from '@/lib/incoming';
 import type { LeadDetail, QueueItem } from '@/lib/fake';
 import type { MergeValues } from '@/lib/script';
 
@@ -136,6 +137,10 @@ export function useLiveCallSession(): CallSession {
   const device = useDeviceStore();
   const phone = useRef<Softphone | null>(null);
   const liveCall = useRef<string | null>(null);
+  // A lead who called back and was answered: shown in place of the queue's lead until saved.
+  const [inbound, setInbound] = useState<{ item: Item; script: QueueScript | null } | null>(null);
+  const answeredIn = useIncomingStore(s => s.answered);
+  const ringingIn = useIncomingStore(s => s.ringing);
   useEffect(() => { liveCall.current = phase === 'live' ? callId : null; }, [phase, callId]);
 
   const { setTalkVia: storeVia, setPhoneLinked: storeLinked, setPhoneName: storeName } = device;
@@ -223,7 +228,7 @@ export function useLiveCallSession(): CallSession {
       .map(queryKey => qc.invalidateQueries({ queryKey })),
   ), [qc]);
 
-  const item = items[current];
+  const item = inbound?.item ?? items[current];
   const lead = item?.lead;
   const detail = item ? detailOf(item.src, now) : undefined;
   const details = useMemo(() => Object.fromEntries(items.map(x => [x.lead.id, detailOf(x.src, now)])), [items, now]);
@@ -233,7 +238,7 @@ export function useLiveCallSession(): CallSession {
   const left = items.filter(x => !x.done).length;
   const dials = q?.dials_today ?? 0;
   const limit = q?.dial_limit ?? null;
-  const script = q?.scripts.find(s => s.id === item?.src.script_id) ?? null;
+  const script = inbound ? inbound.script : q?.scripts.find(s => s.id === item?.src.script_id) ?? null;
   const freeUntil = q?.script_free_until ? new Date(`${q.script_free_until}T00:00:00Z`) : null;
   const scriptLocked = free && freeUntil !== null && now >= freeUntil;
 
@@ -359,11 +364,14 @@ export function useLiveCallSession(): CallSession {
     }
     setBusy(false);
     const label = savedLabel(o, when);
-    const next = items.map((x, i) => (i === current
-      ? { ...x, done: label, src: { ...x.src, attempts: x.src.attempts + 1, last_call: { at: new Date().toISOString(), outcome: OUTCOME_KEY[o], note: note.trim() } } }
-      : x));
+    const last = { at: new Date().toISOString(), outcome: OUTCOME_KEY[o], note: note.trim() };
+    // A lead who called in is marked done wherever they are in the queue; Undo is for the queue's own calls.
+    const next = items.map((x, i) => (inbound ? x.lead.id === lead.id : i === current)
+      ? { ...x, done: label, src: { ...x.src, attempts: x.src.attempts + (inbound ? 0 : 1), last_call: last } }
+      : x);
     setItems(() => next);
-    setUndo({ index: current, callId, outcome: o, note, when, ended: done, label: `${label} · ${lead.name}` });
+    setUndo(inbound ? null : { index: current, callId, outcome: o, note, when, ended: done, label: `${label} · ${lead.name}` });
+    setInbound(null);
     void refresh();
     resetCall();
     const picked = nextPick !== null && !next[nextPick]?.done ? nextPick : -1;
@@ -457,7 +465,7 @@ export function useLiveCallSession(): CallSession {
   const saveLatest = useRef(saveWith);
   useEffect(() => { saveLatest.current = saveWith; });
   useEffect(() => {
-    if (countdown === null || hold || busy) return;
+    if (countdown === null || hold || busy || ringingIn) return;
     if (countdown <= 0) {
       setCountdown(null);
       if (outcome) void saveLatest.current(outcome, true);
@@ -465,7 +473,33 @@ export function useLiveCallSession(): CallSession {
     }
     const t = setTimeout(() => setCountdown(c => (c === null ? null : c - 1)), 1000);
     return () => clearTimeout(t);
-  }, [countdown, hold, busy, outcome]);
+  }, [countdown, hold, busy, outcome, ringingIn]);
+
+  // The rep answered a lead calling back: save the call before (if it has a
+  // result), then this screen carries the new call with the caller's script.
+  useEffect(() => {
+    if (!answeredIn || phase === 'live' || busy) return;
+    const { call, phone: answered } = answeredIn;
+    useIncomingStore.getState().clear();
+    if (!call.lead) return;
+    const taken = { item: itemOf(call.lead), script: call.script };
+    void (async () => {
+      if (phase === 'wrapup' && outcome) await saveLatest.current(outcome, false);
+      setCountdown(null);
+      setAuto(false);
+      resetCall();
+      setInbound(taken);
+      setCallId(call.id);
+      setFake(call.phone === 'fake');
+      setPrice(call.price_per_minute_microdollars);
+      setDialedAt(null);
+      setPhase('live');
+      setCallStatus('answered');
+      phone.current = answered;
+    })();
+    // Runs once per answered call (the store is cleared at once); the rest is read at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answeredIn, phase, busy]);
 
   /** Stops auto-dial: at once between calls, after this one during a call. */
   function pauseAuto() {

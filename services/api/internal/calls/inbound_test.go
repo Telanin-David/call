@@ -110,8 +110,8 @@ func TestIncomingCalls(t *testing.T) {
 		if in == nil || in.Call.ID != c.ID || in.Lead.ID != lead || in.Lead.Name != "Mark" || !in.RingUntil.Equal(c.StartedAt.Add(InboundRingFor)) {
 			t.Fatalf("app sees %+v", in)
 		}
-		if in.Lead.LastCall == nil || in.Lead.LastCall.At.Equal(c.StartedAt) {
-			t.Errorf("last call should be the one before this: %+v", in.Lead.LastCall)
+		if in.Lead.LastCall != nil {
+			t.Errorf("missed calls aren't the last call to show: %+v", in.Lead.LastCall)
 		}
 		other := e.lead(u.ID, list, randomNumber("212"), "Ann")
 		if _, err := e.svc.Start(ctx, u, other); !errors.Is(err, ErrBeingCalled) {
@@ -163,6 +163,9 @@ func TestIncomingCalls(t *testing.T) {
 		before := e.balance(u.ID)
 		online()
 		c := ring(leadPhone)
+		if in := online(); in == nil || in.Lead.LastCall == nil || in.Lead.LastCall.Note != "Wants a quote" || in.Lead.LastCall.Outcome != "interested" {
+			t.Errorf("the last call with a result shows: %+v", in)
+		}
 		e.clock = morning.Add(InboundRingFor + 5*time.Second)
 		res, err := e.svc.Tick(ctx)
 		e.clock = morning

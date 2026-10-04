@@ -75,10 +75,13 @@ export default function History() {
           <ListRow key={c.id} cols={COLS}>
             <span className="text-muted max-lg:order-3 max-lg:text-13">{whenLabel(c.started_at)}</span>
             <Person initials={initialsOf(c.lead?.name ?? '#')} tone={toneOf(c.lead?.id ?? c.id)} size={32}
-              name={c.lead?.name ?? prettyNumber(c.to)} sub={c.lead?.company || prettyNumber(c.to)} className="max-lg:order-1 max-lg:flex-1" />
-            {isOutcome(c.outcome)
-              ? <Pill tone={OUTCOME_TONE[c.outcome]} className="max-lg:order-3">{OUTCOME_LABEL[c.outcome]}</Pill>
-              : <Pill tone="neutral" className="max-lg:order-3">No result</Pill>}
+              name={c.lead?.name ?? prettyNumber(c.to)} sub={[c.incoming && 'Called you', c.lead?.company || prettyNumber(c.to)].filter(Boolean).join(' · ')}
+              className="max-lg:order-1 max-lg:flex-1" />
+            {c.incoming && !c.answered
+              ? <Pill tone="danger" className="max-lg:order-3">Missed call</Pill>
+              : isOutcome(c.outcome)
+                ? <Pill tone={OUTCOME_TONE[c.outcome]} className="max-lg:order-3">{OUTCOME_LABEL[c.outcome]}</Pill>
+                : <Pill tone="neutral" className="max-lg:order-3">No result</Pill>}
             <span className="tabular-nums max-lg:order-3 max-lg:text-13 max-lg:text-muted">{callLength(c.seconds)}</span>
             <span className="tabular-nums max-lg:order-2 max-lg:font-semibold">{callCost(c.cost_microdollars)}</span>
             <span aria-hidden="true" className="order-2 basis-full lg:hidden" />

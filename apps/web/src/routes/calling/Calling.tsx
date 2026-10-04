@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom';
-import { Button, Icon, Note, Tile, buttonClass } from '@dialer/ui';
+import { Button, CallbackAlert, Icon, Note, Tile, buttonClass } from '@dialer/ui';
 import { LEADS } from '@/lib/fake';
 import { isLive } from '@/lib/backend';
 import { PHONE, useMediaQuery } from '@/lib/useMediaQuery';
-import { BlockedDialog, CallbackAlert } from './CallAlerts';
+import { BlockedDialog } from './CallAlerts';
 import CallingDesk from './CallingDesk';
 import CallingPhone from './CallingPhone';
 import { UpgradeDialog } from './Upgrade';

@@ -261,9 +261,10 @@ func (s *Service) Ringing(ctx context.Context, userID string) (*IncomingCall, er
 	if len(q.Scripts) > 0 {
 		in.Script = &q.Scripts[0]
 	}
-	// "You called him yesterday": the call before this one.
+	// "Last call yesterday" and its note: the last call the rep saved a
+	// result for, not missed calls in between.
 	var last LastCall
-	err = s.DB.QueryRow(ctx, `SELECT started_at, COALESCE(outcome, ''), COALESCE(note, '') FROM calls WHERE lead_id = $1 AND id <> $2 ORDER BY started_at DESC LIMIT 1`,
+	err = s.DB.QueryRow(ctx, `SELECT started_at, outcome, COALESCE(note, '') FROM calls WHERE lead_id = $1 AND id <> $2 AND outcome IS NOT NULL ORDER BY started_at DESC LIMIT 1`,
 		c.LeadID, c.ID).Scan(&last.At, &last.Outcome, &last.Note)
 	switch {
 	case err == nil:

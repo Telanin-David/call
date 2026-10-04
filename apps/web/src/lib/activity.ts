@@ -19,6 +19,9 @@ export type FollowupTab = 'today' | 'tomorrow' | 'week' | 'later';
 export type FollowupsData = { counts: Record<FollowupTab, number>; followups: Followup[] };
 export type Outcome = NonNullable<CallRecord['outcome']>;
 
+/** What Follow-ups says about a lead who called the rep back and was missed (board 26). */
+export const MISSED_NOTE = 'Called your number back. No message.';
+
 export const activityKeys = {
   today: ['today'] as const,
   followups: (tab: FollowupTab) => ['followups', tab] as const,

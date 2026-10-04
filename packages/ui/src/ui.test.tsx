@@ -6,6 +6,7 @@ import { Progress } from './Badge';
 import { CodeBoxes, CodeInput, Field } from './Form';
 import { Modal, Toggle } from './Overlay';
 import { QrCode } from './Qr';
+import { CallbackAlert } from './Call';
 
 afterEach(cleanup);
 
@@ -107,5 +108,21 @@ describe('QrCode', () => {
     // 25 bytes fit version 2 (25 modules) at level M; 4 modules of quiet zone each side.
     expect(n).toBe(33);
     expect(svg.querySelector('path')?.getAttribute('d')).toMatch(/^M\d+ \d+h1v1h-1z/);
+  });
+});
+
+describe('CallbackAlert', () => {
+  it('names the caller, shows the last note only when there is one, and answers or declines', () => {
+    const calls: string[] = [];
+    const lead = { name: 'Mark Reyes', initials: 'MR', tone: 'a' as const };
+    const { rerender } = render(<CallbackAlert open lead={lead} sub="Reyes Home Care" note="Prices by email."
+      onAnswer={() => calls.push('answer')} onLater={() => calls.push('later')} />);
+    expect(screen.getByRole('dialog', { name: 'Mark Reyes is calling you back' })).toBeTruthy();
+    expect(screen.getByText('Prices by email.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Answer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Not now, add to follow-ups' }));
+    expect(calls).toEqual(['answer', 'later']);
+    rerender(<CallbackAlert open lead={lead} sub="" note="" onAnswer={() => {}} onLater={() => {}} />);
+    expect(screen.queryByText('Last note:')).toBeNull();
   });
 });

@@ -61,6 +61,16 @@ export function fakeLeadHangsUp(callId: string): Promise<unknown> {
 /** The laptop's side of a call its linked phone dials and carries: nothing to do here. */
 const onLinkedPhone: Softphone = { async dial() { /* the phone dials */ }, stop() { /* the server ends it */ }, setMuted() { /* sent to the phone */ } };
 
+/**
+ * Picks up a call ringing in. With the fake provider that plays the
+ * provider's answered event; Telnyx's browser phone comes with D3 part 5.
+ */
+export async function answerIncoming(call: { id: string; phone: string }): Promise<Softphone> {
+  if (call.phone !== 'fake') throw new Error('The browser phone for real calls is not set up yet.');
+  await api.post(`/dev/calls/${call.id}/events/answered`);
+  return { async dial() { /* already connected */ }, stop() { /* the server ends it */ }, setMuted() { /* no sound to mute */ } };
+}
+
 /** The phone for a call the server approved. Telnyx's browser phone comes with D3 part 5. */
 export function phoneFor(call: StartedCall): Softphone {
   if (call.phone === 'paired') return onLinkedPhone;
