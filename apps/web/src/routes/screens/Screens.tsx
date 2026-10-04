@@ -51,7 +51,7 @@ const GROUPS: { title: string; items: Entry[] }[] = [
       { name: 'Upgrade to Pro', to: '/call', plan: 'starter', sim: 'upgrade' },
       { name: 'Script locked after free months', to: '/call', plan: 'free', sim: 'script' },
       { name: 'Lead calls you back', to: '/call', plan: 'starter', sim: 'callback' },
-      { name: 'Move to Free', to: '/settings', plan: 'starter', sim: 'movefree' },
+      { name: 'Move to Free', to: '/settings?tab=billing', plan: 'starter', sim: 'movefree' },
     ],
   },
   {

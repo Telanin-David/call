@@ -61,11 +61,6 @@ function DeviceChip({ plan }: { plan: Plan }) {
   );
 }
 
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1]?.[0] ?? '' : '')).toUpperCase();
-}
-
 export default function AppLayout() {
   const { plan } = usePlan();
   const handle = useShellHandle();
@@ -79,11 +74,11 @@ export default function AppLayout() {
     if (me.error instanceof ApiError && me.error.status === 401) {
       if (handle.public) {
         return (
-          <div className="flex h-dvh flex-col">
+          <div className="fixed inset-0 flex flex-col">
             <header className="flex h-[calc(3.5rem+env(safe-area-inset-top))] flex-none items-center border-b border-line bg-surface px-4 pt-[env(safe-area-inset-top)] lg:h-[60px] lg:px-7">
               <Link to="/signup" className="text-ink no-underline"><Brand /></Link>
             </header>
-            <main className="min-h-0 flex-1 overflow-auto bg-sunk"><Outlet /></main>
+            <main className="relative min-h-0 flex-1 overflow-auto overscroll-contain bg-sunk"><Outlet /></main>
           </div>
         );
       }
@@ -100,10 +95,12 @@ export default function AppLayout() {
     if (me.data && homeFor(me.data) !== '/') return <Navigate to={homeFor(me.data)} replace />;
   }
   const balance = me.data ? me.data.balance_microdollars : (handle.balance ?? BALANCE);
-  const initials = me.data ? initialsOf(me.data.name) : ME.initials;
+  const name = me.data ? me.data.name : ME.name;
 
   return (
-    <div className="flex h-dvh flex-col">
+    // Pinned to the screen: only <main> scrolls, so the header and the bottom
+    // bar never move, whatever a page contains or the phone's address bar does.
+    <div className="fixed inset-0 flex flex-col">
       <header className="flex h-[calc(3.5rem+env(safe-area-inset-top))] flex-none items-center gap-3 border-b border-line bg-surface px-4 pt-[env(safe-area-inset-top)] sm:gap-4 lg:h-[60px] lg:px-7">
         <Link to="/" className="text-ink no-underline"><Brand /></Link>
         {!onboarding && (
@@ -124,12 +121,13 @@ export default function AppLayout() {
           <span className="mt-[3px] text-11 text-muted">Balance</span>
         </Link>
         {!onboarding && <Link to="/wallet" className={cn(buttonClass({ variant: 'outline' }), 'max-sm:hidden')}>Top up</Link>}
-        <Link to="/settings" aria-label="Settings"
-          className="flex size-[34px] flex-none items-center justify-center rounded-full bg-warn-soft text-13 font-semibold text-warn-ink no-underline">
-          {initials}
+        <Link to="/settings" aria-label="Profile and settings" title={name}
+          className="flex size-[36px] flex-none items-center justify-center rounded-full border border-line bg-sunk text-ink-2 no-underline hover:border-brand hover:text-brand-ink">
+          <Icon name="user" size={20} />
         </Link>
       </header>
-      <main className={cn('min-h-0 flex-1 overflow-auto', handle.white ? 'bg-surface' : 'bg-sunk')}>
+      {/* relative: absolutely placed bits (screen-reader labels) stay inside the scroll area. */}
+      <main className={cn('relative min-h-0 flex-1 overflow-auto overscroll-contain', handle.white ? 'bg-surface' : 'bg-sunk')}>
         <Outlet />
       </main>
       {!onboarding && (

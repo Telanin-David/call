@@ -86,7 +86,7 @@ export default function ComparePlans() {
   }
 
   function choose(p: Plan) {
-    if (!live) { setPlan(p); navigate('/settings'); return; }
+    if (!live) { setPlan(p); navigate('/settings?tab=billing'); return; }
     if (RANK[p] > RANK[current] && p !== 'free') setUpgradeTo(p);
     else setDownTo(p);
   }
