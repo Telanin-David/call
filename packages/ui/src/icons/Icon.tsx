@@ -6,7 +6,7 @@ export const ICON_NAMES = [
   'globe', 'hangup', 'headset', 'history', 'id', 'laptop', 'left', 'link', 'list', 'lock',
   'mail', 'mic', 'micoff', 'missed', 'more', 'note', 'panel', 'pause', 'phone', 'pin',
   'play', 'qr', 'right', 'shield', 'skip', 'spark', 'speaker', 'sun', 'up', 'upload',
-  'users', 'vol', 'wallet', 'wifioff', 'wrong', 'x',
+  'user', 'users', 'vol', 'wallet', 'wifioff', 'wrong', 'x',
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];

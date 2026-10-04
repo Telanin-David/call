@@ -52,7 +52,7 @@ export function DarkEyebrow({ children }: { children: ReactNode }) {
   return <div className="text-12 font-extrabold uppercase tracking-[.06em] text-zinc-400">{children}</div>;
 }
 
-type NoteTone = 'brand' | 'grey' | 'lemon' | 'success' | 'tint';
+type NoteTone = 'brand' | 'grey' | 'lemon' | 'success' | 'tint' | 'danger';
 
 const NOTE: Record<NoteTone, string> = {
   brand: 'bg-brand-soft',
@@ -60,6 +60,7 @@ const NOTE: Record<NoteTone, string> = {
   lemon: 'bg-warn-soft',
   success: 'bg-success-soft',
   tint: 'bg-brand-tint',
+  danger: 'bg-danger-soft text-danger-ink',
 };
 
 export function Note({ tone = 'grey', className, children }: { tone?: NoteTone; className?: string; children: ReactNode }) {

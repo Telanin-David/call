@@ -107,7 +107,7 @@ export default function VerifyId() {
           <Tile tone="mint" size={40}><Icon name="check" size={20} /></Tile>
           <h1 className="text-28 font-extrabold tracking-[-0.03em]">We're checking your ID</h1>
           <p className="max-w-[460px] text-15 text-muted">Usually under 10 minutes. We'll email you, and your new-account limits come off as soon as it's approved.</p>
-          <Button variant="primary" size="lg" className="mt-2" onClick={() => navigate('/settings')}>Back to settings</Button>
+          <Button variant="primary" size="lg" className="mt-2" onClick={() => navigate('/settings?tab=verify')}>Back to settings</Button>
         </Card>
       </Page>
     );

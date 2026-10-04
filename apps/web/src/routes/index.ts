@@ -9,6 +9,7 @@ const Signin = lazy(() => import('./auth/Signin'));
 const Signup = lazy(() => import('./auth/Signup'));
 const Confirm = lazy(() => import('./auth/Confirm'));
 const CheckEmail = lazy(() => import('./auth/CheckEmail'));
+const ConfirmEmail = lazy(() => import('./auth/ConfirmEmail'));
 const Forgot = lazy(() => import('./auth/Forgot'));
 const Setup = lazy(() => import('./auth/Setup'));
 
@@ -38,6 +39,7 @@ export const routes: RouteObject[] = [
       { path: '/signin', Component: Signin },
       { path: '/signup', Component: Signup },
       { path: '/check-email', Component: CheckEmail },
+      { path: '/confirm-email', Component: ConfirmEmail },
       { path: '/confirm', Component: Confirm },
       { path: '/forgot', Component: Forgot },
       { path: '/link', Component: LinkPhone },
@@ -52,13 +54,13 @@ export const routes: RouteObject[] = [
           { path: '/call/:leadId?', Component: Calling, handle: h({ section: 'calling', device: true }) },
           { path: '/followups', Component: Followups, handle: h({ section: 'followups' }) },
           { path: '/leads', Component: Leads, handle: h({ section: 'leads' }) },
-          { path: '/leads/upload', Component: UploadLeads, handle: h({ section: 'leads', balance: usd(8, 50) }) },
+          { path: '/leads/upload', Component: UploadLeads, handle: h({ section: 'leads' }) },
           { path: '/scripts', Component: Scripts, handle: h({ section: 'leads' }) },
           { path: '/history', Component: History, handle: h({ section: 'history' }) },
           { path: '/history/:callId', Component: Recording, handle: h({ section: 'history' }) },
           { path: '/wallet', Component: Wallet, handle: h({}) },
           { path: '/settings', Component: Settings, handle: h({}) },
-          { path: '/rules', Component: Rules, handle: h({ balance: usd(8, 50) }) },
+          { path: '/rules', Component: Rules, handle: h({ public: true }) },
           { path: '/verify', Component: VerifyId, handle: h({}) },
           { path: '/plans', Component: ComparePlans, handle: h({ white: true }) },
         ],

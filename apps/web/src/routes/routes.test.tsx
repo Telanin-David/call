@@ -2,6 +2,7 @@ import { describe, expect, it, afterEach, beforeEach } from 'vitest';
 import { cleanup, render, screen, fireEvent, within } from '@testing-library/react';
 import { RouterProvider, createMemoryRouter } from 'react-router-dom';
 import { Suspense } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { routes } from './index';
 import { PlanProvider, type Plan } from '@/lib/plan';
 import { useSimStore } from '@/lib/sim';
@@ -16,9 +17,11 @@ afterEach(() => {
 function renderAt(path: string, plan: Plan = 'starter') {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   return render(
-    <PlanProvider initial={plan}>
-      <Suspense fallback={null}><RouterProvider router={router} /></Suspense>
-    </PlanProvider>,
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <PlanProvider initial={plan}>
+        <Suspense fallback={null}><RouterProvider router={router} /></Suspense>
+      </PlanProvider>
+    </QueryClientProvider>,
   );
 }
 
@@ -113,7 +116,7 @@ describe('D1 states', () => {
   });
 
   it('confirms before moving to Free and keeps the plan until renewal', async () => {
-    renderAt('/settings', 'starter');
+    renderAt('/settings?tab=billing', 'starter');
     fireEvent.click(await screen.findByRole('button', { name: 'Move to Free' }));
     const dialog = screen.getByRole('dialog', { name: 'Move to Free on 1 Nov?' });
     expect(dialog.textContent).toContain('Auto-dial');
@@ -189,14 +192,33 @@ describe('finished flows', () => {
   }, 10000);
 
   it('changes a setting and confirms with a toast', async () => {
-    renderAt('/settings');
-    fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
+    renderAt('/settings?tab=billing');
+    fireEvent.click(await screen.findByRole('button', { name: 'Profile' }));
     const nameRow = screen.getByText('Name').closest('div')!;
     fireEvent.click(within(nameRow).getByRole('button', { name: 'Change' }));
     fireEvent.change(screen.getByLabelText('Name', { selector: 'input' }), { target: { value: 'Tunde B. Bakare' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(screen.getByText('Tunde B. Bakare')).toBeTruthy();
     expect(screen.getByRole('status').textContent).toContain('Name updated');
+  });
+
+  it('settings opens on the profile, with the profile card and sign out', async () => {
+    renderAt('/settings');
+    expect(await screen.findByRole('region', { name: 'Profile' })).toBeTruthy();
+    expect(screen.getAllByText('tunde.bakare@gmail.com').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Sign out' }).length).toBeGreaterThan(0);
+    // Phone numbers have their own section and no longer repeat under billing.
+    fireEvent.click(screen.getByRole('button', { name: 'Plan and billing' }));
+    expect(screen.queryByRole('region', { name: 'Numbers' })).toBeNull();
+  });
+
+  it('the header has a profile button and the balance is the same on every page', async () => {
+    renderAt('/rules');
+    expect(await screen.findByRole('link', { name: 'Profile and settings' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /^Wallet balance/ }).textContent).toContain('$24.51');
+    cleanup();
+    renderAt('/leads/upload');
+    expect((await screen.findByRole('link', { name: /^Wallet balance/ })).textContent).toContain('$24.51');
   });
 
   it('opens the pairing dialog from Scan code', async () => {

@@ -66,10 +66,10 @@ export default function AuthShell({ headline: title, signupStep, children }: Aut
   );
 }
 
-export function AuthForm({ wide, onSubmit, children }: { wide?: boolean; onSubmit?: () => void; children: ReactNode }) {
+export function AuthForm({ wide, onSubmit, children }: { wide?: boolean; onSubmit?: (data: FormData) => void; children: ReactNode }) {
   return (
-    <form className={cn('flex w-full flex-col', wide ? 'max-w-[440px] gap-[26px]' : 'max-w-[420px] gap-[22px]')}
-      onSubmit={e => { e.preventDefault(); onSubmit?.(); }}>
+    <form noValidate className={cn('flex w-full flex-col', wide ? 'max-w-[440px] gap-[26px]' : 'max-w-[420px] gap-[22px]')}
+      onSubmit={e => { e.preventDefault(); onSubmit?.(new FormData(e.currentTarget)); }}>
       {children}
     </form>
   );

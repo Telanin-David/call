@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SIMS, SIM_ROUTE, useSimStore, type Sim } from './sim';
+import { useMe } from './account';
+import { isLive } from './backend';
 
 export type Plan = 'free' | 'starter' | 'pro';
 
@@ -13,9 +15,20 @@ interface PlanCtx {
 
 const Ctx = createContext<PlanCtx>({ plan: 'starter', setPlan: () => {} });
 
+function isPlan(p: string | undefined): p is Plan {
+  return p === 'free' || p === 'starter' || p === 'pro';
+}
+
+/**
+ * The rep's plan. Live, it is the account's plan and only an upgrade or a
+ * renewal changes it. In demo mode the Dev button switches it freely.
+ */
 export function PlanProvider({ children, initial = 'starter' }: { children: ReactNode; initial?: Plan }) {
-  const [plan, setPlan] = useState<Plan>(initial);
-  return <Ctx.Provider value={{ plan, setPlan }}>{children}</Ctx.Provider>;
+  const [demo, setDemo] = useState<Plan>(initial);
+  const me = useMe();
+  const live = isLive();
+  const plan: Plan = live ? (isPlan(me.data?.plan) ? me.data.plan : 'free') : demo;
+  return <Ctx.Provider value={{ plan, setPlan: live ? () => {} : setDemo }}>{children}</Ctx.Provider>;
 }
 
 export function usePlan() {
@@ -32,7 +45,8 @@ export function DevPlanSwitcher() {
         Dev · {PLAN_LABEL[plan]}
       </summary>
       <div className="flex gap-0.5 rounded-b-md bg-night p-[3px] max-lg:absolute max-lg:right-0 max-lg:top-full max-lg:rounded-md">
-        {(Object.keys(PLAN_LABEL) as Plan[]).map(p => (
+        {/* Live, the plan is the account's: change it on the Plans page. */}
+        {!isLive() && (Object.keys(PLAN_LABEL) as Plan[]).map(p => (
           <button key={p} type="button" aria-pressed={plan === p} onClick={() => setPlan(p)}
             className="h-7 cursor-pointer rounded-[7px] border-0 bg-transparent px-3 text-12 text-zinc-300 aria-pressed:bg-tangerine aria-pressed:text-night">
             {PLAN_LABEL[p]}
