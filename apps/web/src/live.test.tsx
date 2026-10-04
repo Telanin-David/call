@@ -880,3 +880,93 @@ describe('live incoming calls', () => {
     expect(callerLine({ ...RINGING, lead: { ...MARK, company: '', last_call: null } })).toBe('October leads');
   });
 });
+
+describe('live recordings', () => {
+  const PRO = { ...ME, plan: 'pro' };
+  const OFF = { on: false, agreed_at: null, pro: true, available: true };
+  const CALL = {
+    lead_id: 'ada', lead_name: 'Ada Obi', lead_company: 'Obi Cleaning', to: '+16465550101', incoming: false,
+    started_at: '2026-10-04T14:51:00Z', seconds: 400, cost_microdollars: 110_000, outcome: 'interested', note: 'Thursday after 10',
+  };
+  const READY = {
+    call_id: 'c1', status: 'ready', seconds: 400, url: '/dev/files/recordings/u1/c1.wav?exp=1&sig=a',
+    download_url: '/dev/files/recordings/u1/c1.wav?dl=call.wav&exp=1&sig=b', keep_until: '2027-01-02T14:51:00Z', call: CALL,
+  };
+  const TOTALS = { calls: 0, talk_seconds: 0, spent_microdollars: 0, interested: 0 };
+
+  beforeEach(() => {
+    answers['GET /me'] = { status: 200, body: PRO };
+    answers['GET /incoming'] = { status: 200, body: { call: null } };
+    answers['GET /history'] = { status: 200, body: { calls: [], next_cursor: '', week: TOTALS } };
+  });
+
+  it('Settings: turning recording on needs the rep to agree to tell every lead', async () => {
+    answers['GET /recordings/settings'] = { status: 200, body: OFF };
+    answers['PUT /recordings/settings'] = { status: 200, body: { ...OFF, on: true, agreed_at: '2026-10-04T12:00:00Z' } };
+    renderAt('/settings?tab=calling');
+    expect(await screen.findByText('Off')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Turn on' }));
+    const turnOn = await screen.findByRole('button', { name: 'Turn on recording' });
+    expect(screen.getByText('“Just so you know, this call may be recorded.”')).toBeTruthy();
+    expect((turnOn as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(turnOn);
+    await waitFor(() => expect(calls.find(c => c.method === 'PUT' && c.path === '/recordings/settings')?.body).toEqual({ on: true, agree: true }));
+    expect(await screen.findByText('On · you tell every lead first')).toBeTruthy();
+  });
+
+  it('Settings: recording is part of Pro', async () => {
+    answers['GET /me'] = { status: 200, body: { ...ME, plan: 'starter' } };
+    renderAt('/settings?tab=calling');
+    expect(await screen.findByText('Part of Pro')).toBeTruthy();
+    expect(calls.some(c => c.path === '/recordings/settings')).toBe(false);
+  });
+
+  it('the call screen reminds the rep to say the call may be recorded', async () => {
+    answers['GET /queue'] = { status: 200, body: {
+      title: 'October leads', list_id: 'l1', script_free_until: null, dials_today: 0, dial_limit: null, balance_microdollars: 9_000_000,
+      price_per_minute_microdollars: 17_000, live_call_id: null, record_calls: true, scripts: [],
+      leads: [{ id: 'kim', name: 'Kim Park', first_name: 'Kim', company: '', city: '', email: '', phone: '+16465550102', notes: '',
+        her_time_zone: 'America/New_York', attempts: 0, list_name: 'October leads', script_id: null, last_call: null }],
+    } };
+    renderAt('/call?list=l1');
+    expect(await screen.findByText('This call is recorded. Say first:')).toBeTruthy();
+    expect(screen.getByText('“Just so you know, this call may be recorded.”')).toBeTruthy();
+  });
+
+  it('History links calls with a recording', async () => {
+    const row = { id: 'c1', lead: { id: 'ada', name: 'Ada Obi', company: 'Obi Cleaning', phone: '+16465550101', her_time_zone: 'America/New_York' },
+      to: '+16465550101', incoming: false, answered: true, started_at: new Date().toISOString(), seconds: 400, cost_microdollars: 110_000, outcome: 'interested', note: '' };
+    answers['GET /history'] = { status: 200, body: { calls: [{ ...row, recording: 'ready' }, { ...row, id: 'c2', recording: 'processing' }, { ...row, id: 'c3', recording: 'none' }], next_cursor: '', week: TOTALS } };
+    renderAt('/history');
+    expect((await screen.findByRole('link', { name: 'Play recording' })).getAttribute('href')).toBe('/history/c1');
+    expect(screen.getByRole('link', { name: 'Saving recording…' }).getAttribute('href')).toBe('/history/c2');
+    expect(screen.getByText('No recording')).toBeTruthy();
+  });
+
+  it('plays, downloads and deletes a recording', async () => {
+    answers['GET /recordings/c1'] = { status: 200, body: READY };
+    answers['DELETE /recordings/c1'] = { status: 204 };
+    const router = renderAt('/history/c1');
+    expect(await screen.findByRole('heading', { name: 'Ada Obi' })).toBeTruthy();
+    expect(document.querySelector('audio')?.getAttribute('src')).toBe('/api/dev/files/recordings/u1/c1.wav?exp=1&sig=a');
+    expect(screen.getByRole('link', { name: 'Download recording' }).getAttribute('href')).toBe('/api/dev/files/recordings/u1/c1.wav?dl=call.wav&exp=1&sig=b');
+    expect(screen.getByText('Kept until 2 Jan, then deleted.')).toBeTruthy();
+    expect(screen.getByText('Thursday after 10')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete recording' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/history'));
+    expect(calls.some(c => c.method === 'DELETE' && c.path === '/recordings/c1')).toBe(true);
+  });
+
+  it('says when a recording is still being saved, or there is none', async () => {
+    answers['GET /recordings/c1'] = { status: 200, body: { ...READY, status: 'processing', url: null, download_url: null, keep_until: null } };
+    renderAt('/history/c1');
+    expect(await screen.findByText(/Saving the recording/)).toBeTruthy();
+    expect(document.querySelector('audio')).toBeNull();
+    cleanup();
+    answers['GET /recordings/c9'] = { status: 404, body: { code: 'recording_not_found', error: 'That call has no recording.' } };
+    renderAt('/history/c9');
+    expect(await screen.findByText('This call has no recording.')).toBeTruthy();
+  });
+});

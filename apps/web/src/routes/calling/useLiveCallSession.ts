@@ -610,6 +610,7 @@ export function useLiveCallSession(): CallSession {
     yourTime: clockIn(me.data?.timezone ?? '', now),
     callState: live ? (answered ? 'connected' : 'calling') : phase === 'wrapup' ? 'ended' : 'ready',
     answered: answered || Boolean(ended?.answered),
+    recording: q?.record_calls ?? false,
     lowBalance: Boolean(callQ.data?.low_balance && live),
     busy,
     error,

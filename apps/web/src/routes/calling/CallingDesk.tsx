@@ -4,7 +4,7 @@ import {
   Avatar, Button, CallCard, CallFacts, CallStatus, CallTimer, ChoiceCard, Chip, Dot, Facts, Icon, Kbd, Merge, Note,
   OutcomeTile, Paper, Pill, Progress, Radio, ScriptText, Tile, Toggle, buttonClass, cn,
 } from '@dialer/ui';
-import { FakePickUpSwitch, ProblemCard } from './CallAlerts';
+import { FakePickUpSwitch, ProblemCard, RecordingReminder } from './CallAlerts';
 import { DEV_TOOLS } from '@/lib/devtools';
 import { LeadPeek, peekAt, type PeekAction } from './NextLead';
 import { PairDialog } from './Pairing';
@@ -212,6 +212,7 @@ export default function CallingDesk({ s }: { s: CallSession }) {
             <button type="button" aria-label="Bigger text" onClick={() => setScriptSize(s => Math.min(28, s + 2))} className="size-9 cursor-pointer rounded-sm border-0 bg-transparent text-13 text-muted hover:bg-sunk">A+</button>
           </div>
           <div className="relative xl:-mr-3 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:pb-14 xl:pr-3" tabIndex={0} aria-label="Script">
+            {s.recording && <RecordingReminder className="mb-4" />}
             {!script && (
               <p className="text-15 text-muted">This list has no script. <Link to="/scripts" className="font-semibold text-brand-ink">Write one</Link> and pick this list, and it shows here with {merge.first_name === 'there' ? 'their' : `${merge.first_name}'s`} name filled in.</p>
             )}
@@ -248,8 +249,8 @@ export default function CallingDesk({ s }: { s: CallSession }) {
           <div className="flex items-center justify-between">
             <CallStatus live={live} state={s.callState} />
             {!live && !wrapup && <span className="text-12 text-zinc-400">US rate {s.rateLabel} / min</span>}
-            {live && plan === 'pro' && demo && <span className="inline-flex items-center gap-1.5 text-12 text-zinc-400"><i className="size-[7px] rounded-full bg-danger" />Recording{via === 'phone' ? ' · on your phone' : ''}</span>}
-            {live && !(plan === 'pro' && demo) && <span className="inline-flex items-center gap-1.5 text-12 text-zinc-400"><Icon name="lock" size={13} />Not recorded · Pro</span>}
+            {live && s.recording && <span className="inline-flex items-center gap-1.5 text-12 text-zinc-400"><i className="size-[7px] rounded-full bg-danger" />Recording{via === 'phone' ? ' · on your phone' : ''}</span>}
+            {live && !s.recording && <span className="inline-flex items-center gap-1.5 text-12 text-zinc-400"><Icon name="lock" size={13} />{plan === 'pro' ? 'Not recorded' : 'Not recorded · Pro'}</span>}
           </div>
           <CallTimer seconds={seconds} idle={!live && !wrapup} />
           <CallFacts items={[

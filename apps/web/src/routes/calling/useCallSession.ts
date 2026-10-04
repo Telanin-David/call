@@ -49,6 +49,8 @@ export interface SessionExtras {
   callState: 'ready' | 'calling' | 'connected' | 'ended';
   /** The lead picked up (this call, or the one being wrapped up). */
   answered: boolean;
+  /** Answered calls are recorded (Pro, turned on): the rep starts by saying so. */
+  recording: boolean;
   lowBalance: boolean;
   busy: boolean;
   error: string | null;
@@ -292,6 +294,7 @@ export function useCallSession() {
     yourTime: '8:14 pm',
     callState: live ? 'connected' : phase === 'wrapup' ? 'ended' : 'ready',
     answered: live || phase === 'wrapup',
+    recording: plan === 'pro',
     lowBalance: false,
     busy: false,
     error: null,

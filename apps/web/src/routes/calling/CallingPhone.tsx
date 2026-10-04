@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import {
   Avatar, Button, ChoiceCard, Chip, Icon, LinkButton, Merge, Modal, Note, Pill, Radio, ScriptText, Tile, Toggle, cn, type IconName,
 } from '@dialer/ui';
-import { ProblemCard } from './CallAlerts';
+import { ProblemCard, RecordingReminder } from './CallAlerts';
 import { OUTCOMES, WHEN, clockOf, type CallSession } from './useCallSession';
 import { isProblem } from '@/lib/sim';
 import { PLAN_LABEL } from '@/lib/plan';
@@ -241,12 +241,14 @@ function LiveView({ s }: { s: CallSession }) {
             ? <span role="status" className="inline-flex items-center gap-1.5 rounded-full bg-sun/15 px-2.5 py-1 text-sun"><i className="size-1.5 animate-ring rounded-full bg-sun" />Calling…</span>
             : <span className="inline-flex items-center gap-1.5 rounded-full bg-success/20 px-2.5 py-1 text-success tabular-nums"><i className="size-1.5 rounded-full bg-success" />{s.clock}</span>}
           <span className="rounded-full bg-tangerine/20 px-2.5 py-1 text-glow tabular-nums">{formatUsd3(s.cost)}</span>
-          {s.plan === 'pro' && s.demo
+          {s.recording
             ? <span className="inline-flex items-center gap-1.5 rounded-full bg-danger/25 px-2.5 py-1 text-red-300"><i className="size-1.5 rounded-full bg-danger" />Rec</span>
-            : <button type="button" onClick={() => s.setUpgrade({ to: 'pro', reason: 'Recording is on Pro' })}
-                className="inline-flex cursor-pointer items-center gap-1 rounded-full border-0 bg-white/10 px-2.5 py-1 text-12 font-bold text-zinc-300">
-                <Icon name="lock" size={12} />Not recorded
-              </button>}
+            : s.plan === 'pro'
+              ? <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-12 font-bold text-zinc-300">Not recorded</span>
+              : <button type="button" onClick={() => s.setUpgrade({ to: 'pro', reason: 'Recording is on Pro' })}
+                  className="inline-flex cursor-pointer items-center gap-1 rounded-full border-0 bg-white/10 px-2.5 py-1 text-12 font-bold text-zinc-300">
+                  <Icon name="lock" size={12} />Not recorded
+                </button>}
         </div>
       </header>
 
@@ -272,6 +274,7 @@ function LiveView({ s }: { s: CallSession }) {
             <span><b>{detail.lastCall.date} · {resultLabel(detail.lastCall.result)}</b> {detail.lastCall.note}</span>
           </Note>
         )}
+        {s.recording && <RecordingReminder className="mb-4" />}
         {s.free && s.script && s.scriptFreeUntil && !s.scriptLocked && <p className="mb-3 flex items-center gap-1.5 text-12 font-semibold text-brand-ink"><Icon name="lock" size={13} />Script on screen is free until {s.scriptFreeUntil}</p>}
         {!s.script && <p className="text-15 text-muted">This list has no script. Write one on the Scripts page and pick this list.</p>}
         {s.script && <div className="relative">

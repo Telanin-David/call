@@ -1,9 +1,20 @@
 import { useEffect, useState } from 'react';
-import { Button, Icon, Modal, Tile, Toggle, cn, type IconName, type TileTone } from '@dialer/ui';
+import { Button, Icon, Modal, Note, Tile, Toggle, cn, type IconName, type TileTone } from '@dialer/ui';
+import { RECORDING_NOTICE } from '@/lib/recordings';
 import { fakeLeadsPickUp, setFakeLeadsPickUp } from '@/lib/phone';
 import type { Block, Problem } from '@/lib/sim';
 
 /** Board 29: a lead rings your number back while you're on the dial screen. */
+/** Recorded calls: the line the rep agreed to say first, above the script. */
+export function RecordingReminder({ className }: { className?: string }) {
+  return (
+    <Note tone="danger" className={cn('gap-2 text-13', className)}>
+      <Icon name="mic" size={15} className="mt-0.5 flex-none text-danger-ink" />
+      <span><b>This call is recorded. Say first:</b> “{RECORDING_NOTICE}”</span>
+    </Note>
+  );
+}
+
 interface BlockCopy { icon: IconName; tone: TileTone; title: string; body: string; primary: string; secondary?: string }
 
 export function blockCopy(block: Block, ctx: { limit: number | null; lead: string; next: string; balance: string }): BlockCopy {
