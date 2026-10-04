@@ -588,7 +588,7 @@ paths:
   /lists:
     get:
       tags: [lists]
-      summary: List all lead lists
+      summary: The rep's lead lists with progress, newest first
       operationId: listLeadLists
       responses:
         "200":
@@ -597,38 +597,20 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [lists]
                 properties:
                   lists:
                     type: array
                     items:
                       $ref: "#/components/schemas/LeadList"
-    post:
-      tags: [lists]
-      summary: Create a lead list
-      operationId: createLeadList
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [name]
-              properties:
-                name:
-                  type: string
-      responses:
-        "201":
-          description: Created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LeadList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
-  /lists/{listId}/imports:
-    post:
-      tags: [imports]
-      summary: Upload a CSV and get column mapping suggestions
-      operationId: uploadCSV
+  /lists/{listId}:
+    delete:
+      tags: [lists]
+      summary: Delete a list and its leads (refused once any lead was called)
+      operationId: deleteLeadList
       parameters:
         - name: listId
           in: path
@@ -636,51 +618,92 @@ paths:
           schema:
             type: string
             format: uuid
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: No such list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /imports/check:
+    post:
+      tags: [imports]
+      summary: Read a CSV and say what uploading it would add and leave out
+      description: |
+        Without a mapping, the server suggests one from the column names.
+        A mapping that can't be used yet (no phone column) comes back as
+        `problem`, with the columns, so the rep can fix it. Nothing is saved.
+      operationId: checkImport
       requestBody:
         required: true
         content:
-          multipart/form-data:
+          application/json:
             schema:
-              type: object
-              properties:
-                file:
-                  type: string
-                  format: binary
+              $ref: "#/components/schemas/ImportRequest"
       responses:
         "200":
-          description: Import preview with column mapping
+          description: What the upload would do
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ImportPreview"
+                $ref: "#/components/schemas/ImportCheck"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          description: File over 2 MB
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "422":
+          $ref: "#/components/responses/ValidationError"
 
-  /lists/{listId}/imports/{importId}/confirm:
+  /imports:
     post:
       tags: [imports]
-      summary: Confirm column mapping and import leads
-      operationId: confirmImport
-      parameters:
-        - name: listId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: importId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      summary: Upload a CSV as a new list
+      description: |
+        Everything is checked again on the server. US and Canada numbers go
+        into the named list; numbers elsewhere go into a second list named
+        "<name> · outside US and Canada".
+      operationId: createImport
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ColumnMapping"
+              allOf:
+                - $ref: "#/components/schemas/ImportRequest"
+                - type: object
+                  required: [mapping, name]
       responses:
-        "202":
-          description: Import started
+        "201":
+          description: The lists created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [lists]
+                properties:
+                  lists:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LeadList"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          description: File over 2 MB
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "422":
+          $ref: "#/components/responses/ValidationError"
 
   /scripts:
     get:
@@ -1364,55 +1387,144 @@ components:
 
     LeadList:
       type: object
+      required: [id, name, region, status, lead_count, called_count, followup_count, script, created_at]
       properties:
         id:
           type: string
           format: uuid
         name:
           type: string
+        region:
+          type: string
+          enum: [us_ca, abroad]
+        status:
+          type: string
+          enum: [new, active, done, abroad]
         lead_count:
           type: integer
         called_count:
           type: integer
+          description: Leads called at least once
+        followup_count:
+          type: integer
+          description: Follow-ups not done yet
+        script:
+          type: object
+          nullable: true
+          required: [id, name]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
         created_at:
           type: string
           format: date-time
 
-    ImportPreview:
+    LeadField:
+      type: string
+      description: What a CSV column is saved as. full_name is split into first and last name.
+      enum: [first_name, last_name, full_name, company, phone, email, city, notes, skip]
+
+    ImportRequest:
       type: object
+      required: [csv]
       properties:
-        import_id:
+        csv:
           type: string
-          format: uuid
-        row_count:
-          type: integer
+          description: The file's text, up to 2 MB and 5,000 rows
+        mapping:
+          type: array
+          description: One field per column, in column order
+          items:
+            $ref: "#/components/schemas/LeadField"
+        name:
+          type: string
+          maxLength: 80
+
+    ImportCheck:
+      type: object
+      required: [columns, rows, ready, abroad, left_out, left_out_rows, problem]
+      properties:
         columns:
           type: array
           items:
-            type: string
-        suggestions:
+            type: object
+            required: [header, sample, field]
+            properties:
+              header:
+                type: string
+              sample:
+                type: string
+                description: The first value in the column
+              field:
+                $ref: "#/components/schemas/LeadField"
+        rows:
+          type: integer
+          description: Lead rows in the file (blank lines don't count)
+        ready:
+          type: integer
+          description: US and Canada leads that would go into the list
+        abroad:
+          type: integer
+          description: Leads that would go into the separate list
+        left_out:
           type: object
-          description: Suggested column→field mapping
-        duplicates:
-          type: integer
-        dnc_hits:
-          type: integer
+          description: Rows not added to the list, by reason
+          required: [invalid, premium, duplicate, dnc, listed, abroad]
+          properties:
+            invalid:
+              type: integer
+            premium:
+              type: integer
+            duplicate:
+              type: integer
+            dnc:
+              type: integer
+            listed:
+              type: integer
+            abroad:
+              type: integer
+        left_out_rows:
+          type: array
+          description: The first 200 rows not added
+          items:
+            $ref: "#/components/schemas/LeftOutRow"
+        problem:
+          type: object
+          nullable: true
+          description: Why the mapping can't be used yet; counts are zero until it's fixed
+          required: [code, error]
+          properties:
+            code:
+              type: string
+            error:
+              type: string
 
-    ColumnMapping:
+    LeftOutRow:
       type: object
+      required: [row, name, phone, reason, same_as_row, list_name]
       properties:
+        row:
+          type: integer
+          description: Line in the file; the header is line 1
+        name:
+          type: string
         phone:
           type: string
-        first_name:
+          description: As written in the file
+        reason:
           type: string
-        last_name:
+          enum: [invalid, premium, duplicate, dnc, listed, abroad]
+        same_as_row:
+          type: integer
+          nullable: true
+          description: For a duplicate, the line it repeats
+        list_name:
           type: string
-        company:
-          type: string
-        city:
-          type: string
-        timezone:
-          type: string
+          nullable: true
+          description: For a number already listed, the list it's in
 
     Script:
       type: object
