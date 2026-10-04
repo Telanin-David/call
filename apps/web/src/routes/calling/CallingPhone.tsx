@@ -6,9 +6,10 @@ import { ProblemCard } from './CallAlerts';
 import { OUTCOMES, WHEN, clockOf, type CallSession } from './useCallSession';
 import { isProblem } from '@/lib/sim';
 import { PLAN_LABEL } from '@/lib/plan';
-import { CALLS, DETAILS, RESULT_LABEL } from '@/lib/fake';
+import { CALLS, resultLabel, RESULT_LABEL } from '@/lib/fake';
 import { formatUsd, formatUsd3 } from '@/lib/money';
-import { SCRIPT_PARTS, renderScript } from '@/lib/script';
+import { callbackLabel } from '@/lib/calling';
+import { renderScript } from '@/lib/script';
 
 const OUTCOME_TILE: Record<string, string> = {
   mint: 'bg-success text-white', orange: 'bg-tangerine text-night', grey: 'bg-faint text-white', lemon: 'bg-lemon text-night', red: 'bg-danger text-white',
@@ -49,14 +50,14 @@ function UpNextSheet({ s, open, onClose }: { s: CallSession; open: boolean; onCl
       <p className="text-14 text-muted">{s.left} left{s.limit ? ` · ${s.dials} of ${s.limit} dials today` : ''}</p>
       <ul className="mt-3 flex list-none flex-col rounded-2xl border border-line">
         {s.queue.map((q, i) => {
-          const d = DETAILS[q.lead.id];
+          const d = s.details[q.lead.id];
           const isCurrent = i === s.current;
           return (
             <li key={q.lead.id} className={cn('flex items-center gap-3 border-t border-line px-3.5 py-2.5 first:border-t-0', q.done && 'opacity-55')}>
               <Avatar initials={q.lead.initials} tone={isCurrent ? 'brand' : q.lead.tone} size={32} />
               <span className="min-w-0 flex-1">
                 <b className="block text-15">{q.lead.name}</b>
-                <span className="text-13 text-muted">{q.done ?? (isCurrent ? 'On this call' : `${q.lead.company} · ${d?.localTime ?? ''}`)}</span>
+                <span className="text-13 text-muted">{q.done ?? (isCurrent ? 'On this call' : [q.lead.company, d?.localTime].filter(Boolean).join(' · '))}</span>
               </span>
               {q.done ? <span className="text-13 text-muted">Done</span> : isCurrent && <span aria-hidden="true" className="size-2 rounded-full bg-success" />}
             </li>
@@ -85,20 +86,21 @@ function UpNextSheet({ s, open, onClose }: { s: CallSession; open: boolean; onCl
 function DetailsSheet({ s, open, onClose }: { s: CallSession; open: boolean; onClose: () => void }) {
   const { lead, detail } = s;
   if (!lead || !detail) return null;
-  const past = CALLS.filter(c => c.lead.id === lead.id);
+  const past = s.demo ? CALLS.filter(c => c.lead.id === lead.id) : [];
   const rows: { icon: IconName; tone: string; main: string; sub: string }[] = [
-    { icon: 'call', tone: 'bg-success', main: detail.phone, sub: 'Phone' },
-    { icon: 'mail', tone: 'bg-blue-600', main: detail.email, sub: 'Email' },
-    { icon: 'pin', tone: 'bg-tangerine', main: detail.location, sub: 'Location' },
-    { icon: 'clock', tone: 'bg-night', main: `${detail.localTime} their time`, sub: '8:14 pm your time' },
-    { icon: 'building', tone: 'bg-violet-500', main: detail.companyNote, sub: detail.website },
-  ];
+    { icon: 'call' as const, tone: 'bg-success', main: detail.phone, sub: 'Phone' },
+    { icon: 'mail' as const, tone: 'bg-blue-600', main: detail.email, sub: 'Email' },
+    { icon: 'pin' as const, tone: 'bg-tangerine', main: detail.location, sub: 'Location' },
+    { icon: 'clock' as const, tone: 'bg-night', main: `${detail.localTime} their time`, sub: s.yourTime ? `${s.yourTime} your time` : 'Their time' },
+    { icon: 'building' as const, tone: 'bg-violet-500', main: detail.companyNote, sub: detail.website || 'Company' },
+    { icon: 'note' as const, tone: 'bg-zinc-500', main: detail.notes ?? '', sub: 'Notes' },
+  ].filter(r => r.main);
   return (
     <Modal open={open} onClose={onClose} label={`${lead.name} details`}>
       <div className="flex flex-col items-center gap-1 text-center">
         <Avatar initials={lead.initials} tone={lead.tone} size={52} />
         <b className="mt-1 text-22">{lead.name}</b>
-        <span className="text-14 text-muted">{detail.title}, {lead.company}</span>
+        <span className="text-14 text-muted">{[detail.title, lead.company].filter(Boolean).join(', ')}</span>
       </div>
       <ul className="mt-4 flex list-none flex-col rounded-2xl border border-line">
         {rows.map(r => (
@@ -112,7 +114,7 @@ function DetailsSheet({ s, open, onClose }: { s: CallSession; open: boolean; onC
       <ul className="mt-2 flex list-none flex-col rounded-2xl border border-line">
         {detail.lastCall && (
           <li className="flex items-center gap-3 px-3.5 py-2.5">
-            <span className="flex-1"><b className="block text-15">{detail.lastCall.date} · {RESULT_LABEL[detail.lastCall.result]}</b><span className="text-13 text-muted">{detail.lastCall.note}</span></span>
+            <span className="flex-1"><b className="block text-15">{detail.lastCall.date} · {resultLabel(detail.lastCall.result)}</b><span className="text-13 text-muted">{detail.lastCall.note}</span></span>
           </li>
         )}
         {past.map(c => (
@@ -135,27 +137,27 @@ function ReadyView({ s }: { s: CallSession }) {
       <div className="flex flex-col gap-4 px-4 py-5">
         <div className="flex items-end gap-3">
           <div className="flex-1">
-            <span className="text-12 font-extrabold uppercase tracking-[.06em] text-faint">October leads · {s.left} to call</span>
+            <span className="text-12 font-extrabold uppercase tracking-[.06em] text-faint">{s.listName} · {s.left} to call</span>
             <h1 className="text-28 font-extrabold tracking-[-0.03em]">Leads</h1>
           </div>
           <Pill>Free</Pill>
         </div>
-        <button type="button" onClick={() => s.setUpgrade({ to: 'starter', reason: 'Let us dial for you with Starter' })}
+        {s.demo && <button type="button" onClick={() => s.setUpgrade({ to: 'starter', reason: 'Let us dial for you with Starter' })}
           className="flex cursor-pointer items-center gap-3 rounded-2xl border-0 bg-brand-tint p-3.5 text-left text-ink">
           <Tile tone="brand" size={36}><Icon name="lock" size={17} /></Tile>
           <span className="flex-1"><b className="block text-15">Let us dial for you</b><span className="text-13 text-muted">Starter calls your list one after another.</span></span>
           <b className="text-14 text-brand-ink">See</b>
-        </button>
-        <span className="text-12 font-extrabold uppercase tracking-[.06em] text-faint">Tap to call · {s.dials} of {s.limit} today</span>
+        </button>}
+        <span className="text-12 font-extrabold uppercase tracking-[.06em] text-faint">Tap to call{s.limit ? ` · ${s.dials} of ${s.limit} today` : ''}</span>
         <ul className="flex list-none flex-col rounded-2xl border border-line bg-surface">
           {s.queue.map((q, i) => {
-            const d = DETAILS[q.lead.id];
+            const d = s.details[q.lead.id];
             return (
               <li key={q.lead.id} className={cn('flex items-center gap-3 border-t border-line px-3.5 py-2.5 first:border-t-0', q.done && 'opacity-55')}>
                 <Avatar initials={q.lead.initials} tone={q.lead.tone} size={36} />
-                <span className="min-w-0 flex-1"><b className="block text-15">{q.lead.name}</b><span className="text-13 text-muted">{q.done ?? `${q.lead.company} · ${d?.localTime ?? ''}`}</span></span>
+                <span className="min-w-0 flex-1"><b className="block text-15">{q.lead.name}</b><span className="text-13 text-muted">{q.done ?? [q.lead.company, d?.localTime].filter(Boolean).join(' · ')}</span></span>
                 {!q.done && (
-                  <button type="button" aria-label={`Call ${q.lead.name}`} onClick={() => s.startAt(i)}
+                  <button type="button" aria-label={`Call ${q.lead.name}`} disabled={s.busy} onClick={() => s.startAt(i)}
                     className="flex size-10 flex-none cursor-pointer items-center justify-center rounded-full border-0 bg-tangerine text-night">
                     <Icon name="call" size={18} />
                   </button>
@@ -172,7 +174,7 @@ function ReadyView({ s }: { s: CallSession }) {
     <div className="flex flex-col gap-4 px-4 py-5">
       <div className="flex items-end gap-3">
         <div className="flex-1">
-          <span className="text-12 font-extrabold uppercase tracking-[.06em] text-faint">October leads · {s.left} left</span>
+          <span className="text-12 font-extrabold uppercase tracking-[.06em] text-faint">{s.listName} · {s.left} left</span>
           <h1 className="text-28 font-extrabold tracking-[-0.03em]">Calling</h1>
         </div>
         <Pill tone={s.plan === 'pro' ? 'lemon' : 'brand'}>{PLAN_LABEL[s.plan]}</Pill>
@@ -180,7 +182,7 @@ function ReadyView({ s }: { s: CallSession }) {
       {s.lead && (
         <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-3.5">
           <Avatar initials={s.lead.initials} tone={s.lead.tone} size={40} />
-          <span className="min-w-0 flex-1"><b className="block text-16">{s.lead.name}</b><span className="text-13 text-muted">{s.lead.company} · {s.detail?.localTime} their time</span></span>
+          <span className="min-w-0 flex-1"><b className="block text-16">{s.lead.name}</b><span className="text-13 text-muted">{[s.lead.company, `${s.detail?.localTime ?? ''} their time`].filter(Boolean).join(' · ')}</span></span>
           <Pill>Up first</Pill>
         </div>
       )}
@@ -192,10 +194,10 @@ function ReadyView({ s }: { s: CallSession }) {
             <span><b className="block text-15 font-semibold">Just this phone</b><span className="block text-13 text-muted">Script and buttons here. Talk through the phone.</span></span>
             <Radio />
           </ChoiceCard>
-          <ChoiceCard checked={laptop} onClick={() => setLaptop(true)}>
+          <ChoiceCard checked={laptop} locked={!s.demo} onClick={() => { if (s.demo) setLaptop(true); }}>
             <Tile tone="grey" size={36}><Icon name="laptop" /></Tile>
             <span><b className="block text-15 font-semibold">With my laptop</b><span className="block text-13 text-muted">Script on the laptop. This phone is the mic and speaker.</span></span>
-            <Radio />
+            {s.demo ? <Radio /> : <Pill className="ml-auto flex-none">Soon</Pill>}
           </ChoiceCard>
         </div>
         <p className="text-13 text-muted">Calls use the internet, not your airtime. You can change this any time.</p>
@@ -203,7 +205,7 @@ function ReadyView({ s }: { s: CallSession }) {
       {laptop ? (
         <Button variant="primary" size="xl" block onClick={() => s.navigate('/link')}><Icon name="qr" />Link my laptop</Button>
       ) : (
-        <Button variant="primary" size="xl" block onClick={() => s.startAt(s.current)}><Icon name="call" />Start calling</Button>
+        <Button variant="primary" size="xl" block disabled={s.busy} onClick={() => s.startAt(s.current)}><Icon name="call" />{s.busy ? 'Calling…' : 'Start calling'}</Button>
       )}
       {s.nextLead && <p className="text-center text-13 text-muted">Then {s.nextLead.name}, {s.left - 1} more after that.</p>}
     </div>
@@ -231,13 +233,15 @@ function LiveView({ s }: { s: CallSession }) {
           <Avatar initials={lead.initials} tone={lead.tone} size={40} />
           <div className="min-w-0 flex-1">
             <h1 className="text-20 font-bold">{lead.name}</h1>
-            <p className="text-13 text-zinc-400">{lead.company} · {detail.localTime} their time</p>
+            <p className="text-13 text-zinc-400">{[lead.company, `${detail.localTime} their time`].filter(Boolean).join(' · ')}</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-1.5 text-12 font-bold">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-success/20 px-2.5 py-1 text-success tabular-nums"><i className="size-1.5 rounded-full bg-success" />{s.clock}</span>
+          {s.callState === 'calling'
+            ? <span role="status" className="inline-flex items-center gap-1.5 rounded-full bg-sun/15 px-2.5 py-1 text-sun"><i className="size-1.5 animate-ring rounded-full bg-sun" />Calling…</span>
+            : <span className="inline-flex items-center gap-1.5 rounded-full bg-success/20 px-2.5 py-1 text-success tabular-nums"><i className="size-1.5 rounded-full bg-success" />{s.clock}</span>}
           <span className="rounded-full bg-tangerine/20 px-2.5 py-1 text-glow tabular-nums">{formatUsd3(s.cost)}</span>
-          {s.plan === 'pro'
+          {s.plan === 'pro' && s.demo
             ? <span className="inline-flex items-center gap-1.5 rounded-full bg-danger/25 px-2.5 py-1 text-red-300"><i className="size-1.5 rounded-full bg-danger" />Rec</span>
             : <button type="button" onClick={() => s.setUpgrade({ to: 'pro', reason: 'Recording is on Pro' })}
                 className="inline-flex cursor-pointer items-center gap-1 rounded-full border-0 bg-white/10 px-2.5 py-1 text-12 font-bold text-zinc-300">
@@ -247,6 +251,16 @@ function LiveView({ s }: { s: CallSession }) {
       </header>
 
       <div className="min-h-0 flex-1 overflow-auto px-4 py-4">
+        {s.lowBalance && (
+          <Note tone="danger" className="mb-4 text-13"><Icon name="wallet" size={15} /><span>Your balance is almost used up. The call ends when it runs out.</span></Note>
+        )}
+        {s.dev && (
+          <Note className="mb-4 text-13">
+            <Icon name="headset" size={15} />
+            <span className="flex-1">{s.answered ? 'Fake phone: no sound.' : 'Fake phone: they pick up in 3 seconds.'}</span>
+            <Button variant="outline" className="h-[34px]" onClick={s.dev.leadHangsUp}>They hang up</Button>
+          </Note>
+        )}
         {isProblem(s.sim) && (
           <div className="mb-4">
             <ProblemCard problem={s.sim} timer={s.clock} lead={merge.first_name} canUsePhone={!s.free} onFix={s.fixProblem} />
@@ -255,14 +269,15 @@ function LiveView({ s }: { s: CallSession }) {
         {detail.lastCall && (
           <Note tone="lemon" className="mb-4 gap-2 text-13">
             <Icon name="history" size={15} className="mt-0.5 text-warn-ink" />
-            <span><b>{detail.lastCall.date}</b> {detail.lastCall.note}</span>
+            <span><b>{detail.lastCall.date} · {resultLabel(detail.lastCall.result)}</b> {detail.lastCall.note}</span>
           </Note>
         )}
-        {s.free && !s.scriptLocked && <p className="mb-3 flex items-center gap-1.5 text-12 font-semibold text-brand-ink"><Icon name="lock" size={13} />Script on screen is free until 1 Dec</p>}
-        <div className="relative">
+        {s.free && s.script && s.scriptFreeUntil && !s.scriptLocked && <p className="mb-3 flex items-center gap-1.5 text-12 font-semibold text-brand-ink"><Icon name="lock" size={13} />Script on screen is free until {s.scriptFreeUntil}</p>}
+        {!s.script && <p className="text-15 text-muted">This list has no script. Write one on the Scripts page and pick this list.</p>}
+        {s.script && <div className="relative">
           <ScriptText size={18} className={cn(s.scriptLocked && 'pointer-events-none select-none blur-[6px]')}>
             <div aria-hidden={s.scriptLocked || undefined}>
-              {SCRIPT_PARTS.map(p => (
+              {s.script.parts.map(p => (
                 <div key={p.title}>
                   <h4>{p.title}</h4>
                   <p>{renderScript(p.body, t => <Merge>{merge[t]}</Merge>)}</p>
@@ -277,14 +292,14 @@ function LiveView({ s }: { s: CallSession }) {
               <p className="text-13 text-muted">You can keep calling on Free. You can move to Starter from Plans after this call.</p>
             </div>
           )}
-        </div>
+        </div>}
       </div>
 
       <nav aria-label="Call controls" className="flex border-t border-line bg-surface px-2 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
         <RoundAction icon={s.muted ? 'micoff' : 'mic'} label={s.muted ? 'Unmute' : 'Mute'} pressed={s.muted} onClick={() => s.setMuted(m => !m)} />
         <RoundAction icon="note" label="Note" onClick={() => setSheet('note')} />
         <RoundAction icon="users" label="Details" onClick={() => setSheet('details')} />
-        <RoundAction icon="hangup" label="End" danger onClick={s.endCall} />
+        <RoundAction icon="hangup" label={s.busy ? 'Ending…' : 'End'} danger onClick={() => { if (!s.busy) s.endCall(); }} />
       </nav>
 
       <UpNextSheet s={s} open={sheet === 'queue'} onClose={() => setSheet(null)} />
@@ -307,13 +322,13 @@ function WrapUpView({ s }: { s: CallSession }) {
     <Layer className="overflow-auto">
       <div className="flex flex-1 flex-col gap-4 px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-[max(20px,env(safe-area-inset-top))]">
         <div>
-          <p className="text-13 text-muted">Call ended · {clockOf(s.seconds)} · {formatUsd3(s.cost)}</p>
+          <p className="text-13 text-muted">{s.answered ? `Call ended · ${clockOf(s.seconds)} · ${formatUsd3(s.cost)}` : "They didn't pick up · not charged"}</p>
           <div className="flex items-center gap-2">
             <h1 className="flex-1 text-28 font-extrabold tracking-[-0.03em]">How did it go?</h1>
             {s.plan === 'pro' && <Pill tone="lemon">Pro</Pill>}
           </div>
         </div>
-        {s.plan === 'pro' && (
+        {s.plan === 'pro' && s.demo && (
           <section aria-label="Call summary" className="rounded-2xl border border-line bg-surface p-3.5">
             <span className="flex items-center gap-1.5 text-12 font-extrabold uppercase tracking-[.06em] text-warn-ink"><Icon name="spark" size={14} />Call summary</span>
             <p className="mt-1.5 text-14">{SUMMARY}</p>
@@ -338,6 +353,13 @@ function WrapUpView({ s }: { s: CallSession }) {
             <span className="text-12 font-extrabold uppercase tracking-[.06em] text-faint">Call {first} back</span>
             <div className="flex flex-wrap gap-1.5">
               {WHEN.map(w => <Chip key={w} pressed={s.when === w} onClick={() => s.setWhen(w)}>{w}</Chip>)}
+              <label className={cn('relative inline-flex h-10 flex-none cursor-pointer items-center gap-1.5 rounded-full border border-transparent bg-sunk px-3 text-14 font-medium',
+                !(WHEN as readonly string[]).includes(s.when) && 'border-brand bg-brand-soft text-brand-ink')}>
+                <Icon name="callback" size={16} />
+                {(WHEN as readonly string[]).includes(s.when) ? 'Pick a day' : callbackLabel(s.when)}
+                <input type="date" aria-label="Pick a date" min={new Date().toISOString().slice(0, 10)} className="absolute inset-0 cursor-pointer opacity-0"
+                  onChange={e => { if (e.target.value) s.setWhen(e.target.value); }} />
+              </label>
             </div>
           </div>
         )}
@@ -345,10 +367,10 @@ function WrapUpView({ s }: { s: CallSession }) {
           className="min-h-[72px] w-full rounded-2xl border border-line bg-surface p-3.5 text-16 text-ink" />
         <span className="flex-1" />
         {s.free ? (
-          <Button variant="primary" size="xl" block onClick={() => s.save(false)}>Save</Button>
+          <Button variant="primary" size="xl" block disabled={s.busy} onClick={() => s.save(false)}>Save</Button>
         ) : (
           <>
-            <Button variant="primary" size="xl" block onClick={() => s.save(Boolean(next))}>
+            <Button variant="primary" size="xl" block disabled={s.busy} onClick={() => s.save(Boolean(next))}>
               {next ? `Save · call ${next}` : 'Save'}
             </Button>
             <LinkButton className="self-center text-15 font-semibold" onClick={() => s.save(false)}>Save and pause</LinkButton>

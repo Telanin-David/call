@@ -1,5 +1,6 @@
 import type { PillTone } from '@dialer/ui';
 import { usd } from './money';
+import { OUTCOME_LABEL, type Outcome } from './activity';
 
 export const ME = { name: 'Tunde Bakare', first: 'Tunde', initials: 'TB', email: 'tunde.bakare@gmail.com' };
 
@@ -23,6 +24,11 @@ export const RESULT_TONE: Record<Result, PillTone> = {
   not_interested: 'neutral',
   missed: 'danger',
 };
+
+/** A result in words, from the demo's results or the server's outcomes. */
+export function resultLabel(r: Result | Outcome): string {
+  return OUTCOME_LABEL[r as Outcome] ?? RESULT_LABEL[r as Result] ?? r;
+}
 
 export interface Lead {
   id: string;
@@ -93,8 +99,10 @@ export interface LeadDetail {
   companyNote: string;
   website: string;
   localTime: string;
-  lastCall?: { date: string; note: string; result: Result };
+  lastCall?: { date: string; note: string; result: Result | Outcome };
   attempt: number;
+  /** The lead's notes from the upload. */
+  notes?: string;
 }
 
 export const DETAILS: Record<string, LeadDetail> = {

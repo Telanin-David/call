@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef } from 'react';
 import { Avatar, Button, Pill } from '@dialer/ui';
-import { DETAILS, RESULT_LABEL, type Lead } from '@/lib/fake';
+import { resultLabel, type Lead, type LeadDetail } from '@/lib/fake';
 
 export interface Peek { index: number; top: number; left: number }
 
@@ -22,12 +22,11 @@ export function peekAt(index: number, row: HTMLElement): Peek {
  * Board 03: a lead's details, shown when you hover or focus a name in the
  * queue. The buttons depend on the moment (before a call, during one).
  */
-export function LeadPeek({ peek, lead, tag, actions, onClose, onEnter, onLeave }: {
-  peek: Peek; lead: Lead; tag: string; actions: PeekAction[];
+export function LeadPeek({ peek, lead, detail: d, tag, actions, onClose, onEnter, onLeave }: {
+  peek: Peek; lead: Lead; detail: LeadDetail | undefined; tag: string; actions: PeekAction[];
   onClose: () => void; onEnter: () => void; onLeave: () => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
-  const d = DETAILS[lead.id];
 
   useEffect(() => {
     function onDown(e: MouseEvent) {
@@ -43,9 +42,9 @@ export function LeadPeek({ peek, lead, tag, actions, onClose, onEnter, onLeave }
 
   const rows: [string, string][] = [
     ['Phone', d?.phone ?? '—'],
-    ['Their time', d ? `${d.localTime}, ${d.location.split(',')[0] ?? ''}` : '—'],
+    ['Their time', d ? [d.localTime, d.location.split(',')[0]].filter(Boolean).join(', ') : '—'],
     ['Calls so far', String(Math.max(0, (d?.attempt ?? 1) - 1))],
-    ['Last time', d?.lastCall ? `${RESULT_LABEL[d.lastCall.result]}, ${d.lastCall.date}` : 'Not called yet'],
+    ['Last time', d?.lastCall ? `${resultLabel(d.lastCall.result)}, ${d.lastCall.date}` : 'Not called yet'],
   ];
 
   return (
@@ -56,7 +55,7 @@ export function LeadPeek({ peek, lead, tag, actions, onClose, onEnter, onLeave }
         <Avatar initials={lead.initials} tone={lead.tone} size={38} />
         <div className="min-w-0 flex-1">
           <b className="block text-16">{lead.name}</b>
-          <span className="text-13 text-muted">{d?.title ?? 'Lead'}, {lead.company}</span>
+          <span className="text-13 text-muted">{[d?.title, lead.company].filter(Boolean).join(', ') || 'Lead'}</span>
         </div>
         <Pill>{tag}</Pill>
       </div>

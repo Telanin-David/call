@@ -74,10 +74,10 @@ export function initialsOf(name: string): string {
   return (words[0] ?? '#').slice(0, 2).toUpperCase();
 }
 
-const TONES: AvatarTone[] = ['a', 'b', 'c', 'd', 'e'];
+const TONES = ['a', 'b', 'c', 'd', 'e'] as const satisfies readonly AvatarTone[];
 
 /** The same lead always gets the same avatar colour. */
-export function toneOf(id: string): AvatarTone {
+export function toneOf(id: string): (typeof TONES)[number] {
   let h = 0;
   for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return TONES[h % TONES.length] ?? 'a';
