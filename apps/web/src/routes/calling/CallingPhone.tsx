@@ -205,7 +205,7 @@ function ReadyView({ s }: { s: CallSession }) {
       {laptop ? (
         <Button variant="primary" size="xl" block onClick={() => s.navigate('/link')}><Icon name="qr" />Link my laptop</Button>
       ) : (
-        <Button variant="primary" size="xl" block disabled={s.busy} onClick={() => s.startAt(s.current)}><Icon name="call" />{s.busy ? 'Calling…' : 'Start calling'}</Button>
+        <Button variant="primary" size="xl" block disabled={s.busy} onClick={() => (s.demo ? s.startAt(s.current) : s.start())}><Icon name="call" />{s.busy ? 'Calling…' : 'Start calling'}</Button>
       )}
       {s.nextLead && <p className="text-center text-13 text-muted">Then {s.nextLead.name}, {s.left - 1} more after that.</p>}
     </div>
@@ -364,9 +364,20 @@ function WrapUpView({ s }: { s: CallSession }) {
           </div>
         )}
         <textarea aria-label="Note" value={s.note} onChange={e => s.setNote(e.target.value)} placeholder="Add a note"
+          onFocus={() => s.holdCountdown(true)} onBlur={() => s.holdCountdown(false)}
           className="min-h-[72px] w-full rounded-2xl border border-line bg-surface p-3.5 text-16 text-ink" />
         <span className="flex-1" />
-        {s.free ? (
+        {s.auto ? (
+          s.countdown !== null ? (
+            <div role="status" className="flex flex-col gap-2 rounded-2xl bg-brand-tint p-3.5">
+              <b className="text-16">{next ? `Calling ${next.split(' ')[0]} in ${s.countdown}` : `Saving in ${s.countdown}`}</b>
+              <div className="grid grid-cols-2 gap-2">
+                <Button size="lg" onClick={s.pauseAuto}><Icon name="pause" size={16} />Pause</Button>
+                <Button variant="primary" size="lg" onClick={s.callNow}><Icon name="call" size={16} />{next ? 'Call now' : 'Save now'}</Button>
+              </div>
+            </div>
+          ) : <p className="text-center text-14 text-muted">Pick a result and the next call starts on its own.</p>
+        ) : s.free ? (
           <Button variant="primary" size="xl" block disabled={s.busy} onClick={() => s.save(false)}>Save</Button>
         ) : (
           <>

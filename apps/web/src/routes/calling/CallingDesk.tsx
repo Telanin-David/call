@@ -4,7 +4,8 @@ import {
   Avatar, Button, CallCard, CallFacts, CallStatus, CallTimer, ChoiceCard, Chip, Dot, Facts, Icon, Kbd, Merge, Note,
   OutcomeTile, Paper, Pill, Progress, Radio, ScriptText, Tile, Toggle, buttonClass, cn,
 } from '@dialer/ui';
-import { ProblemCard } from './CallAlerts';
+import { FakePickUpSwitch, ProblemCard } from './CallAlerts';
+import { DEV_TOOLS } from '@/lib/devtools';
 import { LeadPeek, peekAt, type PeekAction } from './NextLead';
 import { PairDialog } from './Pairing';
 import { OUTCOMES, WHEN, type CallSession } from './useCallSession';
@@ -90,7 +91,7 @@ export default function CallingDesk({ s }: { s: CallSession }) {
           const isCurrent = i === current;
           const d = details[q.lead.id];
           const sub = q.done ?? (isCurrent
-            ? (live ? 'On call now' : `${free ? 'Selected' : 'Up first'} · ${d?.localTime ?? ''}`)
+            ? (live ? 'On call now' : wrapup ? 'Just called' : `${free ? 'Selected' : 'Up first'} · ${d?.localTime ?? ''}`)
             : nextPick === i ? 'Next up' : [q.lead.company, d?.localTime].filter(Boolean).join(' · '));
           return (
             <div key={q.lead.id}
@@ -142,10 +143,14 @@ export default function CallingDesk({ s }: { s: CallSession }) {
           </button>
         ) : (
           <div className="grid grid-cols-2 gap-2">
-            <Button aria-pressed={pauseAfter} onClick={() => setPauseAfter(v => !v)}><Icon name={pauseAfter ? 'play' : 'pause'} size={16} />{pauseAfter ? 'Paused' : 'Pause'}</Button>
-            <Button onClick={() => { if (live) return; const n = nextOpen(current); if (n >= 0) setCurrent(n); }}>
-              <Icon name="skip" size={16} />Skip
-            </Button>
+            {demo ? (
+              <Button aria-pressed={pauseAfter} onClick={() => setPauseAfter(v => !v)}><Icon name={pauseAfter ? 'play' : 'pause'} size={16} />{pauseAfter ? 'Paused' : 'Pause'}</Button>
+            ) : s.auto ? (
+              <Button aria-pressed={pauseAfter} onClick={s.pauseAuto}><Icon name="pause" size={16} />{pauseAfter ? 'Stopping' : 'Pause'}</Button>
+            ) : (
+              <Button disabled={s.busy || live} onClick={start}><Icon name="play" size={16} />{s.made > 0 ? 'Resume' : 'Start'}</Button>
+            )}
+            <Button onClick={s.skipNext}><Icon name="skip" size={16} />Skip</Button>
           </div>
         )}
       </aside>
@@ -304,9 +309,24 @@ export default function CallingDesk({ s }: { s: CallSession }) {
             )}
             {!demo && (
               <textarea aria-label="Note" value={note} onChange={e => setNote(e.target.value)} placeholder="Add a note (they'll see it next time)" maxLength={2000}
+                onFocus={() => s.holdCountdown(true)} onBlur={() => s.holdCountdown(false)}
                 className="min-h-[64px] w-full rounded-xl border border-line-strong bg-surface p-3 text-14 text-ink" />
             )}
-            {wrapup && (
+            {wrapup && s.auto && (
+              s.countdown !== null ? (
+                <div role="status" className="flex flex-col gap-2 rounded-xl bg-brand-tint p-3.5">
+                  <b className="text-15">{nextLead ? `Calling ${nextLead.name.split(' ')[0]} in ${s.countdown}` : `Saving in ${s.countdown}`}</b>
+                  <span className="text-13 text-muted">Change the result or add a note before then. Typing a note holds the countdown.</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button onClick={s.pauseAuto}><Icon name="pause" size={16} />Pause</Button>
+                    <Button variant="primary" onClick={s.callNow}><Icon name="call" size={16} />{nextLead ? 'Call now' : 'Save now'}</Button>
+                  </div>
+                </div>
+              ) : !outcome && (
+                <p className="text-13 text-muted">Pick a result and the next call starts on its own.</p>
+              )
+            )}
+            {wrapup && !s.auto && (
               free || !nextLead ? (
                 <Button variant="primary" size="lg" block disabled={s.busy} onClick={() => save(false)}>Save</Button>
               ) : (
@@ -350,6 +370,7 @@ export default function CallingDesk({ s }: { s: CallSession }) {
               </Note>
             )}
             <span className="flex-1 max-xl:hidden" />
+            {!demo && DEV_TOOLS && <FakePickUpSwitch />}
             <Button variant="primary" size="lg" block aria-disabled={!canStart} onClick={start}>
               <Icon name="call" />{s.busy ? 'Calling…' : free ? `Call ${merge.first_name === 'there' ? lead.name : merge.first_name}` : 'Start calling'}{!free && <Kbd onColor>P</Kbd>}
             </Button>

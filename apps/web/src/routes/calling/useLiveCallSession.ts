@@ -13,7 +13,7 @@ import { leadKeys } from '@/lib/leads';
 import { prettyNumber } from '@/lib/numbers';
 import { formatUsd } from '@/lib/money';
 import {
-  OUTCOME_KEY, callbackAt, callbackLabel, callingKeys, costOf, dial, getCall, hangupCall, refusalCopy, saveOutcome, useQueue,
+  OUTCOME_KEY, autodialGap, callbackAt, callbackLabel, callingKeys, costOf, dial, getCall, hangupCall, refusalCopy, saveOutcome, useQueue,
   type LiveCall, type QueueLead, type Refusal,
 } from '@/lib/calling';
 import { fakeLeadHangsUp, phoneFor, type Softphone } from '@/lib/phone';
@@ -27,6 +27,9 @@ type Item = QueueItem & { src: QueueLead };
 interface Ended { seconds: number; cost: number; answered: boolean }
 
 interface Undo { index: number; callId: string; outcome: Outcome; note: string; when: When; ended: Ended; label: string }
+
+/** How long a call may ring before it is ended as no answer. */
+export const RING_LIMIT_MS = 30_000;
 
 const SKIP_LABEL: Record<string, string> = {
   do_not_call: 'Do not call · skipped', three_tries: 'Blocked · 3 tries', calling_hours: 'Too early or late · skipped',
@@ -116,7 +119,13 @@ export function useLiveCallSession(): CallSession {
   const [nextPick, setNextPick] = useState<number | null>(null);
   const [multiDial, setMultiDial] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const [gap] = useState(autodialGap);
   const [fake, setFake] = useState(false);
+  // Auto-dial (Starter and Pro): after each call, a countdown, then the next lead.
+  const [auto, setAuto] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [hold, setHold] = useState(false);
+  const [dialedAt, setDialedAt] = useState<number | null>(null);
   const phone = useRef<Softphone | null>(null);
   const liveCall = useRef<string | null>(null);
   useEffect(() => { liveCall.current = phase === 'live' ? callId : null; }, [phase, callId]);
@@ -231,7 +240,7 @@ export function useLiveCallSession(): CallSession {
     setPeek(null);
   }
 
-  async function startAt(i: number, xs: Item[] = items) {
+  async function startAt(i: number, xs: Item[] = items, autoRun = auto, skipped = 0) {
     if (busy || phase === 'live') return;
     const it = xs[i];
     if (!it || it.done) return;
@@ -248,9 +257,20 @@ export function useLiveCallSession(): CallSession {
       return;
     }
     if ('refused' in res) {
+      setBusy(false);
+      // Auto-dial skips leads it may not call now (too early, do not call) and
+      // carries on; anything the rep must act on stops it.
+      if (autoRun && res.refused.action === 'skip' && skipped < 25) {
+        const next = xs.map((x, j) => (j === i ? { ...x, done: SKIP_LABEL[res.refused.code] ?? 'Skipped' } : x));
+        setItems(() => next);
+        const n = next.findIndex(x => !x.done);
+        if (n >= 0) { await startAt(n, next, true, skipped + 1); return; }
+        setAuto(false);
+        return;
+      }
+      setAuto(false);
       setRefusal({ ...res.refused, index: i });
       setBlockOpen(true);
-      setBusy(false);
       return;
     }
     const st = res.started;
@@ -259,6 +279,7 @@ export function useLiveCallSession(): CallSession {
     setFake(st.phone === 'fake');
     setPrice(st.price_per_minute_microdollars);
     setPhase('live');
+    setDialedAt(Date.now());
     setMade(m => m + 1);
     setCallStatus('answered');
     setBusy(false);
@@ -274,8 +295,12 @@ export function useLiveCallSession(): CallSession {
     }
   }
 
+  /** Free calls the lead picked; Starter and Pro start auto-dial from here. */
   function start() {
-    void startAt(current);
+    const on = !free;
+    setAuto(on);
+    setPauseAfter(false);
+    void startAt(current, items, on);
   }
 
   /** Ends the call on the server, which bills it to the second. */
@@ -324,7 +349,9 @@ export function useLiveCallSession(): CallSession {
     if (n >= 0) setCurrent(n);
     const go = thenCall && !pauseAfter && n >= 0;
     setPauseAfter(false);
-    if (go) void startAt(n, next);
+    setCountdown(null);
+    if (!go) setAuto(false);
+    if (go) void startAt(n, next, auto);
   }
 
   function save(thenCall: boolean) {
@@ -344,6 +371,12 @@ export function useLiveCallSession(): CallSession {
       const c = await endNow();
       if (!c) return;
       const done: Ended = { seconds: c.seconds, cost: c.cost_microdollars, answered: c.answered_at !== null };
+      if (auto) {
+        // Auto-dial: the countdown saves it and calls the next lead.
+        if (!done.answered) setOutcome(o => o ?? 'no_answer');
+        setPhase('wrapup');
+        return;
+      }
       const o = outcome ?? (done.answered ? null : 'no_answer');
       setPhase('wrapup');
       if (o) {
@@ -369,6 +402,53 @@ export function useLiveCallSession(): CallSession {
       const n = nextOpen(current);
       if (n >= 0) setCurrent(n);
     }
+  }
+
+  /** Skip: during or after a call, the lead after this one; before, this one. */
+  function skipNext() {
+    if (phase === 'ready') { skip(current); return; }
+    const n = nextOpen(current);
+    if (n >= 0) skip(n);
+  }
+
+  // A call nobody picks up ends after RING_LIMIT, so no one waits on a dead line.
+  useEffect(() => {
+    if (phase !== 'live' || dialedAt === null || status === 'answered' || busy) return;
+    const t = setTimeout(() => {
+      void (async () => {
+        const c = await endNow();
+        if (!c) return;
+        if (c.answered_at === null) setOutcome(o => o ?? 'no_answer');
+        setPhase('wrapup');
+      })();
+    }, Math.max(0, dialedAt + RING_LIMIT_MS - Date.now()));
+    return () => clearTimeout(t);
+    // endNow is recreated each render; the timer only needs the call and its state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, dialedAt, status, busy]);
+
+  // Auto-dial: once the call has ended and has a result, count down to the next one.
+  useEffect(() => {
+    if (auto && phase === 'wrapup' && outcome && ended && countdown === null && !busy) setCountdown(gap);
+  }, [auto, phase, outcome, ended, countdown, busy, gap]);
+  const saveLatest = useRef(saveWith);
+  useEffect(() => { saveLatest.current = saveWith; });
+  useEffect(() => {
+    if (countdown === null || hold || busy) return;
+    if (countdown <= 0) {
+      setCountdown(null);
+      if (outcome) void saveLatest.current(outcome, true);
+      return;
+    }
+    const t = setTimeout(() => setCountdown(c => (c === null ? null : c - 1)), 1000);
+    return () => clearTimeout(t);
+  }, [countdown, hold, busy, outcome]);
+
+  /** Stops auto-dial: at once between calls, after this one during a call. */
+  function pauseAuto() {
+    if (phase === 'live') { setPauseAfter(true); return; }
+    setCountdown(null);
+    setAuto(false);
   }
 
   const copy = refusal ? refusalCopy(refusal, nextIndex >= 0) : null;
@@ -421,6 +501,12 @@ export function useLiveCallSession(): CallSession {
     start, startAt: (i: number) => { void startAt(i); }, save, hangUp, endCall, skip, fixProblem: () => {}, answerCallback: () => {}, resolveBlock,
 
     demo: false,
+    auto,
+    countdown,
+    callNow: () => setCountdown(c => (c === null ? null : 0)),
+    pauseAuto,
+    skipNext,
+    holdCountdown: setHold,
     details,
     listName: q?.title ?? '',
     script: script ? { name: script.name, parts: script.parts } : null,

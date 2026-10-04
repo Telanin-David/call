@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Avatar, Button, Icon, Modal, Tile, cn, type IconName, type TileTone } from '@dialer/ui';
+import { Avatar, Button, Icon, Modal, Tile, Toggle, cn, type IconName, type TileTone } from '@dialer/ui';
+import { fakeLeadsPickUp, setFakeLeadsPickUp } from '@/lib/phone';
 import type { Lead } from '@/lib/fake';
 import type { Block, Problem } from '@/lib/sim';
 
@@ -143,5 +144,16 @@ export function ProblemCard({ problem, timer, lead, canUsePhone, onFix }: {
         </>
       )}
     </section>
+  );
+}
+
+/** Development with the fake phone: whether fake leads pick up, to try unanswered calls. */
+export function FakePickUpSwitch({ className }: { className?: string }) {
+  const [on, setOn] = useState(fakeLeadsPickUp);
+  return (
+    <div className={cn('flex items-center gap-3 rounded-xl border border-dashed border-line-strong px-3.5 py-2.5 text-13', className)}>
+      <span className="flex-1"><b className="block">Fake leads pick up</b><span className="text-muted">Development only. Off: the line rings, then drops.</span></span>
+      <Toggle checked={on} onChange={v => { setOn(v); setFakeLeadsPickUp(v); }} label="Fake leads pick up" />
+    </div>
   );
 }

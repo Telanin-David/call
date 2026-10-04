@@ -141,3 +141,20 @@ export function callbackLabel(when: string): string {
 export function costOf(pricePerMin: number, seconds: number): number {
   return Math.ceil((pricePerMin * seconds) / 60);
 }
+
+const GAP_KEY = 'dialer.autodialGap';
+export const GAPS = [3, 5, 10] as const;
+
+/** Seconds auto-dial waits after a result before the next call. Kept on this device. */
+export function autodialGap(): number {
+  try {
+    const n = Number(window.localStorage.getItem(GAP_KEY));
+    return (GAPS as readonly number[]).includes(n) ? n : 5;
+  } catch {
+    return 5;
+  }
+}
+
+export function setAutodialGap(seconds: number) {
+  try { window.localStorage.setItem(GAP_KEY, String(seconds)); } catch { /* private window: the default it is */ }
+}
