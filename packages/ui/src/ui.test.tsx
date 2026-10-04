@@ -5,6 +5,7 @@ import { buttonClass } from './Button';
 import { Progress } from './Badge';
 import { CodeBoxes, CodeInput, Field } from './Form';
 import { Modal, Toggle } from './Overlay';
+import { QrCode } from './Qr';
 
 afterEach(cleanup);
 
@@ -94,5 +95,17 @@ describe('Field', () => {
     const { getByRole, queryByText } = render(<Field label="Email" hint="We never share it" error="Enter a valid email address."><input /></Field>);
     expect(getByRole('alert').textContent).toBe('Enter a valid email address.');
     expect(queryByText('We never share it')).toBeNull();
+  });
+});
+
+describe('QrCode', () => {
+  it('draws a labelled code for its value, with a quiet zone', () => {
+    render(<QrCode value="https://dialer.app/verify" label="Scan me" size={100} />);
+    const svg = screen.getByRole('img', { name: 'Scan me' });
+    expect(svg.getAttribute('data-qr')).toBe('https://dialer.app/verify');
+    const n = Number(svg.getAttribute('viewBox')?.split(' ')[2]);
+    // 25 bytes fit version 2 (25 modules) at level M; 4 modules of quiet zone each side.
+    expect(n).toBe(33);
+    expect(svg.querySelector('path')?.getAttribute('d')).toMatch(/^M\d+ \d+h1v1h-1z/);
   });
 });

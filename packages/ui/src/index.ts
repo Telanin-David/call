@@ -10,4 +10,5 @@ export {
   type OutcomeTone,
 } from './Call';
 export { Modal, Toggle, ToastProvider, useToast } from './Overlay';
+export { QrCode } from './Qr';
 export * as tokens from './tokens';

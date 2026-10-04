@@ -12,6 +12,7 @@
   ],
   "dependencies": {
     "clsx": "^2.1.1",
+    "qrcode-generator": "^1.5.2",
     "tailwind-merge": "^3.7.0"
   },
   "peerDependencies": {
