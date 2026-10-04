@@ -11,6 +11,7 @@ import (
 
 	"github.com/telanin-david/call/services/api/internal/auth"
 	"github.com/telanin-david/call/services/api/internal/platform"
+	"github.com/telanin-david/call/services/api/internal/scripts"
 	"github.com/telanin-david/call/services/api/internal/telephony"
 )
 
@@ -20,6 +21,7 @@ func (s *Service) Routes(r chi.Router) {
 	r.With(auth.RequireUser).Get("/today", s.handleToday)
 	r.With(auth.RequireUser).Get("/followups", s.handleFollowups)
 	r.With(auth.RequireUser).Get("/history", s.handleHistory)
+	r.With(auth.RequireUser).Get("/queue", s.handleQueue)
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireConfirmed)
 		r.Post("/calls", s.handleStart)
@@ -54,6 +56,9 @@ type startedJSON struct {
 	Token       string `json:"token"`
 	ClientState string `json:"client_state"`
 	HerTimeZone string `json:"her_time_zone"`
+	// Phone says which browser phone dials: "telnyx", or "fake" in
+	// development, where /dev/calls plays the provider's part.
+	Phone string `json:"phone"`
 }
 
 type callJSON struct {
@@ -98,6 +103,7 @@ func (s *Service) handleStart(w http.ResponseWriter, r *http.Request) {
 	platform.JSON(w, http.StatusCreated, startedJSON{
 		CallID: st.CallID, LeadID: st.Lead.ID, LeadName: st.Lead.Name(), From: st.From, To: st.To,
 		PricePerMin: st.PricePerMin, Held: st.Held, Token: st.Token, ClientState: st.ClientState, HerTimeZone: st.HerTimeZone,
+		Phone: s.phoneKind(),
 	})
 }
 
@@ -344,4 +350,88 @@ func (s *Service) fail(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	s.log().ErrorContext(r.Context(), "request failed", "path", r.URL.Path, "err", err)
 	platform.ErrorJSON(w, http.StatusInternalServerError, "internal", "Something went wrong. Try again.")
+}
+
+func (s *Service) phoneKind() string {
+	if _, ok := s.Provider.(*telephony.FakeCalls); ok {
+		return "fake"
+	}
+	return "telnyx"
+}
+
+type lastCallJSON struct {
+	At      time.Time `json:"at"`
+	Outcome *string   `json:"outcome"`
+	Note    string    `json:"note"`
+}
+
+type queueLeadJSON struct {
+	ID          string        `json:"id"`
+	Name        string        `json:"name"`
+	FirstName   string        `json:"first_name"`
+	Company     string        `json:"company"`
+	City        string        `json:"city"`
+	Email       string        `json:"email"`
+	Phone       string        `json:"phone"`
+	Notes       string        `json:"notes"`
+	HerTimeZone string        `json:"her_time_zone"`
+	Attempts    int           `json:"attempts"`
+	ListName    string        `json:"list_name"`
+	ScriptID    *string       `json:"script_id"`
+	LastCall    *lastCallJSON `json:"last_call"`
+}
+
+type queueScriptJSON struct {
+	ID    string         `json:"id"`
+	Name  string         `json:"name"`
+	Parts []scripts.Part `json:"parts"`
+}
+
+type queueJSON struct {
+	Title           string            `json:"title"`
+	ListID          *string           `json:"list_id"`
+	Leads           []queueLeadJSON   `json:"leads"`
+	Scripts         []queueScriptJSON `json:"scripts"`
+	ScriptFreeUntil *string           `json:"script_free_until"`
+	DialsToday      int               `json:"dials_today"`
+	DialLimit       *int              `json:"dial_limit"`
+	Balance         int64             `json:"balance_microdollars"`
+	PricePerMin     int64             `json:"price_per_minute_microdollars"`
+	LiveCallID      *string           `json:"live_call_id"`
+}
+
+func (s *Service) handleQueue(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFrom(r.Context())
+	qs := r.URL.Query()
+	q, err := s.Queue(r.Context(), u.ID, QueueFor{ListID: qs.Get("list"), Followups: qs.Get("followups") == "1", LeadID: qs.Get("lead")})
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	out := queueJSON{
+		Title: q.Title, ListID: nullable(q.ListID), Leads: make([]queueLeadJSON, 0, len(q.Leads)), Scripts: make([]queueScriptJSON, 0, len(q.Scripts)),
+		DialsToday: q.DialsToday, DialLimit: q.DialLimit, Balance: q.Balance, PricePerMin: q.PricePerMin, LiveCallID: nullable(q.LiveCallID),
+	}
+	for _, l := range q.Leads {
+		j := queueLeadJSON{
+			ID: l.ID, Name: l.Name, FirstName: l.FirstName, Company: l.Company, City: l.City, Email: l.Email, Phone: l.Phone, Notes: l.Notes,
+			HerTimeZone: l.HerTimeZone, Attempts: l.Attempts, ListName: l.ListName, ScriptID: nullable(l.ScriptID),
+		}
+		if l.LastCall != nil {
+			j.LastCall = &lastCallJSON{At: l.LastCall.At, Outcome: nullable(l.LastCall.Outcome), Note: l.LastCall.Note}
+		}
+		out.Leads = append(out.Leads, j)
+	}
+	for _, sc := range q.Scripts {
+		parts := sc.Parts
+		if parts == nil {
+			parts = []scripts.Part{}
+		}
+		out.Scripts = append(out.Scripts, queueScriptJSON{ID: sc.ID, Name: sc.Name, Parts: parts})
+	}
+	if q.ScriptFreeUntil != nil {
+		d := q.ScriptFreeUntil.Format("2006-01-02")
+		out.ScriptFreeUntil = &d
+	}
+	platform.JSON(w, http.StatusOK, out)
 }

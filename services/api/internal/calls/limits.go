@@ -163,3 +163,6 @@ func dollars(micro int64) string {
 	}
 	return fmt.Sprintf("%s$%d.%02d", sign, cents/100, cents%100)
 }
+
+// ErrListNotFound is a call screen opened on a list that isn't the rep's.
+var ErrListNotFound = &Blocked{http.StatusNotFound, "list_not_found", "That list isn't one of yours", "Pick a list on the Leads page.", ""}
