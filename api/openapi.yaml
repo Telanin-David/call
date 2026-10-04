@@ -708,7 +708,7 @@ paths:
   /scripts:
     get:
       tags: [scripts]
-      summary: List scripts
+      summary: The rep's scripts, most recently changed first
       operationId: listScripts
       responses:
         "200":
@@ -717,14 +717,27 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [scripts, fields, on_screen_free_until]
                 properties:
                   scripts:
                     type: array
                     items:
                       $ref: "#/components/schemas/Script"
+                  fields:
+                    type: array
+                    description: The fill-in words a script can use, like {first_name}
+                    items:
+                      type: string
+                  on_screen_free_until:
+                    type: string
+                    format: date
+                    nullable: true
+                    description: On Free, the day the script stops showing on the call screen (2 months after sign-up). Null on Starter and Pro.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
     post:
       tags: [scripts]
-      summary: Create a script
+      summary: Save a new script
       operationId: createScript
       requestBody:
         required: true
@@ -739,6 +752,61 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Script"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /scripts/{scriptId}:
+    parameters:
+      - name: scriptId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags: [scripts]
+      summary: Replace a script's name and parts, and which lists use it
+      operationId: updateScript
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScriptRequest"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Script"
+        "404":
+          description: No such script, or one of the lists doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [scripts]
+      summary: Delete a script; lists that used it are left without one
+      operationId: deleteScript
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: No such script
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
 
   /calls:
     post:
@@ -1526,8 +1594,21 @@ components:
           nullable: true
           description: For a number already listed, the list it's in
 
+    ScriptPart:
+      type: object
+      required: [title, body]
+      properties:
+        title:
+          type: string
+          maxLength: 80
+        body:
+          type: string
+          maxLength: 3000
+          description: Text with fill-in words in curly brackets, like {first_name}
+
     Script:
       type: object
+      required: [id, name, parts, lists, updated_at]
       properties:
         id:
           type: string
@@ -1537,12 +1618,22 @@ components:
         parts:
           type: array
           items:
+            $ref: "#/components/schemas/ScriptPart"
+        lists:
+          type: array
+          description: Lead lists that use this script
+          items:
             type: object
+            required: [id, name]
             properties:
-              label:
+              id:
                 type: string
-              body:
+                format: uuid
+              name:
                 type: string
+        updated_at:
+          type: string
+          format: date-time
 
     ScriptRequest:
       type: object
@@ -1550,10 +1641,18 @@ components:
       properties:
         name:
           type: string
+          maxLength: 80
         parts:
           type: array
+          maxItems: 30
           items:
-            type: object
+            $ref: "#/components/schemas/ScriptPart"
+        list_ids:
+          type: array
+          description: Exactly the lists that use the script after saving. Leave out to keep them as they are.
+          items:
+            type: string
+            format: uuid
 
     StartCallRequest:
       type: object

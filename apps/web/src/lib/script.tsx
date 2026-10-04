@@ -18,7 +18,10 @@ export const SCRIPT_PARTS: ScriptPart[] = [
 
 const isTag = (s: string): s is MergeTag => (MERGE_TAGS as readonly string[]).includes(s);
 
+/** Fills a part's text: each {first_name} becomes tag('first_name'). Unknown words stay as written. */
 export function renderScript(body: string, tag: (t: MergeTag) => ReactNode): ReactNode[] {
-  return body.split(/\{(\w+)\}/g).map((chunk, i) =>
-    i % 2 === 1 && isTag(chunk) ? <Fragment key={i}>{tag(chunk)}</Fragment> : chunk);
+  return body.split(/\{(\w+)\}/g).map((chunk, i) => {
+    if (i % 2 === 0) return chunk;
+    return isTag(chunk) ? <Fragment key={i}>{tag(chunk)}</Fragment> : `{${chunk}}`;
+  });
 }
