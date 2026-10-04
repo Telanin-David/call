@@ -39,6 +39,16 @@ type Config struct {
 	// SmileIDSandbox sends checks to Smile ID's test server. Only
 	// SMILEID_SANDBOX=false sends them to the live one.
 	SmileIDSandbox bool
+
+	// S3-compatible file storage (Cloudflare R2) for call recordings.
+	S3Endpoint  string
+	S3Bucket    string
+	S3AccessKey string
+	S3SecretKey string
+	S3Region    string
+	// DevFilesDir keeps files in development without S3; defaults to a
+	// folder in the system temp dir.
+	DevFilesDir string
 }
 
 // devSessionKey keys code hashes when SESSION_KEY is unset in development.
@@ -72,6 +82,13 @@ func MustLoadConfig() Config {
 		SmileIDAPIKey:      getenv("SMILEID_API_KEY", ""),
 		SmileIDCallbackURL: getenv("SMILEID_CALLBACK_URL", ""),
 		SmileIDSandbox:     getenv("SMILEID_SANDBOX", "true") != "false",
+
+		S3Endpoint:  getenv("S3_ENDPOINT", ""),
+		S3Bucket:    getenv("S3_BUCKET", ""),
+		S3AccessKey: getenv("S3_ACCESS_KEY", ""),
+		S3SecretKey: getenv("S3_SECRET_KEY", ""),
+		S3Region:    getenv("S3_REGION", "auto"),
+		DevFilesDir: getenv("DEV_FILES_DIR", ""),
 	}
 	cfg.WebOrigins = strings.Split(getenv("WEB_ORIGINS", cfg.WebURL), ",")
 	if cfg.SessionKey == "" && cfg.Env == "production" {

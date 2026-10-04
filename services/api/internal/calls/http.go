@@ -203,6 +203,8 @@ func (s *Service) handleDevEvent(w http.ResponseWriter, r *http.Request) {
 		ev.Type = telephony.EventAnswered
 	case "hangup":
 		ev.Type, ev.HangupCause = telephony.EventHangup, "normal_clearing"
+		// The lead hung up: a recorded call's recording is saved.
+		defer fake.Ended(c.ProviderID)
 	default:
 		platform.ErrorJSON(w, http.StatusNotFound, "not_found", "Use initiated, answered or hangup.")
 		return
@@ -333,6 +335,7 @@ func (s *Service) handleHistory(w http.ResponseWriter, r *http.Request) {
 		To        string       `json:"to"`
 		Incoming  bool         `json:"incoming"`
 		Answered  bool         `json:"answered"`
+		Recording string       `json:"recording"`
 		StartedAt time.Time    `json:"started_at"`
 		Seconds   int64        `json:"seconds"`
 		Cost      int64        `json:"cost_microdollars"`
@@ -341,7 +344,7 @@ func (s *Service) handleHistory(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]itemJSON, len(items))
 	for i, h := range items {
-		out[i] = itemJSON{ID: h.ID, To: h.To, Incoming: h.Incoming, Answered: h.Answered, StartedAt: h.StartedAt, Seconds: h.Seconds, Cost: h.Cost, Outcome: nullable(h.Outcome), Note: h.Note}
+		out[i] = itemJSON{ID: h.ID, To: h.To, Incoming: h.Incoming, Answered: h.Answered, Recording: h.Recording, StartedAt: h.StartedAt, Seconds: h.Seconds, Cost: h.Cost, Outcome: nullable(h.Outcome), Note: h.Note}
 		if h.Lead != nil {
 			l := leadJSON(*h.Lead)
 			out[i].Lead = &l
@@ -415,6 +418,7 @@ type queueJSON struct {
 	Balance         int64             `json:"balance_microdollars"`
 	PricePerMin     int64             `json:"price_per_minute_microdollars"`
 	LiveCallID      *string           `json:"live_call_id"`
+	RecordCalls     bool              `json:"record_calls"`
 }
 
 func (s *Service) handleQueue(w http.ResponseWriter, r *http.Request) {
@@ -428,6 +432,7 @@ func (s *Service) handleQueue(w http.ResponseWriter, r *http.Request) {
 	out := queueJSON{
 		Title: q.Title, ListID: nullable(q.ListID), Leads: make([]queueLeadJSON, 0, len(q.Leads)), Scripts: make([]queueScriptJSON, 0, len(q.Scripts)),
 		DialsToday: q.DialsToday, DialLimit: q.DialLimit, Balance: q.Balance, PricePerMin: q.PricePerMin, LiveCallID: nullable(q.LiveCallID),
+		RecordCalls: q.RecordCalls,
 	}
 	for _, l := range q.Leads {
 		out.Leads = append(out.Leads, queueLeadOut(l))

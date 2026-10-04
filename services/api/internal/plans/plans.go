@@ -23,6 +23,9 @@ import (
 // Free is the plan with no subscription.
 const Free = "free"
 
+// Pro is the top plan: recording, transcripts and summaries.
+const Pro = "pro"
+
 // Plan is one row of the plans table.
 type Plan struct {
 	ID            string

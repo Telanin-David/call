@@ -1,10 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Avatar, Button, Card, DarkCard, Icon, Modal, Pill, cn, linkClass, useToast } from '@dialer/ui';
+import { useQueryClient } from '@tanstack/react-query';
+import { Avatar, Button, Card, DarkCard, Icon, Modal, Pill, buttonClass, cn, linkClass, useToast } from '@dialer/ui';
 import { Page } from '@/components/Page';
 import { usePlan } from '@/lib/plan';
 import { CALLS, RESULT_LABEL, RESULT_TONE, type CallRecord } from '@/lib/fake';
 import { formatUsd } from '@/lib/money';
+import { isLive } from '@/lib/backend';
+import { ApiError, errorText } from '@/lib/api';
+import { OUTCOME_LABEL, OUTCOME_TONE, callCost, callLength, initialsOf, isOutcome, toneOf, useHistory, whenLabel } from '@/lib/activity';
+import { prettyNumber } from '@/lib/numbers';
+import { dayMonth } from '@/lib/dates';
+import { deleteRecording, fileUrl, recordingKeys, useRecording } from '@/lib/recordings';
 
 interface Line { you: boolean; text: string }
 
@@ -86,7 +93,171 @@ function Player({ call }: { call: CallRecord }) {
   );
 }
 
+/** Board 36, live: the waveform is a picture; the sound is a real audio element. */
+function AudioPlayer({ src, total, onExpired }: { src: string; total: number; onExpired: () => void }) {
+  const audio = useRef<HTMLAudioElement>(null);
+  // Where to carry on when a new link replaces one that expired mid-play.
+  const resumeAt = useRef(0);
+  const [at, setAt] = useState(0);
+  const [length, setLength] = useState(total);
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
+
+  useEffect(() => { if (audio.current) audio.current.playbackRate = speed; }, [speed, src]);
+
+  function seek(t: number) {
+    const a = audio.current;
+    if (!a) return;
+    a.currentTime = Math.max(0, Math.min(length, t));
+    setAt(a.currentTime);
+  }
+  function toggle() {
+    const a = audio.current;
+    if (!a) return;
+    if (a.paused) void a.play().catch(() => setPlaying(false));
+    else a.pause();
+  }
+
+  const played = length > 0 ? Math.round((at / length) * BARS.length) : 0;
+  return (
+    <div className="mt-4 flex items-center gap-3">
+      <audio ref={audio} src={src} preload="metadata"
+        onLoadedMetadata={e => {
+          const a = e.currentTarget;
+          if (Number.isFinite(a.duration) && a.duration > 0) setLength(a.duration);
+          if (resumeAt.current) { a.currentTime = resumeAt.current; resumeAt.current = 0; }
+        }}
+        onTimeUpdate={e => setAt(e.currentTarget.currentTime)} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
+        onEnded={() => setPlaying(false)} onError={() => { resumeAt.current = audio.current?.currentTime ?? 0; onExpired(); }} />
+      <button type="button" aria-label={playing ? 'Pause' : 'Play'} onClick={toggle}
+        className="flex size-11 flex-none cursor-pointer items-center justify-center rounded-full border-0 bg-night text-white">
+        <Icon name={playing ? 'pause' : 'play'} size={18} />
+      </button>
+      <div className="flex h-9 min-w-0 flex-1 cursor-pointer items-center gap-[2px] overflow-hidden" role="slider" aria-label="Position"
+        aria-valuemin={0} aria-valuemax={Math.round(length)} aria-valuenow={Math.round(at)} tabIndex={0}
+        onClick={e => { const r = e.currentTarget.getBoundingClientRect(); seek(((e.clientX - r.left) / r.width) * length); }}
+        onKeyDown={e => { if (e.key === 'ArrowRight') seek(at + 5); if (e.key === 'ArrowLeft') seek(at - 5); }}>
+        {BARS.map((h, i) => (
+          <span key={i} style={{ height: h }} className={cn('w-[3px] flex-none rounded-full', i < played ? 'bg-tangerine' : 'bg-off')} />
+        ))}
+      </div>
+      <span className="text-13 tabular-nums text-muted max-sm:hidden">{clock(at)} / {clock(length)}</span>
+      <Button variant="outline" className="h-9 px-3" onClick={() => setSpeed(s => SPEEDS[(SPEEDS.indexOf(s) + 1) % SPEEDS.length] ?? 1)}>{speed}x</Button>
+    </div>
+  );
+}
+
+const STATUS_TEXT: Record<'processing' | 'failed' | 'deleted', string> = {
+  processing: "Saving the recording. It's ready about a minute after the call ends.",
+  failed: "This recording couldn't be saved.",
+  deleted: 'This recording was deleted.',
+};
+
+function LiveRecording() {
+  const { callId = '' } = useParams();
+  const navigate = useNavigate();
+  const toast = useToast();
+  const qc = useQueryClient();
+  const rec = useRecording(callId);
+  const history = useHistory('', '');
+  const recent = (history.data?.pages[0]?.calls ?? []).filter(c => c.recording === 'ready' || c.recording === 'processing').slice(0, 12);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const r = rec.data;
+
+  async function remove() {
+    setDeleting(true);
+    try {
+      await deleteRecording(callId);
+      await Promise.all([qc.invalidateQueries({ queryKey: ['history'] }), qc.invalidateQueries({ queryKey: recordingKeys.one(callId) })]);
+      toast('Recording deleted');
+      navigate('/history');
+    } catch (e) {
+      toast(errorText(e));
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  }
+
+  const name = r ? r.call.lead_name || prettyNumber(r.call.to) : '';
+  return (
+    <Page width={1240}>
+      <div className="grid items-start gap-3.5 lg:grid-cols-[260px_minmax(0,1fr)_340px] lg:gap-5">
+        <nav aria-label="Recent recordings" className="flex flex-col gap-1 max-lg:order-3">
+          <span className="px-3 pb-2 text-12 font-extrabold uppercase tracking-[.06em] text-faint">Recent</span>
+          {recent.map(c => (
+            <Link key={c.id} to={`/history/${c.id}`} aria-current={c.id === callId ? 'page' : undefined}
+              className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-ink no-underline hover:bg-surface aria-[current=page]:bg-surface aria-[current=page]:shadow-[0_1px_3px_rgba(0,0,0,.06)]">
+              <Avatar initials={initialsOf(c.lead?.name ?? '#')} tone={toneOf(c.lead?.id ?? c.id)} size={32} />
+              <span className="min-w-0 flex-1">
+                <b className="block truncate text-15">{c.lead?.name ?? prettyNumber(c.to)}</b>
+                <span className="text-13 text-muted">{isOutcome(c.outcome) ? `${OUTCOME_LABEL[c.outcome]} · ` : ''}{callLength(c.seconds)}</span>
+              </span>
+              <Icon name="play" size={15} className="text-faint" />
+            </Link>
+          ))}
+          {history.isSuccess && recent.length === 0 && <p className="px-3 text-13 text-muted">No other recordings yet.</p>}
+        </nav>
+
+        <div className="flex min-w-0 flex-col gap-3.5 max-lg:order-1">
+          {rec.isPending && <Card><p className="text-15 text-muted">Loading…</p></Card>}
+          {rec.isError && (
+            <Card className="flex flex-col items-start gap-2">
+              <p className="text-15 text-muted">{rec.error instanceof ApiError && rec.error.status === 404 ? 'This call has no recording.' : errorText(rec.error)}</p>
+              <Link to="/history" className={cn(linkClass, 'text-15')}>Back to History</Link>
+            </Card>
+          )}
+          {r && (
+            <Card as="section" aria-label="Recording">
+              <div className="flex flex-wrap items-center gap-3.5">
+                <Avatar initials={initialsOf(name)} tone={toneOf(r.call.lead_id ?? r.call_id)} size={52} />
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-24 font-extrabold tracking-[-0.03em]">{name}</h1>
+                  <p className="text-14 text-muted">
+                    {[r.call.lead_company, r.call.incoming ? 'called you' : '', whenLabel(r.call.started_at).toLowerCase(), callLength(r.call.seconds), callCost(r.call.cost_microdollars)]
+                      .filter(Boolean).join(' · ')}
+                  </p>
+                </div>
+                {isOutcome(r.call.outcome) && <Pill tone={OUTCOME_TONE[r.call.outcome]}>{OUTCOME_LABEL[r.call.outcome]}</Pill>}
+              </div>
+              {r.status === 'ready' && r.url
+                ? <AudioPlayer src={fileUrl(r.url)} total={r.seconds} onExpired={() => void rec.refetch()} />
+                : <p role="status" className="mt-4 text-15 text-muted">{STATUS_TEXT[r.status === 'ready' ? 'processing' : r.status]}</p>}
+              {r.call.note && <p className="mt-4 text-14 text-ink-2"><b>Your note:</b> {r.call.note}</p>}
+            </Card>
+          )}
+        </div>
+
+        {r && r.status !== 'deleted' && (
+          <div className="flex flex-col gap-3.5 max-lg:order-2">
+            <Card className="flex flex-col gap-2.5 p-[18px]">
+              {r.download_url
+                ? <a href={fileUrl(r.download_url)} download className={cn(buttonClass({ variant: 'outline' }), 'w-full')}>Download recording</a>
+                : <Button variant="outline" block disabled>Download recording</Button>}
+              <Button variant="outlineDanger" block onClick={() => setConfirmDelete(true)}>Delete recording</Button>
+              <p className="text-13 text-muted">{r.keep_until ? `Kept until ${dayMonth(r.keep_until.slice(0, 10))}, then deleted.` : 'Recordings are kept for 90 days.'}</p>
+            </Card>
+          </div>
+        )}
+      </div>
+
+      <Modal open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Delete this recording?" width="sm">
+        <p className="mt-2 text-15 text-muted">The recording of your call with {name} is removed for good. The call stays in your history.</p>
+        <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
+          <Button size="lg" onClick={() => setConfirmDelete(false)}>Keep it</Button>
+          <Button variant="danger" size="lg" disabled={deleting} onClick={() => void remove()}>Delete</Button>
+        </div>
+      </Modal>
+    </Page>
+  );
+}
+
 export default function Recording() {
+  return isLive() ? <LiveRecording /> : <DemoRecording />;
+}
+
+function DemoRecording() {
   const { plan } = usePlan();
   const navigate = useNavigate();
   const { callId } = useParams();

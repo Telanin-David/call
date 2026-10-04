@@ -58,6 +58,26 @@ fine for checking screens but is not the production plan.
 - [ ] A browser tab hidden for over 5 minutes checks in about once a minute
       (Chrome slows its timers), so the rep shows as away and call backs go
       to Follow-ups. Fine for a web app; the phone app (later) can use push.
+- [ ] Call recordings (Pro): with keys, check that `record_start` works on calls
+      placed from the browser phone and on call backs, that Telnyx sends
+      `call.recording.saved` to `/webhooks/telnyx`, and that the worker copies
+      the file within its 10-minute download window. Telnyx also keeps its
+      own copy: set its recording storage to delete them (or delete each after
+      the copy) so recordings only live in our storage.
+- [ ] File storage: create a private Cloudflare R2 bucket and an API token
+      for it, and set `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY` and
+      `S3_SECRET_KEY`. Without them, recording is off outside development.
+      R2 encrypts files at rest. The signing code was checked against AWS's
+      own library (botocore), not against R2 itself: try one upload, play,
+      download and delete. Run `cmd/worker`: it copies recordings and deletes
+      them after 90 days.
+- [ ] Decide whether recording costs reps extra. Today it is included in Pro
+      (Telnyx charges about $0.002/min, plus R2 storage).
+- [ ] Recording consent: the owner chose "the rep says it". Recording is off
+      until a Pro rep agrees in Settings to say "Just so you know, this call
+      may be recorded." at the start of every call, and the call screen shows
+      that line on every recorded call. The app can't check the rep said it.
+      Part of the lawyer's review (all-party consent states).
 - [ ] Confirm Telnyx's monthly price for a US/Canada local number. The
       `numbers.Cost` constant ($1.00) must match it: reps pay it × 1.5, and
       numbers that cost more are not offered.

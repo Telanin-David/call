@@ -85,9 +85,13 @@ export default function History() {
             <span className="tabular-nums max-lg:order-3 max-lg:text-13 max-lg:text-muted">{callLength(c.seconds)}</span>
             <span className="tabular-nums max-lg:order-2 max-lg:font-semibold">{callCost(c.cost_microdollars)}</span>
             <span aria-hidden="true" className="order-2 basis-full lg:hidden" />
-            {plan === 'pro'
-              ? <span className="flex items-center gap-1.5 text-13 text-faint max-lg:order-3 max-lg:ml-auto"><Icon name="play" size={14} /><span className="max-sm:sr-only">No recording yet</span></span>
-              : <Link to="/plans" className="flex items-center gap-1.5 text-13 text-faint no-underline max-lg:order-3 max-lg:ml-auto"><Icon name="lock" size={14} /><span className="max-sm:sr-only">Recording on Pro</span></Link>}
+            {c.recording === 'ready' || c.recording === 'processing'
+              ? <Link to={`/history/${c.id}`} className={cn(linkClass, 'flex items-center gap-1.5 text-13 max-lg:order-3 max-lg:ml-auto')}>
+                  <Icon name="play" size={14} /><span className="max-sm:sr-only">{c.recording === 'ready' ? 'Play recording' : 'Saving recording…'}</span>
+                </Link>
+              : plan === 'pro'
+                ? <span className="flex items-center gap-1.5 text-13 text-faint max-lg:order-3 max-lg:ml-auto"><Icon name="play" size={14} /><span className="max-sm:sr-only">No recording</span></span>
+                : <Link to="/plans" className="flex items-center gap-1.5 text-13 text-faint no-underline max-lg:order-3 max-lg:ml-auto"><Icon name="lock" size={14} /><span className="max-sm:sr-only">Recording on Pro</span></Link>}
           </ListRow>
         )) : rows.map(c => (
           <ListRow key={c.when + c.lead.id} cols={COLS}>

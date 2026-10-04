@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/telanin-david/call/services/api/internal/ledger"
+	"github.com/telanin-david/call/services/api/internal/plans"
 	"github.com/telanin-david/call/services/api/internal/platform"
 	"github.com/telanin-david/call/services/api/internal/rates"
 	"github.com/telanin-david/call/services/api/internal/telephony"
@@ -108,14 +109,117 @@ func (s *Service) HandleEvent(ctx context.Context, ev telephony.CallEvent) error
 			return fmt.Errorf("mark ringing: %w", err)
 		}
 	case telephony.EventAnswered:
-		_, err := s.DB.Exec(ctx, `
+		tag, err := s.DB.Exec(ctx, `
 			UPDATE calls SET status = 'answered', answered_at = $2, telnyx_call_id = COALESCE(telnyx_call_id, $3)
 			WHERE id = $1 AND status IN ('dialing', 'ringing')`, c.ID, ev.At, nullable(ev.CallControlID))
 		if err != nil {
 			return fmt.Errorf("mark answered: %w", err)
 		}
+		if tag.RowsAffected() == 1 {
+			ccid := c.ProviderID
+			if ccid == "" {
+				ccid = ev.CallControlID
+			}
+			s.startRecording(ctx, c, ccid)
+		}
 	case telephony.EventHangup:
 		return s.finish(ctx, c.ID, ev.At, ev.HangupCause)
+	case telephony.EventRecordingSaved:
+		if ev.RecordingURL == "" {
+			return nil
+		}
+		_, err := s.DB.Exec(ctx, `UPDATE recordings SET status = 'saved', source_url = $2, seconds = $3 WHERE call_id = $1 AND status = 'recording'`,
+			c.ID, ev.RecordingURL, ev.RecordingSeconds)
+		if err != nil {
+			return fmt.Errorf("mark recording saved: %w", err)
+		}
+	}
+	return nil
+}
+
+// startRecording records an answered call when the rep is on Pro and has
+// agreed to tell leads it may be recorded. If the provider can't start it,
+// the call goes on unrecorded.
+func (s *Service) startRecording(ctx context.Context, c Call, callControlID string) {
+	if !s.Recording || callControlID == "" {
+		return
+	}
+	on, err := RecordsCalls(ctx, s.DB, c.UserID)
+	if err != nil || !on {
+		if err != nil {
+			s.log().ErrorContext(ctx, "read recording setting", "call_id", c.ID, "err", err)
+		}
+		return
+	}
+	tag, err := s.DB.Exec(ctx, `INSERT INTO recordings (call_id, status) VALUES ($1, 'recording') ON CONFLICT (call_id) DO NOTHING`, c.ID)
+	if err != nil || tag.RowsAffected() == 0 {
+		if err != nil {
+			s.log().ErrorContext(ctx, "add recording", "call_id", c.ID, "err", err)
+		}
+		return
+	}
+	if err := s.Provider.StartRecording(ctx, callControlID); err != nil {
+		s.log().ErrorContext(ctx, "start recording", "call_id", c.ID, "err", err)
+		if _, err := s.DB.Exec(ctx, `DELETE FROM recordings WHERE call_id = $1 AND status = 'recording'`, c.ID); err != nil {
+			s.log().ErrorContext(ctx, "drop recording", "call_id", c.ID, "err", err)
+		}
+	}
+}
+
+// RecordsCalls is whether the rep's answered calls are recorded: Pro, and
+// they agreed to tell every lead.
+func RecordsCalls(ctx context.Context, q platform.Querier, userID string) (bool, error) {
+	var agreed bool
+	if err := q.QueryRow(ctx, `SELECT recording_agreed_at IS NOT NULL FROM users WHERE id = $1`, userID).Scan(&agreed); err != nil {
+		return false, fmt.Errorf("read recording setting: %w", err)
+	}
+	if !agreed {
+		return false, nil
+	}
+	sub, ok, err := plans.Current(ctx, q, userID)
+	if err != nil {
+		return false, err
+	}
+	return ok && sub.PlanID == plans.Pro, nil
+}
+
+// PlayFakeEvents delivers the fake provider's events (recordings saved
+// after a call) as if they were webhooks, through the same signature
+// check. Development only; it does nothing with a real provider.
+func (s *Service) PlayFakeEvents(ctx context.Context, every time.Duration) {
+	if _, ok := s.Provider.(*telephony.FakeCalls); !ok {
+		return
+	}
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		if err := s.DeliverFake(ctx); err != nil {
+			s.log().ErrorContext(ctx, "fake provider event", "err", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
+// DeliverFake sends the fake provider's waiting events now (tests, and
+// PlayFakeEvents).
+func (s *Service) DeliverFake(ctx context.Context) error {
+	fake, ok := s.Provider.(*telephony.FakeCalls)
+	if !ok {
+		return nil
+	}
+	for _, ev := range fake.Sent() {
+		body, h := fake.Event(ev)
+		parsed, err := fake.ParseEvent(h, body, ev.At)
+		if err == nil {
+			err = s.HandleEvent(ctx, parsed)
+		}
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

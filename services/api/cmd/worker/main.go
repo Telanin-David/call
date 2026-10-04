@@ -14,6 +14,8 @@ import (
 	"github.com/telanin-david/call/services/api/internal/numbers"
 	"github.com/telanin-david/call/services/api/internal/plans"
 	"github.com/telanin-david/call/services/api/internal/platform"
+	"github.com/telanin-david/call/services/api/internal/recordings"
+	"github.com/telanin-david/call/services/api/internal/storage"
 	"github.com/telanin-david/call/services/api/internal/telephony"
 )
 
@@ -25,9 +27,13 @@ const renewEvery = time.Hour
 // up at the provider.
 const idCheckEvery = 5 * time.Minute
 
-// worker handles background jobs. Today: plan and number renewals, and ID
-// checks the provider never called back about. Later:
-// transcripts, summaries, emails, cleanup.
+// recordingsEvery is how often new recordings are copied into storage. The
+// provider's download links work for about 10 minutes.
+const recordingsEvery = 10 * time.Second
+
+// worker handles background jobs: plan and number renewals, ID checks the
+// provider never called back about, copying call recordings into storage
+// and deleting them after 90 days. Later: transcripts, summaries, emails.
 func main() {
 	cfg := platform.MustLoadConfig()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -50,6 +56,7 @@ func main() {
 	renewals := &plans.Service{DB: db, Mail: mail, Log: logger}
 	numberRenewals := &numbers.Service{DB: db, Provider: telephony.NumbersFromConfig(cfg), Mail: mail, Log: logger}
 	idChecks := &kyc.Service{DB: db, Provider: kyc.FromConfig(cfg), Mail: mail, Log: logger}
+	recs := &recordings.Service{DB: db, Provider: telephony.CallsFromConfig(cfg), Store: storage.FromConfig(cfg), Log: logger}
 
 	slog.Info("worker started")
 	if _, real := idChecks.Provider.(kyc.SmileID); real {
@@ -61,6 +68,24 @@ func main() {
 					slog.Error("id checks", "err", err)
 				} else if n > 0 {
 					slog.Info("id checks", "looked_up", n)
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+				}
+			}
+		}()
+	}
+	if recs.Store != nil && recs.Provider != nil {
+		go func() {
+			t := time.NewTicker(recordingsEvery)
+			defer t.Stop()
+			for {
+				if n, err := recs.CopyPending(ctx); err != nil {
+					slog.Error("copy recordings", "err", err)
+				} else if n > 0 {
+					slog.Info("recordings copied", "count", n)
 				}
 				select {
 				case <-ctx.Done():
@@ -83,6 +108,11 @@ func main() {
 			slog.Error("number renewals", "err", err)
 		} else {
 			slog.Info("number renewals", "renewed", nres.Renewed, "warned", nres.Warned, "released", nres.Released)
+		}
+		if n, err := recs.Expire(ctx); err != nil {
+			slog.Error("old recordings", "err", err)
+		} else if n > 0 {
+			slog.Info("old recordings deleted", "count", n)
 		}
 		select {
 		case <-ctx.Done():

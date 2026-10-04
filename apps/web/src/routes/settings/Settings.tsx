@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Button, Card, CardHead, DarkCard, DarkEyebrow, Field, Icon, Input, LinkButton, Modal, Note, Pill, Select, cn, linkClass, useToast, type IconName } from '@dialer/ui';
+import { Button, Card, CardHead, Checkbox, DarkCard, DarkEyebrow, Field, Icon, Input, LinkButton, Modal, Note, Pill, Select, cn, linkClass, useToast, type IconName } from '@dialer/ui';
+import { useQueryClient } from '@tanstack/react-query';
 import { usePlan, PLAN_LABEL } from '@/lib/plan';
 import { useSimStore } from '@/lib/sim';
 import { BALANCE, ME } from '@/lib/fake';
@@ -13,6 +14,7 @@ import { dayBefore, dayMonth, dayMonthYear } from '@/lib/dates';
 import { prettyNumber, useMyNumbers, useNumberAction, type RentedNumber } from '@/lib/numbers';
 import { useVerification, type Verification } from '@/lib/verification';
 import { GAPS, autodialGap, setAutodialGap } from '@/lib/calling';
+import { RECORDING_NOTICE, recordingKeys, setRecording, useRecordingSetting } from '@/lib/recordings';
 
 type Section = 'profile' | 'billing' | 'numbers' | 'calling' | 'verify' | 'rules';
 
@@ -62,6 +64,64 @@ const VERIFY_STATUS: Record<Verification['status'], string> = {
 const SECTIONS = new Set<Section>(['profile', 'billing', 'numbers', 'calling', 'verify', 'rules']);
 
 interface Edit { label: string; value: string; options?: string[]; secret?: boolean }
+
+/**
+ * Pro: call recording, off until the rep agrees to tell every lead at the
+ * start that the call may be recorded (some US states need everyone on a
+ * call to agree).
+ */
+function RecordingRow({ plan }: { plan: string }) {
+  const live = isLive();
+  const navigate = useNavigate();
+  const toast = useToast();
+  const qc = useQueryClient();
+  const setting = useRecordingSetting(plan === 'pro');
+  const [demoOn, setDemoOn] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [agreed, setAgreed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const on = live ? setting.data?.on ?? false : demoOn;
+
+  async function turn(next: boolean) {
+    if (!live) { setDemoOn(next); setAsking(false); return; }
+    setBusy(true);
+    try {
+      qc.setQueryData(recordingKeys.setting, await setRecording(next, next && agreed));
+      void qc.invalidateQueries({ queryKey: ['queue'] });
+      setAsking(false);
+      toast(next ? 'Recording is on' : 'Recording is off');
+    } catch (e) {
+      toast(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (plan !== 'pro') return <Kv label="Call recording" action="See Pro" onAction={() => navigate('/plans')}>Part of Pro</Kv>;
+  if (live && setting.data && !setting.data.available) return <Kv label="Call recording">Not available yet</Kv>;
+  return (
+    <>
+      <Kv label="Call recording" action={on ? 'Turn off' : 'Turn on'} onAction={() => { if (on) void turn(false); else { setAgreed(false); setAsking(true); } }}>
+        {on ? 'On · you tell every lead first' : 'Off'}
+      </Kv>
+      <Modal open={asking} onClose={() => setAsking(false)} title="Record your calls?" width="sm">
+        <p className="mt-2 text-15 text-muted">
+          Some US states, like California and Florida, need everyone on a call to agree to it being recorded.
+          So every recorded call starts with you saying:
+        </p>
+        <p className="mt-3 rounded-md bg-sunk px-3.5 py-2.5 text-15 font-semibold">“{RECORDING_NOTICE}”</p>
+        <p className="mt-3 text-14 text-muted">Your script shows this line on every call. Recordings are kept for 90 days, and you can delete one at any time.</p>
+        <Checkbox className="mt-4" checked={agreed} onChange={e => setAgreed(e.target.checked)}>
+          I'll tell every lead at the start of the call that it may be recorded.
+        </Checkbox>
+        <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
+          <Button size="lg" onClick={() => setAsking(false)}>Not now</Button>
+          <Button variant="primary" size="lg" disabled={!agreed || busy} onClick={() => void turn(true)}>Turn on recording</Button>
+        </div>
+      </Modal>
+    </>
+  );
+}
 
 const OUT_FROM = ['The number closest to the lead. If none is close, your default.', 'Always your default number'];
 
@@ -306,6 +366,7 @@ export default function Settings() {
             {plan === 'free'
               ? <Kv label="Auto-dial gap">Tap to call on Free</Kv>
               : <Kv label="Auto-dial gap" action="Change" onAction={change('Auto-dial gap', gapLabel, { options: GAPS.map(g => `${g} seconds after you pick a result`) })}>{v('Auto-dial gap', gapLabel)}</Kv>}
+            <RecordingRow plan={plan} />
           </Section>
         )}
 
