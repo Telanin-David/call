@@ -28,7 +28,6 @@ export function LeadPeek({ peek, lead, tag, actions, onClose, onEnter, onLeave }
 }) {
   const box = useRef<HTMLDivElement>(null);
   const d = DETAILS[lead.id];
-  const pronoun = lead.pronoun === 'her' ? 'Her' : 'His';
 
   useEffect(() => {
     function onDown(e: MouseEvent) {
@@ -44,7 +43,7 @@ export function LeadPeek({ peek, lead, tag, actions, onClose, onEnter, onLeave }
 
   const rows: [string, string][] = [
     ['Phone', d?.phone ?? '—'],
-    [`${pronoun} time`, d ? `${d.localTime}, ${d.location.split(',')[0] ?? ''}` : '—'],
+    ['Their time', d ? `${d.localTime}, ${d.location.split(',')[0] ?? ''}` : '—'],
     ['Calls so far', String(Math.max(0, (d?.attempt ?? 1) - 1))],
     ['Last time', d?.lastCall ? `${RESULT_LABEL[d.lastCall.result]}, ${d.lastCall.date}` : 'Not called yet'],
   ];

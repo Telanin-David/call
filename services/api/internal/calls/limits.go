@@ -139,7 +139,7 @@ func outsideHours(name, herTime string) *Blocked {
 	if herTime != "" {
 		title = "It's " + herTime + " for " + name
 	}
-	return &Blocked{http.StatusForbidden, errHours.Code, title, "Call between 8 am and 9 pm her time. Try the next lead.", "skip"}
+	return &Blocked{http.StatusForbidden, errHours.Code, title, "Call between 8 am and 9 pm their time. Try the next lead.", "skip"}
 }
 
 func noRate(name string) *Blocked {

@@ -16,9 +16,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/telanin-david/call/services/api/internal/ledger"
 	"github.com/telanin-david/call/services/api/internal/phone"
 	"github.com/telanin-david/call/services/api/internal/platform"
 )
@@ -339,18 +339,32 @@ func (s *Service) Delete(ctx context.Context, userID, listID string) error {
 	if !uuidRE.MatchString(listID) {
 		return ErrListNotFound
 	}
-	tag, err := s.DB.Exec(ctx, `DELETE FROM lead_lists WHERE id = $1 AND user_id = $2`, listID, userID)
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-		return ErrListHasCalls
-	}
-	if err != nil {
-		return fmt.Errorf("delete list: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return ErrListNotFound
-	}
-	return nil
+	return platform.InTx(ctx, s.DB, func(tx pgx.Tx) error {
+		// The same lock a call takes to start, so no call starts on this
+		// list while it goes.
+		if err := ledger.Lock(ctx, tx, userID); err != nil {
+			return err
+		}
+		var exists, onCall bool
+		if err := tx.QueryRow(ctx, `
+			SELECT EXISTS (SELECT 1 FROM lead_lists WHERE id = $1 AND user_id = $2),
+			       EXISTS (SELECT 1 FROM calls c JOIN leads l ON l.id = c.lead_id
+			               WHERE l.list_id = $1 AND c.user_id = $2 AND c.status <> 'ended')`, listID, userID).Scan(&exists, &onCall); err != nil {
+			return fmt.Errorf("check list: %w", err)
+		}
+		if !exists {
+			return ErrListNotFound
+		}
+		if onCall {
+			return ErrListOnCall
+		}
+		// Leads go with the list, and their follow-ups with them. Calls stay
+		// in history, without the link to the lead.
+		if _, err := tx.Exec(ctx, `DELETE FROM lead_lists WHERE id = $1 AND user_id = $2`, listID, userID); err != nil {
+			return fmt.Errorf("delete list: %w", err)
+		}
+		return nil
+	})
 }
 
 // AddDNC puts a number on the rep's do-not-call list. Adding it twice is fine.

@@ -37,7 +37,7 @@ var (
 	ErrNothingToAdd   = unprocessable("nothing_to_add", "None of these rows can be added. See the rows left out.")
 	ErrBadListName    = unprocessable("invalid_name", "Give the list a name, up to 80 characters.")
 	ErrListNotFound   = &Error{http.StatusNotFound, "list_not_found", "That list doesn't exist."}
-	ErrListHasCalls   = &Error{http.StatusConflict, "list_has_calls", "You've called leads on this list, so it's kept for your history."}
+	ErrListOnCall     = &Error{http.StatusConflict, "list_on_call", "You're on a call with someone on this list. Delete it after the call."}
 )
 
 func badCSV(line int) *Error {

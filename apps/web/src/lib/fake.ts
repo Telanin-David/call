@@ -30,25 +30,24 @@ export interface Lead {
   initials: string;
   tone: AvatarTone;
   company: string;
-  pronoun: 'her' | 'his';
 }
 
-const lead = (id: string, name: string, tone: AvatarTone, company: string, pronoun: Lead['pronoun']): Lead => ({
-  id, name, tone, company, pronoun,
+const lead = (id: string, name: string, tone: AvatarTone, company: string): Lead => ({
+  id, name, tone, company,
   initials: name.split(' ').map(p => p[0]).join(''),
 });
 
 export const LEADS = {
-  lena: lead('lena', 'Lena Park', 'c', 'Sparkle Offices', 'her'),
-  mark: lead('mark', 'Mark Reyes', 'b', 'Reyes Home Care', 'his'),
-  kwame: lead('kwame', 'Kwame Mensah', 'a', 'Mensah Facility', 'his'),
-  sara: lead('sara', 'Sara Kim', 'b', 'Kim Dental Group', 'her'),
-  dan: lead('dan', 'Dan White', 'd', 'White Law LLP', 'his'),
-  tom: lead('tom', 'Tom Allen', 'e', 'Allen Janitorial', 'his'),
-  ada: lead('ada', 'Ada Obi', 'a', 'Obi Cleaning Co', 'her'),
-  rosa: lead('rosa', 'Rosa Diaz', 'd', 'Diaz Maids', 'her'),
-  jade: lead('jade', 'Jade Moore', 'e', 'Moore Cleaning', 'her'),
-  ben: lead('ben', 'Ben Ortiz', 'c', 'Ortiz Pro Clean', 'his'),
+  lena: lead('lena', 'Lena Park', 'c', 'Sparkle Offices'),
+  mark: lead('mark', 'Mark Reyes', 'b', 'Reyes Home Care'),
+  kwame: lead('kwame', 'Kwame Mensah', 'a', 'Mensah Facility'),
+  sara: lead('sara', 'Sara Kim', 'b', 'Kim Dental Group'),
+  dan: lead('dan', 'Dan White', 'd', 'White Law LLP'),
+  tom: lead('tom', 'Tom Allen', 'e', 'Allen Janitorial'),
+  ada: lead('ada', 'Ada Obi', 'a', 'Obi Cleaning Co'),
+  rosa: lead('rosa', 'Rosa Diaz', 'd', 'Diaz Maids'),
+  jade: lead('jade', 'Jade Moore', 'e', 'Moore Cleaning'),
+  ben: lead('ben', 'Ben Ortiz', 'c', 'Ortiz Pro Clean'),
 } satisfies Record<string, Lead>;
 
 export interface Followup {
@@ -61,10 +60,10 @@ export interface Followup {
 
 export const FOLLOWUPS_TODAY: Followup[] = [
   { lead: LEADS.dan, when: 'Missed call', due: '9:12 am', note: 'Called your number back. No message.', result: 'missed' },
-  { lead: LEADS.lena, when: '3:30 pm her time', due: 'in 2 h', note: 'Wanted a call after 3 pm. Unhappy with her Friday cleaner.', result: 'callback' },
-  { lead: LEADS.mark, when: '4:00 pm his time', due: 'in 3 h', note: 'Asked for prices by email first. Sent Monday.', result: 'interested' },
-  { lead: LEADS.kwame, when: '5:15 pm his time', due: 'in 4 h', note: 'Decision maker back from leave this week.', result: 'callback' },
-  { lead: LEADS.sara, when: '6:00 pm her time', due: 'in 6 h', note: 'Two offices. Wants weekend cleaning.', result: 'interested' },
+  { lead: LEADS.lena, when: '3:30 pm their time', due: 'in 2 h', note: 'Wanted a call after 3 pm. Unhappy with her Friday cleaner.', result: 'callback' },
+  { lead: LEADS.mark, when: '4:00 pm their time', due: 'in 3 h', note: 'Asked for prices by email first. Sent Monday.', result: 'interested' },
+  { lead: LEADS.kwame, when: '5:15 pm their time', due: 'in 4 h', note: 'Decision maker back from leave this week.', result: 'callback' },
+  { lead: LEADS.sara, when: '6:00 pm their time', due: 'in 6 h', note: 'Two offices. Wants weekend cleaning.', result: 'interested' },
 ];
 
 export interface CallRecord {

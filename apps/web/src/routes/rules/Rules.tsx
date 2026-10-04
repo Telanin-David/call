@@ -8,7 +8,7 @@ const RULES: { icon: IconName; tone: TileTone; title: string; body: string }[] =
   { icon: 'shield', tone: 'mint', title: 'New accounts have limits', body: 'Until you verify your ID, Free accounts get fewer dials each month, down to 10 a day from month 3. Starter gets 120. Verifying removes these limits.' },
   { icon: 'call', tone: 'lemon', title: 'Each number, 3 tries', body: "You can call the same number 3 times. After that it is blocked for you, so leads aren't pestered." },
   { icon: 'ban', tone: 'red', title: 'Some numbers are never called', body: 'Premium-rate numbers and anyone on the do-not-call list. We skip them and you are never charged.' },
-  { icon: 'clock', tone: 'grey', title: 'Call at decent hours', body: "Only call between 8 am and 9 pm in the lead's time. The dial screen shows her time so you can check." },
+  { icon: 'clock', tone: 'grey', title: 'Call at decent hours', body: "Only call between 8 am and 9 pm in the lead's time. The dial screen shows their time so you can check." },
   { icon: 'globe', tone: 'brand', title: 'Calls outside the US and Canada', body: 'Every country has its own price. New accounts can spend up to $3 a day on these until ID is verified.' },
   { icon: 'wallet', tone: 'mint', title: 'Everything is prepaid', body: 'Calls, numbers and plans come out of your balance. No balance, no calls. You are never billed later.' },
   { icon: 'lock', tone: 'grey', title: 'Breaking the rules', body: 'We may pause or close the account. Serious cases, like calling the do-not-call list on purpose, are closed straight away.' },

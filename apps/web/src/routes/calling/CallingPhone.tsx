@@ -90,7 +90,7 @@ function DetailsSheet({ s, open, onClose }: { s: CallSession; open: boolean; onC
     { icon: 'call', tone: 'bg-success', main: detail.phone, sub: 'Phone' },
     { icon: 'mail', tone: 'bg-blue-600', main: detail.email, sub: 'Email' },
     { icon: 'pin', tone: 'bg-tangerine', main: detail.location, sub: 'Location' },
-    { icon: 'clock', tone: 'bg-night', main: `${detail.localTime} ${lead.pronoun} time`, sub: '8:14 pm your time' },
+    { icon: 'clock', tone: 'bg-night', main: `${detail.localTime} their time`, sub: '8:14 pm your time' },
     { icon: 'building', tone: 'bg-violet-500', main: detail.companyNote, sub: detail.website },
   ];
   return (
@@ -180,7 +180,7 @@ function ReadyView({ s }: { s: CallSession }) {
       {s.lead && (
         <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-3.5">
           <Avatar initials={s.lead.initials} tone={s.lead.tone} size={40} />
-          <span className="min-w-0 flex-1"><b className="block text-16">{s.lead.name}</b><span className="text-13 text-muted">{s.lead.company} · {s.detail?.localTime} {s.lead.pronoun} time</span></span>
+          <span className="min-w-0 flex-1"><b className="block text-16">{s.lead.name}</b><span className="text-13 text-muted">{s.lead.company} · {s.detail?.localTime} their time</span></span>
           <Pill>Up first</Pill>
         </div>
       )}
@@ -231,7 +231,7 @@ function LiveView({ s }: { s: CallSession }) {
           <Avatar initials={lead.initials} tone={lead.tone} size={40} />
           <div className="min-w-0 flex-1">
             <h1 className="text-20 font-bold">{lead.name}</h1>
-            <p className="text-13 text-zinc-400">{lead.company} · {detail.localTime} {lead.pronoun} time</p>
+            <p className="text-13 text-zinc-400">{lead.company} · {detail.localTime} their time</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-1.5 text-12 font-bold">

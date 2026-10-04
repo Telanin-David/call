@@ -156,7 +156,7 @@ export default function CallingDesk({ s }: { s: CallSession }) {
             <div className={detailsOpen ? 'min-w-[150px] flex-1' : 'min-w-0 flex-1'}>
               <h1 className={cn('font-semibold tracking-[-0.03em]', detailsOpen ? 'text-22 sm:text-26' : 'text-20')}>{lead.name}</h1>
               <p className={cn('pt-0.5 text-13 text-muted', !detailsOpen && 'truncate')}>
-                {detail.title}, {lead.company}{!detailsOpen && <> · {detail.localTime} {lead.pronoun} time</>}
+                {detail.title}, {lead.company}{!detailsOpen && <> · {detail.localTime} their time</>}
               </p>
             </div>
             {detail.lastCall && <Pill tone="success"><Icon name="up" size={14} />{RESULT_LABEL[detail.lastCall.result]} last time</Pill>}
@@ -240,7 +240,7 @@ export default function CallingDesk({ s }: { s: CallSession }) {
           </div>
           <CallTimer seconds={seconds} idle={!live} />
           <CallFacts items={[
-            { label: `${lead.pronoun === 'her' ? 'Her' : 'His'} time`, value: detail.localTime },
+            { label: 'Their time', value: detail.localTime },
             { label: 'Your time', value: '8:14 pm' },
             live ? { label: 'This call', value: formatUsd3(cost), hot: true } : { label: 'Balance', value: formatUsd(BALANCE) },
           ]} />
@@ -323,7 +323,6 @@ export default function CallingDesk({ s }: { s: CallSession }) {
       <PairDialog open={phase === 'pairing'} onCancel={() => setPhase('ready')} onChange={() => { setTalkVia('computer'); setPhase('ready'); }} />
       {peek && queue[peek.index] && (() => {
         const q = queue[peek.index]!;
-        const him = q.lead.pronoun === 'her' ? 'her' : 'him';
         const first = q.lead.name.split(' ')[0] ?? q.lead.name;
         const done = () => setPeek(null);
         let tag = 'In list';
@@ -332,7 +331,7 @@ export default function CallingDesk({ s }: { s: CallSession }) {
         else if (live && !free) {
           tag = peek.index === nextOpen(current) ? 'Next' : 'In queue';
           actions = [
-            { label: `Skip ${him}`, onClick: () => { skip(peek.index); done(); } },
+            { label: 'Skip', onClick: () => { skip(peek.index); done(); } },
             { label: 'Call next', primary: true, onClick: () => { setNextPick(peek.index); done(); } },
           ];
         } else if (!live && free) {
@@ -340,7 +339,7 @@ export default function CallingDesk({ s }: { s: CallSession }) {
         } else if (!live) {
           tag = 'In queue';
           actions = [
-            { label: `Skip ${him}`, onClick: () => { skip(peek.index); done(); } },
+            { label: 'Skip', onClick: () => { skip(peek.index); done(); } },
             { label: 'Call first', primary: true, onClick: () => { setCurrent(peek.index); done(); } },
           ];
         }

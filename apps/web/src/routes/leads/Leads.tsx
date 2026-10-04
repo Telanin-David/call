@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Icon, List, ListRow, Note, PageHeader, Pill, Progress, Tile, type PillTone } from '@dialer/ui';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Button, Icon, List, ListRow, Modal, Note, PageHeader, Pill, Progress, Tile, useToast, type PillTone } from '@dialer/ui';
 import { Page } from '@/components/Page';
-import { errorText } from '@/lib/api';
+import { activityKeys } from '@/lib/activity';
+import { api, errorText } from '@/lib/api';
 import { isLive } from '@/lib/backend';
-import { useLists, type LeadList } from '@/lib/leads';
+import { leadKeys, useLists, type LeadList } from '@/lib/leads';
 
 type Status = LeadList['status'];
 
@@ -27,14 +30,28 @@ function toRow(l: LeadList): Row {
   return { id: l.id, name: l.name, total: l.lead_count, called: l.called_count, followups: l.followup_count, script: l.script?.name ?? 'No script yet', status: l.status };
 }
 
-const COLS = 'grid-cols-[minmax(0,1fr)_200px_220px_150px_120px]';
+const COLS = 'grid-cols-[minmax(0,1fr)_200px_220px_150px_196px]';
 
 export default function Leads() {
   const live = isLive();
   const navigate = useNavigate();
+  const qc = useQueryClient();
+  const toast = useToast();
   const lists = useLists();
-  const rows = live ? (lists.data?.lists ?? []).map(toRow) : DEMO;
-  const empty = live && lists.isSuccess && rows.length === 0;
+  const [hidden, setHidden] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState<Row | null>(null);
+  const rows = (live ? (lists.data?.lists ?? []).map(toRow) : DEMO).filter(r => !hidden.includes(r.id));
+  const empty = (live ? lists.isSuccess : true) && rows.length === 0;
+
+  const remove = useMutation({
+    mutationFn: (r: Row) => (live ? api.delete<void>(`/lists/${r.id}`) : Promise.resolve()),
+    onSuccess: async (_, r) => {
+      setDeleting(null);
+      if (live) await Promise.all([leadKeys.lists, activityKeys.today, ['followups'], ['history']].map(queryKey => qc.invalidateQueries({ queryKey })));
+      else setHidden(h => [...h, r.id]);
+      toast(`${r.name} deleted`);
+    },
+  });
 
   return (
     <Page width={1200}>
@@ -68,15 +85,31 @@ export default function Leads() {
                 <Progress value={l.total ? (l.called / l.total) * 100 : 0} label={`${l.name} progress`} />
               </div>
               <Pill tone={STATUS[l.status].tone} className="max-lg:mr-auto">{STATUS[l.status].label}</Pill>
-              {l.status === 'done'
-                ? <Button variant="outline" className="h-[38px]" onClick={() => navigate('/history')}>Open</Button>
-                : <Button variant="primary" className="h-[38px]" onClick={() => navigate('/call')}>Call list</Button>}
+              <div className="flex items-center gap-1.5 lg:justify-end">
+                {l.status === 'done'
+                  ? <Button variant="outline" className="h-[38px]" onClick={() => navigate('/history')}>Open</Button>
+                  : <Button variant="primary" className="h-[38px]" onClick={() => navigate(`/call?list=${l.id}`)}>Call list</Button>}
+                <Button variant="quiet" className="h-[38px] text-danger-ink" aria-label={`Delete ${l.name}`} onClick={() => { remove.reset(); setDeleting(l); }}>Delete</Button>
+              </div>
             </ListRow>
           ))}
         </List>
       )}
 
       <p className="flex items-start gap-3 text-13 text-muted"><Icon name="ban" size={15} className="mt-0.5 flex-none" />Numbers on the do-not-call list are removed when you upload, and you're never charged for them.</p>
+
+      <Modal open={deleting !== null} onClose={() => setDeleting(null)} title={`Delete ${deleting?.name ?? 'this list'}?`} width="sm">
+        <p className="mt-2 text-15 text-muted">
+          {deleting ? `Its ${deleting.total} ${deleting.total === 1 ? 'lead' : 'leads'}` : 'Its leads'} and their follow-ups are removed for good.
+          {deleting && deleting.called > 0 && ' Calls you already made stay in your history.'}
+        </p>
+        <p className="mt-2 text-13 text-muted">Numbers you already called 3 times, or marked do not call, stay blocked if you upload them again.</p>
+        {remove.isError && <Note tone="danger" className="mt-3 text-14"><Icon name="wrong" size={16} /><span role="alert">{errorText(remove.error)}</span></Note>}
+        <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
+          <Button size="lg" onClick={() => setDeleting(null)}>Keep it</Button>
+          <Button variant="danger" size="lg" disabled={remove.isPending} onClick={() => deleting && remove.mutate(deleting)}>Delete list</Button>
+        </div>
+      </Modal>
     </Page>
   );
 }

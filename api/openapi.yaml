@@ -726,7 +726,7 @@ paths:
   /lists/{listId}:
     delete:
       tags: [lists]
-      summary: Delete a list and its leads (refused once any lead was called)
+      summary: Delete a list, its leads and their follow-ups (calls stay in history; refused during a call to one of its leads)
       operationId: deleteLeadList
       parameters:
         - name: listId
