@@ -2,8 +2,15 @@ package telephony
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"strconv"
 	"sync"
+	"time"
 )
 
 // FakeNumbers stands in for the provider in tests and in development
@@ -74,4 +81,74 @@ func (f *FakeNumbers) Release(_ context.Context, e164 string) error {
 	delete(f.Owned, e164)
 	f.Released = append(f.Released, e164)
 	return nil
+}
+
+// FakeCalls stands in for the provider's voice side. Its events are shaped
+// and signed exactly like Telnyx's (ed25519), so the same checks run on
+// them as on real ones.
+type FakeCalls struct {
+	mu   sync.Mutex
+	key  ed25519.PrivateKey
+	n    int
+	Hung []string // call control ids hung up, in order
+	Fail bool
+}
+
+// NewFakeCalls makes a fake with its own signing key.
+func NewFakeCalls() *FakeCalls {
+	_, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		panic(err)
+	}
+	return &FakeCalls{key: key}
+}
+
+func (f *FakeCalls) Login(_ context.Context, userID, credentialID string) (string, string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Fail {
+		return "", "", ErrProvider
+	}
+	if credentialID == "" {
+		credentialID = "fake-cred-" + userID
+	}
+	f.n++
+	return fmt.Sprintf("fake-token-%d", f.n), credentialID, nil
+}
+
+func (f *FakeCalls) Hangup(_ context.Context, callControlID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Fail {
+		return ErrProvider
+	}
+	f.Hung = append(f.Hung, callControlID)
+	return nil
+}
+
+func (f *FakeCalls) ParseEvent(h http.Header, body []byte, now time.Time) (CallEvent, error) {
+	return parseTelnyxEvent(f.key.Public().(ed25519.PublicKey), h, body, now)
+}
+
+// Event builds a signed webhook for e, as Telnyx would send it at e.At.
+func (f *FakeCalls) Event(e CallEvent) ([]byte, http.Header) {
+	f.mu.Lock()
+	f.n++
+	id := fmt.Sprintf("fake-event-%d", f.n)
+	f.mu.Unlock()
+	if e.ID != "" {
+		id = e.ID
+	}
+	body, _ := json.Marshal(map[string]any{"data": map[string]any{
+		"id": id, "event_type": string(e.Type), "occurred_at": e.At.UTC().Format(time.RFC3339Nano),
+		"payload": map[string]string{
+			"call_control_id": e.CallControlID, "client_state": base64.StdEncoding.EncodeToString([]byte(e.ClientState)),
+			"from": e.From, "to": e.To, "hangup_cause": e.HangupCause,
+		},
+	}})
+	ts := strconv.FormatInt(e.At.Unix(), 10)
+	h := http.Header{}
+	h.Set("Telnyx-Timestamp", ts)
+	h.Set("Telnyx-Signature-Ed25519", base64.StdEncoding.EncodeToString(ed25519.Sign(f.key, []byte(ts+"|"+string(body)))))
+	return body, h
 }

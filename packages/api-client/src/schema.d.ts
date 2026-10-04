@@ -574,8 +574,51 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start a call */
+        /**
+         * Check every calling rule, hold the first minute and start a call
+         * @description The server checks, in this order: do-not-call, premium-rate, 3 tries
+         *     per number, calling hours (8 am–9 pm the lead's time), the daily dial
+         *     limit, a rate for the country, the daily cap abroad before the ID
+         *     check, a number to call from, and money for the first minute. A "no"
+         *     comes back as a Blocked body (board 34). Nothing is charged until the
+         *     lead answers; the browser then dials with `token`, attaching
+         *     `client_state` so the provider's events find this call.
+         */
         post: operations["startCall"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calls/{callId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A call's state, cost so far and outcome */
+        get: operations["getCall"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calls/{callId}/hangup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** End a call */
+        post: operations["hangupCall"];
         delete?: never;
         options?: never;
         head?: never;
@@ -591,25 +634,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Save call outcome */
+        /** Save how an ended call went; saving again replaces it (Undo) */
         post: operations["saveOutcome"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/calls/{callId}/end": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** End a call early */
-        post: operations["endCall"];
         delete?: never;
         options?: never;
         head?: never;
@@ -796,7 +822,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Telnyx call events webhook */
+        /**
+         * Telnyx call events (call.initiated, call.answered, call.hangup)
+         * @description The ed25519 signature (telnyx-signature-ed25519 over
+         *     "telnyx-timestamp|body", within 5 minutes) is checked before anything
+         *     else. Calls the server didn't start, or dialled to another number,
+         *     are hung up at once.
+         */
         post: operations["telnyxWebhook"];
         delete?: never;
         options?: never;
@@ -1210,32 +1242,74 @@ export interface components {
             /** @description Exactly the lists that use the script after saving. Leave out to keep them as they are. */
             list_ids?: string[];
         };
-        StartCallRequest: {
+        /** @description Why a call can't start or an action failed, in the rep's words (board 34) */
+        Blocked: {
+            /** @description daily_limit, low_balance, three_tries, do_not_call, premium, calling_hours, no_rate, abroad_cap, no_number, on_a_call, suspended, lead_not_found, … */
+            code: string;
+            title: string;
+            /** @description The message under the title */
+            error: string;
+            /** @enum {string} */
+            action: "" | "top_up" | "skip" | "verify_id" | "upgrade" | "get_number";
+        };
+        StartedCall: {
+            /** Format: uuid */
+            call_id: string;
             /** Format: uuid */
             lead_id: string;
-            /** Format: uuid */
-            from_number_id: string;
-            /**
-             * @default laptop
-             * @enum {string}
-             */
-            device: "laptop" | "phone" | "linked";
+            lead_name: string;
+            /** @description The rep's number the lead sees (closest to the lead, else the default) */
+            from: string;
+            to: string;
+            /** Format: int64 */
+            price_per_minute_microdollars: number;
+            /** Format: int64 */
+            held_microdollars: number;
+            /** @description Signs the browser phone in */
+            token: string;
+            /** @description Attach to the call; only this browser knows it */
+            client_state: string;
+            /** @description IANA zone for "her time"; empty when unknown */
+            her_time_zone: string;
         };
-        StartCallResponse: {
+        Call: {
             /** Format: uuid */
-            call_id?: string;
-            telnyx_token?: string;
-            telnyx_call_id?: string;
+            id: string;
+            /** Format: uuid */
+            lead_id: string | null;
+            from: string;
+            to: string;
+            /** @enum {string} */
+            status: "dialing" | "ringing" | "answered" | "ended";
+            /** Format: int64 */
+            price_per_minute_microdollars: number;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            answered_at: string | null;
+            /** Format: date-time */
+            ended_at: string | null;
+            seconds: number;
+            /** Format: int64 */
+            cost_microdollars: number;
+            /** @description The balance can't cover the next minute; the call ends in under 30 seconds */
+            low_balance: boolean;
+            /** @enum {string|null} */
+            outcome: "interested" | "callback" | "not_interested" | "no_answer" | "wrong_number" | "do_not_call" | null;
+            note: string;
         };
         OutcomeRequest: {
             /**
-             * @description 1=interested, 2=callback, 3=not interested, 4=voicemail, 5=no answer, 6=wrong number
+             * @description Keys 1 to 6 on the call screen, in this order
              * @enum {string}
              */
-            outcome: "1" | "2" | "3" | "4" | "5" | "6";
+            outcome: "interested" | "callback" | "not_interested" | "no_answer" | "wrong_number" | "do_not_call";
             note?: string;
-            /** Format: date-time */
-            followup_at?: string | null;
+            /**
+             * Format: date-time
+             * @description Books a follow-up (not with do_not_call or wrong_number); within a year
+             */
+            follow_up_at?: string | null;
         };
         Followup: {
             /** Format: uuid */
@@ -2321,21 +2395,120 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["StartCallRequest"];
+                "application/json": {
+                    /** Format: uuid */
+                    lead_id: string;
+                };
             };
         };
         responses: {
-            /** @description Call started; includes short-lived Telnyx token */
+            /** @description Started */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartedCall"];
+                };
+            };
+            /** @description Not enough money for the first minute */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Blocked"];
+                };
+            };
+            /** @description A calling rule says no */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Blocked"];
+                };
+            };
+            /** @description Not one of the rep's leads */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Blocked"];
+                };
+            };
+            /** @description Already on a call */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Blocked"];
+                };
+            };
+            /** @description Calling isn't set up or the provider can't be reached */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Blocked"];
+                };
+            };
+        };
+    };
+    getCall: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                callId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["StartCallResponse"];
+                    "application/json": components["schemas"]["Call"];
                 };
             };
-            402: components["responses"]["PaymentRequired"];
-            403: components["responses"]["Forbidden"];
+            /** @description Not one of the rep's calls */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Blocked"];
+                };
+            };
+        };
+    };
+    hangupCall: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                callId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Hung up; the bill follows when the provider confirms the end */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Call"];
+                };
+            };
         };
     };
     saveOutcome: {
@@ -2354,31 +2527,31 @@ export interface operations {
         };
         responses: {
             /** @description Saved */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["Call"];
+                };
             };
-        };
-    };
-    endCall: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                callId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Ended */
-            204: {
+            /** @description The call hasn't ended */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["Blocked"];
+                };
+            };
+            /** @description Unknown outcome, a bad follow-up time or a long note */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Blocked"];
+                };
             };
         };
     };
@@ -2634,6 +2807,13 @@ export interface operations {
         responses: {
             /** @description Acknowledged */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad or old signature */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

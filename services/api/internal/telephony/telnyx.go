@@ -16,10 +16,11 @@ import (
 // Telnyx is the real provider, over the Telnyx v2 REST API.
 type Telnyx struct {
 	APIKey string
-	// ConnectionID is the voice connection new numbers are attached to, so
-	// calls to and from them reach the dialer. Optional until calling (D3
-	// part 5).
+	// ConnectionID is the voice connection new numbers and browser phones
+	// are attached to, so calls reach the dialer.
 	ConnectionID string
+	// PublicKey (base64, from the Telnyx portal) checks call webhooks.
+	PublicKey string
 	// BaseURL defaults to https://api.telnyx.com/v2; tests point it elsewhere.
 	BaseURL string
 	Client  *http.Client
@@ -145,17 +146,36 @@ func (t Telnyx) Release(ctx context.Context, e164 string) error {
 // do sends a request and reads a JSON answer into out. It returns the HTTP
 // status so callers can tell "taken" from "broken".
 func (t Telnyx) do(ctx context.Context, method, path string, body, out any) (int, error) {
+	status, raw, err := t.send(ctx, method, path, body)
+	if err != nil {
+		return status, err
+	}
+	if out != nil && len(raw) > 0 {
+		if err := json.Unmarshal(raw, out); err != nil {
+			return status, fmt.Errorf("telnyx: %w: decode: %w", ErrProvider, err)
+		}
+	}
+	return status, nil
+}
+
+// raw sends a request whose answer is plain text, like a login token.
+func (t Telnyx) raw(ctx context.Context, method, path string) (string, error) {
+	_, b, err := t.send(ctx, method, path, nil)
+	return strings.TrimSpace(string(b)), err
+}
+
+func (t Telnyx) send(ctx context.Context, method, path string, body any) (int, []byte, error) {
 	var r io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
-			return 0, fmt.Errorf("telnyx: encode: %w", err)
+			return 0, nil, fmt.Errorf("telnyx: encode: %w", err)
 		}
 		r = bytes.NewReader(b)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, t.base()+path, r)
 	if err != nil {
-		return 0, fmt.Errorf("telnyx: %w", err)
+		return 0, nil, fmt.Errorf("telnyx: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+t.APIKey)
 	req.Header.Set("Accept", "application/json")
@@ -168,22 +188,17 @@ func (t Telnyx) do(ctx context.Context, method, path string, body, out any) (int
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("telnyx: %w: %w", ErrProvider, err)
+		return 0, nil, fmt.Errorf("telnyx: %w: %w", ErrProvider, err)
 	}
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return resp.StatusCode, fmt.Errorf("telnyx: read: %w", err)
+		return resp.StatusCode, nil, fmt.Errorf("telnyx: read: %w", err)
 	}
 	if resp.StatusCode >= 300 {
-		return resp.StatusCode, fmt.Errorf("telnyx: %w: %s %s: %d %s", ErrProvider, method, strings.SplitN(path, "?", 2)[0], resp.StatusCode, firstError(raw))
+		return resp.StatusCode, raw, fmt.Errorf("telnyx: %w: %s %s: %d %s", ErrProvider, method, strings.SplitN(path, "?", 2)[0], resp.StatusCode, firstError(raw))
 	}
-	if out != nil && len(raw) > 0 {
-		if err := json.Unmarshal(raw, out); err != nil {
-			return resp.StatusCode, fmt.Errorf("telnyx: %w: decode: %w", ErrProvider, err)
-		}
-	}
-	return resp.StatusCode, nil
+	return resp.StatusCode, raw, nil
 }
 
 // firstError pulls the first error title out of a Telnyx error body.
