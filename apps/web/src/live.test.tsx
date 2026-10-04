@@ -660,3 +660,73 @@ describe('live ID check', () => {
     expect(screen.queryByRole('button', { name: 'Verify my ID' })).toBeNull();
   });
 });
+
+describe('live auto-dial', () => {
+  const LEAD = (id: string, name: string, phone: string) => ({
+    id, name, first_name: name.split(' ')[0], company: '', city: '', email: '', phone, notes: '',
+    her_time_zone: 'America/New_York', attempts: 0, list_name: 'October leads', script_id: null, last_call: null,
+  });
+  const QUEUE = {
+    title: 'October leads', list_id: 'l1', script_free_until: null, dials_today: 3, dial_limit: 120,
+    balance_microdollars: 13_990_000, price_per_minute_microdollars: 20_000, live_call_id: null, scripts: [],
+    leads: [LEAD('ray', 'Ray Cole', '+18085550101'), LEAD('kim', 'Kim Park', '+16465550102'), LEAD('lou', 'Lou Ray', '+16465550103')],
+  };
+  const STARTED = { call_id: 'c1', lead_id: 'kim', lead_name: 'Kim Park', from: '+16465550000', to: '+16465550102', price_per_minute_microdollars: 20_000,
+    held_microdollars: 20_000, token: 't', client_state: 'x', her_time_zone: 'America/New_York', phone: 'fake' };
+  const CALL = { id: 'c1', lead_id: 'kim', from: '+16465550000', to: '+16465550102', price_per_minute_microdollars: 20_000,
+    started_at: '2026-10-04T13:00:00Z', low_balance: false, outcome: null, note: '' };
+  const ENDED = { ...CALL, status: 'ended', answered_at: '2026-10-04T13:00:03Z', ended_at: '2026-10-04T13:00:08Z', seconds: 5, cost_microdollars: 1667 };
+
+  beforeEach(() => {
+    window.localStorage.setItem('dialer.autodialGap', '3');
+    answers['GET /me'] = { status: 200, body: { ...ME, plan: 'starter' } };
+    answers['GET /queue'] = { status: 200, body: QUEUE };
+    answers['POST /dev/calls/c1/events/initiated'] = { status: 200, body: { ...CALL, status: 'ringing', answered_at: null } };
+    answers['GET /calls/c1'] = { status: 200, body: { ...CALL, status: 'answered', answered_at: '2026-10-04T13:00:03Z', ended_at: null, seconds: 0, cost_microdollars: 0 } };
+    answers['POST /calls/c1/hangup'] = { status: 200, body: ENDED };
+    answers['POST /calls/c1/outcome'] = { status: 200, body: { ...ENDED, outcome: 'interested' } };
+    // The first lead is out of calling hours; every call after that starts.
+    let dials = 0;
+    Object.defineProperty(answers, 'POST /calls', {
+      configurable: true, enumerable: true,
+      get: () => (++dials === 1
+        ? { status: 403, body: { code: 'calling_hours', error: 'Call between 8 am and 9 pm their time. Try the next lead.', title: "It's 5:15 am for Ray Cole", action: 'skip' } }
+        : { status: 201, body: STARTED }),
+    });
+  });
+  afterEach(() => { window.localStorage.clear(); });
+
+  it('skips a lead it may not call, then counts down to the next call after a result', async () => {
+    renderAt('/call?list=l1');
+    fireEvent.click(await screen.findByRole('button', { name: /^Start calling/ }));
+    // Ray was refused for the hour: skipped without stopping, Kim is called.
+    expect(await screen.findByText('Too early or late · skipped')).toBeTruthy();
+    expect(screen.queryByText("It's 5:15 am for Ray Cole")).toBeNull();
+    expect(await screen.findByText('CONNECTED')).toBeTruthy();
+    expect(calls.filter(c => c.method === 'POST' && c.path === '/calls').map(c => c.body)).toEqual([{ lead_id: 'ray' }, { lead_id: 'kim' }]);
+
+    fireEvent.keyDown(window, { key: '1' });
+    fireEvent.click(screen.getByRole('button', { name: /^Hang up/ }));
+    expect(await screen.findByText(/^Calling Lou in [123]$/)).toBeTruthy();
+    // Nothing is saved until the countdown ends, so the result can still change.
+    expect(calls.some(c => c.path === '/calls/c1/outcome')).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Call now' }));
+    await waitFor(() => expect(calls.find(c => c.path === '/calls/c1/outcome')?.body).toEqual({ outcome: 'interested', note: '' }));
+    await waitFor(() => expect(calls.filter(c => c.method === 'POST' && c.path === '/calls')).toHaveLength(3));
+    expect(calls.filter(c => c.method === 'POST' && c.path === '/calls')[2]?.body).toEqual({ lead_id: 'lou' });
+  });
+
+  it('Pause stops the countdown and leaves the result to save by hand', async () => {
+    renderAt('/call?list=l1');
+    fireEvent.click(await screen.findByRole('button', { name: /^Start calling/ }));
+    expect(await screen.findByText('CONNECTED')).toBeTruthy();
+    fireEvent.keyDown(window, { key: '3' });
+    fireEvent.click(screen.getByRole('button', { name: /^Hang up/ }));
+    expect(await screen.findByText(/^Calling Lou in/)).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Pause' })[0]!);
+    expect(await screen.findByRole('button', { name: 'Save and pause' })).toBeTruthy();
+    await new Promise(r => setTimeout(r, 1200));
+    expect(calls.some(c => c.path === '/calls/c1/outcome')).toBe(false);
+    expect(screen.queryByText(/^Calling Lou in/)).toBeNull();
+  });
+});

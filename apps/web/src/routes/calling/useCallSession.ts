@@ -60,6 +60,16 @@ export interface SessionExtras {
   staleCall: { end: () => void } | null;
   loading: boolean;
   loadError: string | null;
+  /** Auto-dial is running (Starter and Pro). */
+  auto: boolean;
+  /** Seconds until auto-dial calls the next lead; null when not counting. */
+  countdown: number | null;
+  callNow: () => void;
+  pauseAuto: () => void;
+  /** The queue's Skip button. */
+  skipNext: () => void;
+  /** Holds the countdown while the rep types a note. */
+  holdCountdown: (on: boolean) => void;
 }
 
 export function clockOf(seconds: number): string {
@@ -283,6 +293,12 @@ export function useCallSession() {
     staleCall: null,
     loading: false,
     loadError: null,
+    auto: false,
+    countdown: null,
+    callNow: () => {},
+    pauseAuto: () => {},
+    skipNext: () => { if (phase === 'live') return; const n = nextOpen(current); if (n >= 0) setCurrent(n); },
+    holdCountdown: () => {},
   };
 
   return {

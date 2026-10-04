@@ -41,7 +41,8 @@ function useShellHandle(): ShellHandle {
 
 function DeviceChip({ plan }: { plan: Plan }) {
   const { talkVia: chosen, phoneLinked } = useDeviceStore();
-  const talkVia = plan === 'free' ? 'computer' : chosen;
+  // Live calls go through this laptop until linking a phone (D4 part 3) is built.
+  const talkVia = plan === 'free' || isLive() ? 'computer' : chosen;
   const live = useCallStore(s => s.status === 'answered');
   const ready = talkVia === 'computer' || (talkVia === 'phone' && phoneLinked);
   const [title, sub] = talkVia === 'computer'

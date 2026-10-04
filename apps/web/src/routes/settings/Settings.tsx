@@ -12,6 +12,7 @@ import { useChangePlan, useMe, usePlans, useSignout, useSubscription } from '@/l
 import { dayBefore, dayMonth, dayMonthYear } from '@/lib/dates';
 import { prettyNumber, useMyNumbers, useNumberAction, type RentedNumber } from '@/lib/numbers';
 import { useVerification, type Verification } from '@/lib/verification';
+import { GAPS, autodialGap, setAutodialGap } from '@/lib/calling';
 
 type Section = 'profile' | 'billing' | 'numbers' | 'calling' | 'verify' | 'rules';
 
@@ -168,6 +169,7 @@ export default function Settings() {
   const changePlan = useChangePlan();
   const signout = useSignout();
   const verification = useVerification();
+  const gapLabel = `${autodialGap()} seconds after you pick a result`;
   const s = sub.data;
   const movingToFree = live ? s?.pending_change === 'free' : demoMovingToFree;
   const renews = live ? s?.next_renewal ?? '' : '2026-11-01';
@@ -303,7 +305,7 @@ export default function Settings() {
             <Kv label="Script text size" action="Change" onAction={change('Script text size', 'Large', { options: ['Medium', 'Large', 'Extra large'] })}>{v('Script text size', 'Large')}</Kv>
             {plan === 'free'
               ? <Kv label="Auto-dial gap">Tap to call on Free</Kv>
-              : <Kv label="Auto-dial gap" action="Change" onAction={change('Auto-dial gap', '5 seconds after you pick a result', { options: ['3 seconds after you pick a result', '5 seconds after you pick a result', '10 seconds after you pick a result'] })}>{v('Auto-dial gap', '5 seconds after you pick a result')}</Kv>}
+              : <Kv label="Auto-dial gap" action="Change" onAction={change('Auto-dial gap', gapLabel, { options: GAPS.map(g => `${g} seconds after you pick a result`) })}>{v('Auto-dial gap', gapLabel)}</Kv>}
           </Section>
         )}
 
@@ -336,6 +338,7 @@ export default function Settings() {
             e.preventDefault();
             const value = String(new FormData(e.currentTarget).get('value') ?? '').trim();
             if (!value) return;
+            if (edit.label === 'Auto-dial gap') setAutodialGap(Number.parseInt(value, 10));
             setValues(vs => ({ ...vs, [edit.label]: edit.secret ? 'Changed just now' : value }));
             toast(`${edit.label} updated`);
             setEdit(null);
