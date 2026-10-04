@@ -50,9 +50,9 @@ function DeviceChip({ plan }: { plan: Plan }) {
 
   return (
     <button type="button" aria-label={`${title}. ${sub}`}
-      className={cn('inline-flex h-[42px] flex-none cursor-pointer items-center gap-2.5 rounded-full border-0 pl-1.5 pr-1.5 text-left text-13 font-semibold xl:pr-4',
+      className={cn('inline-flex h-9 flex-none cursor-pointer items-center gap-2.5 rounded-full border-0 pl-1 pr-1 text-left text-13 font-semibold xl:pr-4',
         ready ? 'bg-success-soft text-success-ink' : 'bg-warn-soft text-warn-ink')}>
-      <span className={cn('flex size-[30px] flex-none items-center justify-center rounded-full', ready ? 'bg-success text-white' : 'bg-lemon text-on-lemon')}>
+      <span className={cn('flex size-7 flex-none items-center justify-center rounded-full', ready ? 'bg-success text-white' : 'bg-lemon text-on-lemon')}>
         <Icon name={talkVia === 'computer' ? 'headset' : 'phone'} size={16} />
       </span>
       <span className="max-xl:hidden">{title}<small className="block text-11 leading-[14px] font-medium opacity-85">{sub}</small></span>
@@ -115,16 +115,20 @@ export default function AppLayout() {
         )}
         <span className="flex-1" />
         {handle.device && <span className="hidden md:contents"><DeviceChip plan={plan} /></span>}
-        <Pill tone={PLAN_PILL[plan]} className="h-7 max-sm:hidden">{plan === 'free' ? 'Free plan' : PLAN_LABEL[plan]}</Pill>
-        <Link to="/wallet" aria-label="Wallet" className="flex flex-col items-end leading-none text-ink no-underline">
-          <b className="text-15 font-semibold tabular-nums">{formatUsd(balance)}</b>
-          <span className="mt-[3px] text-11 text-muted">Balance</span>
-        </Link>
-        {!onboarding && <Link to="/wallet" className={cn(buttonClass({ variant: 'outline' }), 'max-sm:hidden')}>Top up</Link>}
-        <Link to="/settings" aria-label="Profile and settings" title={name}
-          className="flex size-[36px] flex-none items-center justify-center rounded-full border border-line bg-sunk text-ink-2 no-underline hover:border-brand hover:text-brand-ink">
-          <Icon name="user" size={20} />
-        </Link>
+        {/* Everything on the right is one height (36px) on one centre line. */}
+        <div className="flex flex-none items-center gap-2.5 sm:gap-3">
+          <Pill tone={PLAN_PILL[plan]} className="h-9 px-3.5 text-13 max-sm:hidden">{plan === 'free' ? 'Free plan' : PLAN_LABEL[plan]}</Pill>
+          <Link to="/wallet" aria-label={`Wallet balance ${formatUsd(balance)}`}
+            className="flex h-9 flex-none items-center gap-2 rounded-full border border-line bg-sunk pl-1 pr-3.5 text-ink no-underline hover:border-brand">
+            <span className="flex size-7 items-center justify-center rounded-full bg-surface text-brand-ink"><Icon name="wallet" size={18} /></span>
+            <b className="text-14 font-semibold leading-none tabular-nums">{formatUsd(balance)}</b>
+          </Link>
+          {!onboarding && <Link to="/wallet" className={cn(buttonClass({ variant: 'outline' }), 'h-9 max-sm:hidden')}>Top up</Link>}
+          <Link to="/settings" aria-label="Profile and settings" title={name}
+            className="flex size-9 flex-none items-center justify-center rounded-full border border-line bg-sunk text-ink-2 no-underline hover:border-brand hover:text-brand-ink">
+            <Icon name="user" size={20} />
+          </Link>
+        </div>
       </header>
       {/* relative: absolutely placed bits (screen-reader labels) stay inside the scroll area. */}
       <main className={cn('relative min-h-0 flex-1 overflow-auto overscroll-contain', handle.white ? 'bg-surface' : 'bg-sunk')}>

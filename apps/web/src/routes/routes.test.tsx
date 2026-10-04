@@ -215,10 +215,10 @@ describe('finished flows', () => {
   it('the header has a profile button and the balance is the same on every page', async () => {
     renderAt('/rules');
     expect(await screen.findByRole('link', { name: 'Profile and settings' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Wallet' }).textContent).toContain('$24.51');
+    expect(screen.getByRole('link', { name: /^Wallet balance/ }).textContent).toContain('$24.51');
     cleanup();
     renderAt('/leads/upload');
-    expect((await screen.findByRole('link', { name: 'Wallet' })).textContent).toContain('$24.51');
+    expect((await screen.findByRole('link', { name: /^Wallet balance/ })).textContent).toContain('$24.51');
   });
 
   it('opens the pairing dialog from Scan code', async () => {
