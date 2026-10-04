@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // telnyxServer answers like the Telnyx v2 API and records what was asked.
@@ -201,5 +202,66 @@ func TestFakeNumbers(t *testing.T) {
 	_ = f.Release(ctx, got[0].E164)
 	if f.Owned[got[0].E164] || len(f.Released) != 1 {
 		t.Fatalf("release: owned %v released %v", f.Owned, f.Released)
+	}
+}
+
+func TestCallEvents(t *testing.T) {
+	f := NewFakeCalls()
+	at := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
+	ev := CallEvent{Type: EventAnswered, CallControlID: "v3:abc", ClientState: "call-1", From: "+16465550142", To: "+12135550199", At: at}
+	body, h := f.Event(ev)
+
+	got, err := f.ParseEvent(h, body, at.Add(time.Minute))
+	if err != nil || got.Type != EventAnswered || got.CallControlID != "v3:abc" || got.ClientState != "call-1" || !got.At.Equal(at) || got.ID == "" {
+		t.Fatalf("ParseEvent = %+v, %v", got, err)
+	}
+
+	tests := []struct {
+		name string
+		body []byte
+		h    func() http.Header
+		now  time.Time
+	}{
+		{"changed body", []byte(strings.Replace(string(body), "call.answered", "call.hangup", 1)), func() http.Header { return h }, at},
+		{"too old", body, func() http.Header { return h }, at.Add(SignatureWindow + time.Second)},
+		{"from the future", body, func() http.Header { return h }, at.Add(-SignatureWindow - time.Second)},
+		{"no signature", body, func() http.Header { c := h.Clone(); c.Del("Telnyx-Signature-Ed25519"); return c }, at},
+		{"timestamp changed", body, func() http.Header { c := h.Clone(); c.Set("Telnyx-Timestamp", "1791115201"); return c }, at},
+	}
+	for _, tt := range tests {
+		if _, err := f.ParseEvent(tt.h(), tt.body, tt.now); !errors.Is(err, ErrBadSignature) {
+			t.Errorf("%s: %v, want a bad signature", tt.name, err)
+		}
+	}
+	other := NewFakeCalls()
+	if _, err := other.ParseEvent(h, body, at); !errors.Is(err, ErrBadSignature) {
+		t.Errorf("another key: %v", err)
+	}
+	if _, err := (Telnyx{PublicKey: "not base64!"}).ParseEvent(h, body, at); !errors.Is(err, ErrBadSignature) {
+		t.Errorf("broken public key: %v", err)
+	}
+}
+
+func TestTelnyxLoginAndHangup(t *testing.T) {
+	srv, tx := newTelnyx(t)
+	srv.answer("POST /telephony_credentials", 201, `{"data":{"id":"cred-1"}}`)
+	srv.answer("POST /telephony_credentials/cred-1/token", 201, "eyJ.token.sig\n")
+	srv.answer("POST /calls/v3:abc/actions/hangup", 200, `{"data":{"result":"ok"}}`)
+	token, cred, err := tx.Login(context.Background(), "u1", "")
+	if err != nil || token != "eyJ.token.sig" || cred != "cred-1" {
+		t.Fatalf("Login = %q %q %v", token, cred, err)
+	}
+	if !strings.Contains(srv.bodies[0], `"connection_id":"conn-1"`) {
+		t.Errorf("credential body = %s", srv.bodies[0])
+	}
+	if _, _, err := tx.Login(context.Background(), "u1", "cred-1"); err != nil || len(srv.requests) != 3 {
+		t.Fatalf("a saved credential is reused: %v %v", err, srv.requests)
+	}
+	if err := tx.Hangup(context.Background(), "v3:abc"); err != nil {
+		t.Fatal(err)
+	}
+	srv.answer("POST /calls/v3:gone/actions/hangup", 422, `{"errors":[{"title":"Call has already ended"}]}`)
+	if err := tx.Hangup(context.Background(), "v3:gone"); err != nil {
+		t.Fatalf("hanging up an ended call: %v", err)
 	}
 }

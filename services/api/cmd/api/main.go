@@ -21,6 +21,7 @@ import (
 	"github.com/telanin-david/call/services/api/internal/accounts"
 	"github.com/telanin-david/call/services/api/internal/auth"
 	"github.com/telanin-david/call/services/api/internal/billing"
+	"github.com/telanin-david/call/services/api/internal/calls"
 	"github.com/telanin-david/call/services/api/internal/leads"
 	"github.com/telanin-david/call/services/api/internal/notify"
 	"github.com/telanin-david/call/services/api/internal/numbers"
@@ -74,6 +75,7 @@ func main() {
 	planSvc := &plans.Service{DB: db, Mail: mail, Log: logger}
 	leadSvc := &leads.Service{DB: db, Log: logger}
 	scriptSvc := &scripts.Service{DB: db, Log: logger}
+	callSvc := &calls.Service{DB: db, Provider: telephony.CallsFromConfig(cfg), Log: logger}
 	numberSvc := &numbers.Service{DB: db, Provider: telephony.NumbersFromConfig(cfg), Mail: mail, Limiter: platform.ValkeyLimiter{Client: cache}, Log: logger}
 
 	r := chi.NewRouter()
@@ -93,6 +95,7 @@ func main() {
 	// Provider webhooks: no cookie, no JSON rule; the provider's signature
 	// is checked before anything else.
 	wal.WebhookRoutes(r)
+	callSvc.WebhookRoutes(r)
 
 	// Everything the web app calls.
 	r.Group(func(r chi.Router) {
@@ -104,8 +107,10 @@ func main() {
 		leadSvc.Routes(r)
 		scriptSvc.Routes(r)
 		numberSvc.Routes(r)
+		callSvc.Routes(r)
 		if cfg.Env == "development" {
 			wal.DevRoutes(r)
+			callSvc.DevRoutes(r)
 		}
 	})
 

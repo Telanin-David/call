@@ -104,6 +104,10 @@ func TestFor(t *testing.T) {
 		{"pro multiplier", "pro", "99910000000", "9991", 20_400, nil},
 		{"US/CA seed rate on Free is $0.025", "free", "+1 415 555 0100", "1", 25_000, nil},
 		{"no card", "free", "+998 0000", "", 0, rates.ErrNoRate},
+		{"Jamaica is +1 but not the US", "free", "+1 876 555 0123", "", 0, rates.ErrNoRate},
+		{"Puerto Rico is a US territory, priced apart", "free", "+1 787 555 0123", "", 0, rates.ErrNoRate},
+		{"Canada uses the +1 card", "free", "+1 416 555 0123", "1", 25_000, nil},
+		{"the plans page asks for the +1 card by its prefix", "free", "1", "1", 25_000, nil},
 		{"empty number", "free", "", "", 0, rates.ErrNoRate},
 		{"unknown plan", "gold", "+1 415 555 0100", "", 0, rates.ErrNoRate},
 	}

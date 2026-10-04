@@ -928,30 +928,115 @@ paths:
   /calls:
     post:
       tags: [calls]
-      summary: Start a call
+      summary: Check every calling rule, hold the first minute and start a call
+      description: |
+        The server checks, in this order: do-not-call, premium-rate, 3 tries
+        per number, calling hours (8 am–9 pm the lead's time), the daily dial
+        limit, a rate for the country, the daily cap abroad before the ID
+        check, a number to call from, and money for the first minute. A "no"
+        comes back as a Blocked body (board 34). Nothing is charged until the
+        lead answers; the browser then dials with `token`, attaching
+        `client_state` so the provider's events find this call.
       operationId: startCall
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/StartCallRequest"
+              type: object
+              required: [lead_id]
+              properties:
+                lead_id:
+                  type: string
+                  format: uuid
       responses:
-        "200":
-          description: Call started; includes short-lived Telnyx token
+        "201":
+          description: Started
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/StartCallResponse"
+                $ref: "#/components/schemas/StartedCall"
         "402":
-          $ref: "#/components/responses/PaymentRequired"
+          description: Not enough money for the first minute
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Blocked"
         "403":
-          $ref: "#/components/responses/Forbidden"
+          description: A calling rule says no
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Blocked"
+        "404":
+          description: Not one of the rep's leads
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Blocked"
+        "409":
+          description: Already on a call
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Blocked"
+        "503":
+          description: Calling isn't set up or the provider can't be reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Blocked"
+
+  /calls/{callId}:
+    get:
+      tags: [calls]
+      summary: A call's state, cost so far and outcome
+      operationId: getCall
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Call"
+        "404":
+          description: Not one of the rep's calls
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Blocked"
+
+  /calls/{callId}/hangup:
+    post:
+      tags: [calls]
+      summary: End a call
+      operationId: hangupCall
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Hung up; the bill follows when the provider confirms the end
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Call"
 
   /calls/{callId}/outcome:
     post:
       tags: [calls]
-      summary: Save call outcome
+      summary: Save how an ended call went; saving again replaces it (Undo)
       operationId: saveOutcome
       parameters:
         - name: callId
@@ -967,24 +1052,24 @@ paths:
             schema:
               $ref: "#/components/schemas/OutcomeRequest"
       responses:
-        "204":
+        "200":
           description: Saved
-
-  /calls/{callId}/end:
-    post:
-      tags: [calls]
-      summary: End a call early
-      operationId: endCall
-      parameters:
-        - name: callId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "204":
-          description: Ended
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Call"
+        "409":
+          description: The call hasn't ended
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Blocked"
+        "422":
+          description: Unknown outcome, a bad follow-up time or a long note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Blocked"
 
   /dialer/start:
     post:
@@ -1173,11 +1258,18 @@ paths:
   /webhooks/telnyx:
     post:
       tags: [webhooks]
-      summary: Telnyx call events webhook
+      summary: Telnyx call events (call.initiated, call.answered, call.hangup)
+      description: |
+        The ed25519 signature (telnyx-signature-ed25519 over
+        "telnyx-timestamp|body", within 5 minutes) is checked before anything
+        else. Calls the server didn't start, or dialled to another number,
+        are hung up at once.
       operationId: telnyxWebhook
       responses:
         "200":
           description: Acknowledged
+        "401":
+          description: Bad or old signature
 
   /webhooks/paystack:
     post:
@@ -1788,30 +1880,101 @@ components:
             type: string
             format: uuid
 
-    StartCallRequest:
+    Blocked:
       type: object
-      required: [lead_id, from_number_id]
+      description: Why a call can't start or an action failed, in the rep's words (board 34)
+      required: [code, error, title, action]
       properties:
-        lead_id:
+        code:
           type: string
-          format: uuid
-        from_number_id:
+          description: daily_limit, low_balance, three_tries, do_not_call, premium, calling_hours, no_rate, abroad_cap, no_number, on_a_call, suspended, lead_not_found, …
+        title:
           type: string
-          format: uuid
-        device:
+        error:
           type: string
-          enum: [laptop, phone, linked]
-          default: laptop
+          description: The message under the title
+        action:
+          type: string
+          enum: ["", top_up, skip, verify_id, upgrade, get_number]
 
-    StartCallResponse:
+    StartedCall:
       type: object
+      required: [call_id, lead_id, lead_name, from, to, price_per_minute_microdollars, held_microdollars, token, client_state, her_time_zone]
       properties:
         call_id:
           type: string
           format: uuid
-        telnyx_token:
+        lead_id:
           type: string
-        telnyx_call_id:
+          format: uuid
+        lead_name:
+          type: string
+        from:
+          type: string
+          description: The rep's number the lead sees (closest to the lead, else the default)
+        to:
+          type: string
+        price_per_minute_microdollars:
+          type: integer
+          format: int64
+        held_microdollars:
+          type: integer
+          format: int64
+        token:
+          type: string
+          description: Signs the browser phone in
+        client_state:
+          type: string
+          description: Attach to the call; only this browser knows it
+        her_time_zone:
+          type: string
+          description: IANA zone for "her time"; empty when unknown
+
+    Call:
+      type: object
+      required: [id, lead_id, from, to, status, price_per_minute_microdollars, started_at, answered_at, ended_at, seconds, cost_microdollars, low_balance, outcome, note]
+      properties:
+        id:
+          type: string
+          format: uuid
+        lead_id:
+          type: string
+          format: uuid
+          nullable: true
+        from:
+          type: string
+        to:
+          type: string
+        status:
+          type: string
+          enum: [dialing, ringing, answered, ended]
+        price_per_minute_microdollars:
+          type: integer
+          format: int64
+        started_at:
+          type: string
+          format: date-time
+        answered_at:
+          type: string
+          format: date-time
+          nullable: true
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+        seconds:
+          type: integer
+        cost_microdollars:
+          type: integer
+          format: int64
+        low_balance:
+          type: boolean
+          description: The balance can't cover the next minute; the call ends in under 30 seconds
+        outcome:
+          type: string
+          nullable: true
+          enum: [interested, callback, not_interested, no_answer, wrong_number, do_not_call, null]
+        note:
           type: string
 
     OutcomeRequest:
@@ -1820,14 +1983,16 @@ components:
       properties:
         outcome:
           type: string
-          enum: ["1", "2", "3", "4", "5", "6"]
-          description: "1=interested, 2=callback, 3=not interested, 4=voicemail, 5=no answer, 6=wrong number"
+          enum: [interested, callback, not_interested, no_answer, wrong_number, do_not_call]
+          description: Keys 1 to 6 on the call screen, in this order
         note:
           type: string
-        followup_at:
+          maxLength: 2000
+        follow_up_at:
           type: string
           format: date-time
           nullable: true
+          description: Books a follow-up (not with do_not_call or wrong_number); within a year
 
     Followup:
       type: object

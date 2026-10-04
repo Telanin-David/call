@@ -27,6 +27,12 @@ fine for checking screens but is not the production plan.
       new numbers join). Without the key, renting numbers is off outside
       development. The Telnyx adapter was built from Telnyx's documented API
       and tested against a stand-in; try one real search, rent and cancel.
+- [ ] Calls: set `TELNYX_PUBLIC_KEY` (from the Telnyx portal; call webhooks are
+      refused without it) and point the voice connection's webhook at
+      `https://<api>/webhooks/telnyx`. In Telnyx's outbound voice profile, allow
+      only the countries we sell, as a second lock behind the server's checks.
+      Run `cmd/dialer` next to the api: it tops up holds each minute and ends
+      calls when the money runs out.
 - [ ] Confirm Telnyx's monthly price for a US/Canada local number. The
       `numbers.Cost` constant ($1.00) must match it: reps pay it × 1.5, and
       numbers that cost more are not offered.

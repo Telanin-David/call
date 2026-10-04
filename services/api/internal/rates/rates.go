@@ -15,6 +15,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/telanin-david/call/services/api/internal/phone"
 	"github.com/telanin-david/call/services/api/internal/platform"
 )
 
@@ -93,6 +94,14 @@ func For(ctx context.Context, q platform.Querier, plan, number string) (Quote, e
 	}
 	if err != nil {
 		return Quote{}, fmt.Errorf("look up rate: %w", err)
+	}
+	// The +1 card is for the US and Canada mainland. Jamaica, the other
+	// Caribbean +1 countries and US territories cost far more, so they need
+	// a card of their own (a longer prefix like 1876) before they can be
+	// called.
+	// (A bare "1", as the plans page asks for, is the card itself.)
+	if out.Prefix == "1" && len(digits) > 1 && phone.RegionOf("+"+digits) != phone.USCA {
+		return Quote{}, ErrNoRate
 	}
 	out.PricePerMin = PricePerMinute(out.CostPerMin, out.MultiplierPct)
 	return out, nil

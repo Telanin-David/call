@@ -31,6 +31,7 @@ type Config struct {
 
 	TelnyxAPIKey       string
 	TelnyxConnectionID string
+	TelnyxPublicKey    string
 }
 
 // devSessionKey keys code hashes when SESSION_KEY is unset in development.
@@ -58,6 +59,7 @@ func MustLoadConfig() Config {
 
 		TelnyxAPIKey:       getenv("TELNYX_API_KEY", ""),
 		TelnyxConnectionID: getenv("TELNYX_CONNECTION_ID", ""),
+		TelnyxPublicKey:    getenv("TELNYX_PUBLIC_KEY", ""),
 	}
 	cfg.WebOrigins = strings.Split(getenv("WEB_ORIGINS", cfg.WebURL), ",")
 	if cfg.SessionKey == "" && cfg.Env == "production" {
