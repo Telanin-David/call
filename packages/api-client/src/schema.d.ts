@@ -370,25 +370,26 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Search available numbers by area code */
-        get: operations["searchNumbers"];
+        /** The rep's rented numbers, the default first */
+        get: operations["listMyNumbers"];
         put?: never;
-        post?: never;
+        /** Rent a number and pay its first month from the balance */
+        post: operations["rentNumber"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/numbers/mine": {
+    "/numbers/available": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List rented numbers */
-        get: operations["listMyNumbers"];
+        /** Local numbers for rent in an area code */
+        get: operations["searchNumbers"];
         put?: never;
         post?: never;
         delete?: never;
@@ -407,8 +408,25 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Cancel a rented number */
+        /** Cancel a number; the rep keeps it until the month paid for ends */
         delete: operations["cancelNumber"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/numbers/{numberId}/keep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Undo a cancel before the number is released */
+        post: operations["keepNumber"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -422,7 +440,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Set as default outbound number */
+        /** Make this the default outbound number */
         put: operations["setDefaultNumber"];
         post?: never;
         delete?: never;
@@ -1061,20 +1079,35 @@ export interface components {
             amount_microdollars: number;
         };
         AvailableNumber: {
-            number?: string;
-            area_code?: string;
-            city?: string;
-            monthly_price_usd?: number;
+            /** @description E.164 */
+            number: string;
+            /** @description Its area, like "New York, NY"; empty when unknown */
+            city: string;
         };
         RentedNumber: {
             /** Format: uuid */
-            id?: string;
-            number?: string;
-            city?: string;
-            is_default?: boolean;
-            monthly_price_usd?: number;
+            id: string;
+            number: string;
+            city: string;
+            /** @enum {string} */
+            country: "US" | "CA";
+            is_default: boolean;
+            /** Format: int64 */
+            monthly_price_microdollars: number;
             /** Format: date */
-            renews_at?: string;
+            renews_on: string;
+            /**
+             * Format: date
+             * @description Set when cancelled; the number is released on this day
+             */
+            cancel_on: string | null;
+            /**
+             * Format: date-time
+             * @description The renewal couldn't be paid; released 3 days later unless the rep adds money
+             */
+            renewal_failed_at: string | null;
+            /** Format: date-time */
+            created_at: string;
         };
         LeadList: {
             /** Format: uuid */
@@ -1825,31 +1858,6 @@ export interface operations {
             };
         };
     };
-    searchNumbers: {
-        parameters: {
-            query?: {
-                area_code?: string;
-                country?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Available numbers */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        numbers?: components["schemas"]["AvailableNumber"][];
-                    };
-                };
-            };
-        };
-    };
     listMyNumbers: {
         parameters: {
             query?: never;
@@ -1866,8 +1874,99 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        numbers?: components["schemas"]["RentedNumber"][];
+                        numbers: components["schemas"]["RentedNumber"][];
+                        /**
+                         * Format: int64
+                         * @description What next month's renewals cost (cancelled numbers left out)
+                         */
+                        monthly_total_microdollars: number;
+                        /** Format: int64 */
+                        monthly_price_microdollars: number;
+                        max_numbers: number;
                     };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    rentNumber: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description E.164, from /numbers/available */
+                    number: string;
+                    /** @description The city shown with it in the search, kept for display */
+                    city?: string;
+                    /** @enum {string} */
+                    country: "US" | "CA";
+                };
+            };
+        };
+        responses: {
+            /** @description Rented */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentedNumber"];
+                };
+            };
+            402: components["responses"]["PaymentRequired"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            /** @description The phone provider can't be reached or isn't set up */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    searchNumbers: {
+        parameters: {
+            query: {
+                country: "US" | "CA";
+                area_code: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Available numbers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        numbers: components["schemas"]["AvailableNumber"][];
+                        /** Format: int64 */
+                        monthly_price_microdollars: number;
+                    };
+                };
+            };
+            422: components["responses"]["ValidationError"];
+            429: components["responses"]["TooManyRequests"];
+            /** @description The phone provider can't be reached or isn't set up */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -1883,12 +1982,54 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Cancelled */
-            204: {
+            /** @description Cancelled; cancel_on is set */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["RentedNumber"];
+                };
+            };
+            /** @description Not one of the rep's numbers */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    keepNumber: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                numberId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Kept */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentedNumber"];
+                };
+            };
+            /** @description Not one of the rep's numbers */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
         };
     };
@@ -1904,11 +2045,22 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Default set */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["RentedNumber"];
+                };
+            };
+            /** @description Not one of the rep's numbers */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
         };
     };

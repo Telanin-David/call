@@ -151,23 +151,11 @@ func feeAt(p Plan, introEnds *time.Time, day time.Time) int64 {
 	return p.MonthlyFee
 }
 
-// toDate drops the time of day, in UTC.
-func toDate(t time.Time) time.Time {
-	t = t.UTC()
-	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
-}
-
-// addMonths moves a date by n months, keeping the day of the month the plan
-// started on (anchor) where the month has it: started 31 Jan, it renews 28
-// Feb, then 31 Mar.
-func addMonths(d time.Time, n, anchor int) time.Time {
-	first := time.Date(d.Year(), d.Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, n, 0)
-	last := first.AddDate(0, 1, -1).Day()
-	if anchor > last {
-		anchor = last
-	}
-	return time.Date(first.Year(), first.Month(), anchor, 0, 0, 0, 0, time.UTC)
-}
+// The monthly date maths is shared with numbers.
+var (
+	toDate    = platform.ToDate
+	addMonths = platform.AddMonths
+)
 
 // days counts whole days from a to b.
 func days(a, b time.Time) int64 {

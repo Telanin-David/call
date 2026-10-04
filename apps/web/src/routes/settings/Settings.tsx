@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Button, Card, CardHead, DarkCard, DarkEyebrow, Field, Icon, Input, LinkButton, Modal, Note, Pill, Select, cn, useToast, type IconName } from '@dialer/ui';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Button, Card, CardHead, DarkCard, DarkEyebrow, Field, Icon, Input, LinkButton, Modal, Note, Pill, Select, cn, linkClass, useToast, type IconName } from '@dialer/ui';
 import { usePlan, PLAN_LABEL } from '@/lib/plan';
 import { useSimStore } from '@/lib/sim';
 import { BALANCE, ME } from '@/lib/fake';
@@ -10,6 +10,7 @@ import { isLive } from '@/lib/backend';
 import { errorText } from '@/lib/api';
 import { useChangePlan, useMe, usePlans, useSignout, useSubscription } from '@/lib/account';
 import { dayBefore, dayMonth, dayMonthYear } from '@/lib/dates';
+import { prettyNumber, useMyNumbers, useNumberAction, type RentedNumber } from '@/lib/numbers';
 
 type Section = 'profile' | 'billing' | 'numbers' | 'calling' | 'verify' | 'rules';
 
@@ -55,22 +56,72 @@ interface Edit { label: string; value: string; options?: string[]; secret?: bool
 const OUT_FROM = ['The number closest to the lead. If none is close, your default.', 'Always your default number'];
 
 function NumbersPanel({ onEdit, values }: { onEdit: (e: Edit) => void; values: Record<string, string> }) {
+  const live = isLive();
   const navigate = useNavigate();
   const toast = useToast();
-  const [numbers, setNumbers] = useState(NUMBERS);
-  const [cancel, setCancel] = useState<string | null>(null);
+  const mine = useMyNumbers();
+  const act = useNumberAction();
+  const [demoNumbers, setDemoNumbers] = useState(NUMBERS);
+  const [cancel, setCancel] = useState<{ id: string; label: string; until: string } | null>(null);
   const outFrom = values['Calls go out from'] ?? OUT_FROM[0] ?? '';
+  const rows = live ? mine.data?.numbers ?? [] : [];
+  const count = live ? rows.length : demoNumbers.length;
+  const total = live ? mine.data?.monthly_total_microdollars ?? 0 : NUMBER_MONTHLY * demoNumbers.length;
+
+  function run(id: string, action: 'default' | 'cancel' | 'keep', done: string) {
+    act.mutate({ id, action }, { onSuccess: () => toast(done) });
+  }
+
+  function detail(n: RentedNumber): string {
+    const parts = [n.city || (n.country === 'CA' ? 'Canada' : 'United States')];
+    if (n.is_default) parts.push('default');
+    parts.push(n.cancel_on ? `yours until ${dayMonth(dayBefore(n.cancel_on))}` : `renews ${dayMonth(n.renews_on)}`);
+    return `${parts.join(' · ')} · ${formatUsd(n.monthly_price_microdollars)}`;
+  }
+
   return (
     <Section title="Numbers" sub="The US and Canada numbers your calls come from. Each is paid monthly from your balance."
-      aside={<span className="text-14 text-muted">{numbers.length} numbers · {formatUsd(NUMBER_MONTHLY * numbers.length)} a month</span>}>
-      {numbers.map(n => <Kv key={n.number} label={n.number} action="Cancel" onAction={() => setCancel(n.number)}>{n.detail} · {formatUsd(NUMBER_MONTHLY)}</Kv>)}
+      aside={<span className="text-14 text-muted">{count} number{count === 1 ? '' : 's'} · {formatUsd(total)} a month</span>}>
+      {live ? (
+        <>
+          {mine.isPending && <p className="py-3 text-14 text-muted">Loading your numbers…</p>}
+          {mine.isSuccess && rows.length === 0 && <p className="border-t border-line py-3.5 text-14 text-muted">No numbers yet. Leads see your number when you call, so get one before you start.</p>}
+          {act.isError && <Note tone="danger" className="my-2 text-14"><Icon name="wrong" size={16} /><span role="alert">{errorText(act.error)}</span></Note>}
+          {rows.map(n => (
+            <div key={n.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line py-3.5 text-14">
+              <span className="w-full flex-none font-semibold tabular-nums sm:w-[200px]">{prettyNumber(n.number)}</span>
+              <span className="min-w-0 flex-1 text-ink-2">{detail(n)}</span>
+              <span className="flex gap-4">
+                {!n.is_default && !n.cancel_on && <LinkButton className="text-14" onClick={() => run(n.id, 'default', `${prettyNumber(n.number)} is your default now`)}>Make default</LinkButton>}
+                {n.cancel_on
+                  ? <LinkButton className="text-14" onClick={() => run(n.id, 'keep', `You're keeping ${prettyNumber(n.number)}`)}>Keep it</LinkButton>
+                  : <LinkButton className="text-14" onClick={() => setCancel({ id: n.id, label: prettyNumber(n.number), until: dayMonth(dayBefore(n.renews_on)) })}>Cancel</LinkButton>}
+              </span>
+              {n.renewal_failed_at && !n.cancel_on && (
+                <Note tone="danger" className="mt-1 w-full text-13"><Icon name="wallet" size={15} />
+                  <span>This month couldn't be paid. Add money within 3 days or the number is released. <Link to="/wallet" className={linkClass}>Top up</Link></span>
+                </Note>
+              )}
+            </div>
+          ))}
+        </>
+      ) : (
+        demoNumbers.map(n => <Kv key={n.number} label={n.number} action="Cancel" onAction={() => setCancel({ id: n.number, label: n.number, until: '' })}>{n.detail} · {formatUsd(NUMBER_MONTHLY)}</Kv>)
+      )}
       <Kv label="Calls go out from" action="Change" onAction={() => onEdit({ label: 'Calls go out from', value: outFrom, options: OUT_FROM })}>{outFrom}</Kv>
-      <Button variant="outline" className="mt-3" onClick={() => navigate('/numbers')}>Get another number</Button>
-      <Modal open={cancel !== null} onClose={() => setCancel(null)} title={`Cancel ${cancel ?? ''}?`} width="sm">
-        <p className="mt-2 text-15 text-muted">You keep it until the end of the month you paid for. Leads who call it after that won't reach you.</p>
+      <Button variant="outline" className="mt-3" onClick={() => navigate('/numbers?from=settings')}>{live && rows.length === 0 ? 'Get a number' : 'Get another number'}</Button>
+      <Modal open={cancel !== null} onClose={() => setCancel(null)} title={`Cancel ${cancel?.label ?? ''}?`} width="sm">
+        <p className="mt-2 text-15 text-muted">
+          {cancel?.until ? `You keep it until ${cancel.until}, the end of the month you paid for.` : 'You keep it until the end of the month you paid for.'} Leads who call it after that won't reach you.
+        </p>
         <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
           <Button size="lg" onClick={() => setCancel(null)}>Keep it</Button>
-          <Button variant="outlineDanger" size="lg" onClick={() => { setNumbers(ns => ns.filter(x => x.number !== cancel)); toast(`${cancel ?? 'Number'} cancelled`); setCancel(null); }}>Cancel number</Button>
+          <Button variant="outlineDanger" size="lg" onClick={() => {
+            if (!cancel) return;
+            if (live) run(cancel.id, 'cancel', `${cancel.label} cancelled. It's yours until ${cancel.until}.`);
+            else { setDemoNumbers(ns => ns.filter(x => x.number !== cancel.id)); toast(`${cancel.label} cancelled`); }
+            setCancel(null);
+          }}>Cancel number</Button>
         </div>
       </Modal>
     </Section>

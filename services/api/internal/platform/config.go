@@ -28,6 +28,9 @@ type Config struct {
 	PaystackMinorPerUSD string
 	StripeSecretKey     string
 	StripeWebhookSecret string
+
+	TelnyxAPIKey       string
+	TelnyxConnectionID string
 }
 
 // devSessionKey keys code hashes when SESSION_KEY is unset in development.
@@ -52,6 +55,9 @@ func MustLoadConfig() Config {
 		PaystackMinorPerUSD: getenv("PAYSTACK_MINOR_PER_USD", "100"),
 		StripeSecretKey:     getenv("STRIPE_SECRET_KEY", ""),
 		StripeWebhookSecret: getenv("STRIPE_WEBHOOK_SECRET", ""),
+
+		TelnyxAPIKey:       getenv("TELNYX_API_KEY", ""),
+		TelnyxConnectionID: getenv("TELNYX_CONNECTION_ID", ""),
 	}
 	cfg.WebOrigins = strings.Split(getenv("WEB_ORIGINS", cfg.WebURL), ",")
 	if cfg.SessionKey == "" && cfg.Env == "production" {

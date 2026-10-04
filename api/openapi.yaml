@@ -510,35 +510,7 @@ paths:
   /numbers:
     get:
       tags: [numbers]
-      summary: Search available numbers by area code
-      operationId: searchNumbers
-      parameters:
-        - name: area_code
-          in: query
-          schema:
-            type: string
-        - name: country
-          in: query
-          schema:
-            type: string
-            default: US
-      responses:
-        "200":
-          description: Available numbers
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  numbers:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/AvailableNumber"
-
-  /numbers/mine:
-    get:
-      tags: [numbers]
-      summary: List rented numbers
+      summary: The rep's rented numbers, the default first
       operationId: listMyNumbers
       responses:
         "200":
@@ -547,16 +519,115 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [numbers, monthly_total_microdollars, monthly_price_microdollars, max_numbers]
                 properties:
                   numbers:
                     type: array
                     items:
                       $ref: "#/components/schemas/RentedNumber"
+                  monthly_total_microdollars:
+                    type: integer
+                    format: int64
+                    description: What next month's renewals cost (cancelled numbers left out)
+                  monthly_price_microdollars:
+                    type: integer
+                    format: int64
+                  max_numbers:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [numbers]
+      summary: Rent a number and pay its first month from the balance
+      operationId: rentNumber
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [number, country]
+              properties:
+                number:
+                  type: string
+                  description: E.164, from /numbers/available
+                city:
+                  type: string
+                  description: The city shown with it in the search, kept for display
+                country:
+                  type: string
+                  enum: [US, CA]
+      responses:
+        "201":
+          description: Rented
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RentedNumber"
+        "402":
+          $ref: "#/components/responses/PaymentRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "503":
+          description: The phone provider can't be reached or isn't set up
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /numbers/available:
+    get:
+      tags: [numbers]
+      summary: Local numbers for rent in an area code
+      operationId: searchNumbers
+      parameters:
+        - name: country
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [US, CA]
+        - name: area_code
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: "^[2-9][0-9]{2}$"
+      responses:
+        "200":
+          description: Available numbers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [numbers, monthly_price_microdollars]
+                properties:
+                  numbers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AvailableNumber"
+                  monthly_price_microdollars:
+                    type: integer
+                    format: int64
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          description: The phone provider can't be reached or isn't set up
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
 
   /numbers/{numberId}:
     delete:
       tags: [numbers]
-      summary: Cancel a rented number
+      summary: Cancel a number; the rep keeps it until the month paid for ends
       operationId: cancelNumber
       parameters:
         - name: numberId
@@ -566,13 +637,49 @@ paths:
             type: string
             format: uuid
       responses:
-        "204":
-          description: Cancelled
+        "200":
+          description: Cancelled; cancel_on is set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RentedNumber"
+        "404":
+          description: Not one of the rep's numbers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /numbers/{numberId}/keep:
+    post:
+      tags: [numbers]
+      summary: Undo a cancel before the number is released
+      operationId: keepNumber
+      parameters:
+        - name: numberId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Kept
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RentedNumber"
+        "404":
+          description: Not one of the rep's numbers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
 
   /numbers/{numberId}/default:
     put:
       tags: [numbers]
-      summary: Set as default outbound number
+      summary: Make this the default outbound number
       operationId: setDefaultNumber
       parameters:
         - name: numberId
@@ -582,8 +689,18 @@ paths:
             type: string
             format: uuid
       responses:
-        "204":
+        "200":
           description: Default set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RentedNumber"
+        "404":
+          description: Not one of the rep's numbers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
 
   /lists:
     get:
@@ -1425,18 +1542,18 @@ components:
 
     AvailableNumber:
       type: object
+      required: [number, city]
       properties:
         number:
           type: string
-        area_code:
-          type: string
+          description: E.164
         city:
           type: string
-        monthly_price_usd:
-          type: number
+          description: Its area, like "New York, NY"; empty when unknown
 
     RentedNumber:
       type: object
+      required: [id, number, city, country, is_default, monthly_price_microdollars, renews_on, cancel_on, renewal_failed_at, created_at]
       properties:
         id:
           type: string
@@ -1445,13 +1562,30 @@ components:
           type: string
         city:
           type: string
+        country:
+          type: string
+          enum: [US, CA]
         is_default:
           type: boolean
-        monthly_price_usd:
-          type: number
-        renews_at:
+        monthly_price_microdollars:
+          type: integer
+          format: int64
+        renews_on:
           type: string
           format: date
+        cancel_on:
+          type: string
+          format: date
+          nullable: true
+          description: Set when cancelled; the number is released on this day
+        renewal_failed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: The renewal couldn't be paid; released 3 days later unless the rep adds money
+        created_at:
+          type: string
+          format: date-time
 
     LeadList:
       type: object
