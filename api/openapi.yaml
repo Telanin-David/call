@@ -355,7 +355,7 @@ paths:
   /wallet:
     get:
       tags: [wallet]
-      summary: Get wallet balance and recent activity
+      summary: Balance, money held for calls, this month's spending, and the first page of activity
       operationId: getWallet
       responses:
         "200":
@@ -364,12 +364,66 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WalletResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /wallet/activity:
+    get:
+      tags: [wallet]
+      summary: More activity, newest first (holds are not listed)
+      operationId: getWalletActivity
+      parameters:
+        - name: cursor
+          in: query
+          description: next_cursor from the previous page
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  activity:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LedgerEntry"
+                  next_cursor:
+                    type: string
+                    description: Empty when there are no more entries
+
+  /wallet/statement:
+    get:
+      tags: [wallet]
+      summary: One month's statement as CSV, in the rep's time zone, with exact amounts
+      operationId: getWalletStatement
+      parameters:
+        - name: month
+          in: query
+          description: YYYY-MM; defaults to the current month
+          schema:
+            type: string
+            example: "2026-10"
+      responses:
+        "200":
+          description: CSV file
+          content:
+            text/csv:
+              schema:
+                type: string
 
   /wallet/topups:
     post:
       tags: [wallet]
-      summary: Initiate a top-up via Paystack or Stripe
-      operationId: initiateTopup
+      summary: Start a card top-up
+      description: |
+        Opens a checkout with Paystack (cards from Nigeria, Ghana, Kenya) or
+        Stripe (everyone else); the server picks by the rep's country. Nothing
+        reaches the balance until the provider's signed webhook confirms the
+        payment. Needs confirmed email and phone.
+      operationId: startTopup
       requestBody:
         required: true
         content:
@@ -377,12 +431,51 @@ paths:
             schema:
               $ref: "#/components/schemas/TopupRequest"
       responses:
-        "200":
-          description: Payment URL returned
+        "201":
+          description: Send the rep to payment_url
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/TopupResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /wallet/topups/{reference}:
+    get:
+      tags: [wallet]
+      summary: Where a top-up is, for the page the rep returns to
+      operationId: getTopup
+      parameters:
+        - name: reference
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reference:
+                    type: string
+                  status:
+                    type: string
+                    enum: [pending, succeeded, failed]
+                  amount_microdollars:
+                    type: integer
+                    format: int64
+                  created_at:
+                    type: string
+                    format: date-time
+        "404":
+          description: Not this rep's top-up
 
   /numbers:
     get:
@@ -852,19 +945,25 @@ paths:
     post:
       tags: [webhooks]
       summary: Paystack payment webhook
+      description: Checked with x-paystack-signature (HMAC-SHA512 of the body) before anything is read. A repeated webhook never credits twice.
       operationId: paystackWebhook
       responses:
         "200":
           description: Acknowledged
+        "401":
+          description: Signature missing or wrong
 
   /webhooks/stripe:
     post:
       tags: [webhooks]
       summary: Stripe payment webhook
+      description: Checked with Stripe-Signature (HMAC-SHA256, 5-minute window) before anything is read. A repeated webhook never credits twice.
       operationId: stripeWebhook
       responses:
         "200":
           description: Acknowledged
+        "401":
+          description: Signature missing or wrong
 
   /webhooks/smileid:
     post:
@@ -1053,12 +1152,40 @@ components:
         balance_microdollars:
           type: integer
           format: int64
-        balance_usd:
-          type: number
+          description: What the rep can spend now. 1 USD = 1,000,000.
+        held_microdollars:
+          type: integer
+          format: int64
+        spent_this_month:
+          type: object
+          properties:
+            calls:
+              type: integer
+              format: int64
+            plan:
+              type: integer
+              format: int64
+            numbers:
+              type: integer
+              format: int64
+            total:
+              type: integer
+              format: int64
         activity:
           type: array
           items:
             $ref: "#/components/schemas/LedgerEntry"
+        next_cursor:
+          type: string
+        min_topup_microdollars:
+          type: integer
+          format: int64
+        max_topup_microdollars:
+          type: integer
+          format: int64
+        topup_provider:
+          type: string
+          enum: [paystack, stripe]
 
     LedgerEntry:
       type: object
@@ -1068,10 +1195,11 @@ components:
           format: uuid
         type:
           type: string
-          enum: [topup, call, hold, release, number, plan, refund]
+          enum: [topup, call, number, plan, refund]
         amount_microdollars:
           type: integer
           format: int64
+          description: Positive in, negative out
         description:
           type: string
         created_at:
@@ -1080,22 +1208,28 @@ components:
 
     TopupRequest:
       type: object
-      required: [amount_usd, provider]
+      required: [amount_microdollars]
       properties:
-        amount_usd:
-          type: number
-          minimum: 5
-        provider:
-          type: string
-          enum: [paystack, stripe]
+        amount_microdollars:
+          type: integer
+          format: int64
+          minimum: 5000000
+          maximum: 500000000
+          description: Whole cents ($5 to $500)
 
     TopupResponse:
       type: object
       properties:
-        payment_url:
-          type: string
         reference:
           type: string
+        payment_url:
+          type: string
+        provider:
+          type: string
+          enum: [paystack, stripe]
+        amount_microdollars:
+          type: integer
+          format: int64
 
     AvailableNumber:
       type: object

@@ -22,6 +22,12 @@ type Config struct {
 	TermiiAPIKey   string
 	TermiiSenderID string
 	TermiiBaseURL  string
+
+	PaystackSecretKey   string
+	PaystackCurrency    string
+	PaystackMinorPerUSD string
+	StripeSecretKey     string
+	StripeWebhookSecret string
 }
 
 // devSessionKey keys code hashes when SESSION_KEY is unset in development.
@@ -40,6 +46,12 @@ func MustLoadConfig() Config {
 		TermiiAPIKey:   getenv("TERMII_API_KEY", ""),
 		TermiiSenderID: getenv("TERMII_SENDER_ID", "Dialer"),
 		TermiiBaseURL:  getenv("TERMII_BASE_URL", "https://v3.api.termii.com"),
+
+		PaystackSecretKey:   getenv("PAYSTACK_SECRET_KEY", ""),
+		PaystackCurrency:    getenv("PAYSTACK_CURRENCY", "USD"),
+		PaystackMinorPerUSD: getenv("PAYSTACK_MINOR_PER_USD", "100"),
+		StripeSecretKey:     getenv("STRIPE_SECRET_KEY", ""),
+		StripeWebhookSecret: getenv("STRIPE_WEBHOOK_SECRET", ""),
 	}
 	cfg.WebOrigins = strings.Split(getenv("WEB_ORIGINS", cfg.WebURL), ",")
 	if cfg.SessionKey == "" && cfg.Env == "production" {
