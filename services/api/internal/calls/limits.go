@@ -87,6 +87,9 @@ var (
 	ErrBadFollowup  = &Blocked{http.StatusUnprocessableEntity, "invalid_followup", "Pick a follow-up time in the next year", "", ""}
 	ErrNoteTooLong  = &Blocked{http.StatusUnprocessableEntity, "note_too_long", "Keep the note under 2,000 characters", "", ""}
 
+	ErrFollowupNotFound = &Blocked{http.StatusNotFound, "followup_not_found", "That follow-up isn't one of yours", "", ""}
+	ErrBadCursor        = &Blocked{http.StatusBadRequest, "bad_cursor", "That page link is broken", "Reload History.", ""}
+
 	errDailyLimit = &Blocked{Code: "daily_limit"}
 	errLowBalance = &Blocked{Code: "low_balance"}
 	errTries      = &Blocked{Code: "three_tries"}

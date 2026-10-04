@@ -10,6 +10,7 @@ import { ApiError } from '@/lib/api';
 import { leftOutLine, listNameFromFile, readCsvFile, remap } from '@/lib/leads';
 import { freshName, partsFromText } from '@/lib/scripts';
 import { prettyNumber } from '@/lib/numbers';
+import { callCost, callLength, initialsOf, relative, talkTime } from '@/lib/activity';
 import { renderScript } from '@/lib/script';
 
 // Live mode: the screens talk to an api. Here the api is a table of answers.
@@ -359,6 +360,95 @@ describe('live numbers', () => {
   it('formats numbers', () => {
     expect(prettyNumber('+16465550142')).toBe('+1 (646) 555-0142');
     expect(prettyNumber('+442079460958')).toBe('+442079460958');
+  });
+});
+
+describe('live activity', () => {
+  const LENA = { id: 'l1', name: 'Lena Park', company: 'Sparkle Offices', phone: '+16465550110', her_time_zone: 'America/New_York' };
+  const FOLLOWUP = { id: 'f1', lead: LENA, due_at: new Date(Date.now() + 2 * 3600_000).toISOString(), reason: 'Asked for a call back', last_note: 'After 3 pm her time', last_outcome: 'callback' };
+  const TOTALS = { calls: 0, talk_seconds: 0, spent_microdollars: 0, interested: 0 };
+
+  it('Today shows the real day, the list to call and follow-ups due', async () => {
+    answers['GET /me'] = { status: 200, body: ME };
+    answers['GET /numbers'] = { status: 200, body: { numbers: [], monthly_total_microdollars: 0, monthly_price_microdollars: 1_500_000, max_numbers: 20 } };
+    answers['GET /today'] = { status: 200, body: {
+      dials_today: 12, dial_limit: 30, today: { calls: 12, talk_seconds: 6720, spent_microdollars: 2_240_000, interested: 2 },
+      yesterday: { ...TOTALS, calls: 86, interested: 6 }, followups_due: 1, due: [FOLLOWUP],
+      ready_list: { id: 'list1', name: 'October leads', left: 37, script_name: 'Office cleaning v2' },
+    } };
+    const router = renderAt('/');
+    expect(await screen.findByText('October leads')).toBeTruthy();
+    expect(screen.getByText('37 left · script: Office cleaning v2')).toBeTruthy();
+    expect(screen.getByText('1h 52m')).toBeTruthy();
+    expect(screen.getByText('$2.24')).toBeTruthy();
+    expect(screen.getByText(/Sparkle Offices · \d+:\d\d (am|pm) their time/)).toBeTruthy();
+    expect(screen.getByText('No number yet')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /^Good (morning|afternoon|evening), Ada$/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Start calling' }));
+    await waitFor(() => expect(router.state.location.search).toBe('?list=list1'));
+  });
+
+  it('Today with nothing to call offers an upload', async () => {
+    answers['GET /me'] = { status: 200, body: ME };
+    answers['GET /today'] = { status: 200, body: { dials_today: 0, dial_limit: null, today: TOTALS, yesterday: TOTALS, followups_due: 0, due: [], ready_list: null } };
+    renderAt('/');
+    expect(await screen.findByText('No leads to call')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Upload a list' })).toBeTruthy();
+    expect(screen.getByText(/Nothing due today/)).toBeTruthy();
+  });
+
+  it('Follow-ups shows tabs with counts and switches tabs', async () => {
+    answers['GET /me'] = { status: 200, body: ME };
+    answers['GET /followups'] = { status: 200, body: { counts: { today: 1, tomorrow: 0, week: 2, later: 0 }, followups: [FOLLOWUP] } };
+    renderAt('/followups');
+    expect(await screen.findByText('Lena Park')).toBeTruthy();
+    expect(screen.getByText('After 3 pm her time')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Call all 1 in order/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: /This week/ }));
+    await waitFor(() => expect(calls.some(c => c.path === '/followups?tab=week')).toBe(true));
+  });
+
+  it('History lists real calls, filters on the server and pages', async () => {
+    answers['GET /me'] = { status: 200, body: ME };
+    const call = { id: 'c1', lead: LENA, to: '+16465550110', started_at: new Date().toISOString(), seconds: 252, cost_microdollars: 105_000, outcome: 'interested', note: '' };
+    answers['GET /history'] = { status: 200, body: { calls: [call, { ...call, id: 'c2', lead: null, outcome: null, seconds: 31 }], next_cursor: 'abc', week: { calls: 412, talk_seconds: 34800, spent_microdollars: 11_600_000, interested: 3 } } };
+    renderAt('/history');
+    expect(await screen.findByText('Lena Park')).toBeTruthy();
+    expect(screen.getByText('4:12')).toBeTruthy();
+    expect(screen.getByText('412 calls')).toBeTruthy();
+    expect(screen.getAllByText('+1 (646) 555-0110').length).toBeGreaterThan(0); // a call without a lead shows the number
+    expect(screen.getByText('No result')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Show more calls' }));
+    await waitFor(() => expect(calls.some(c => c.path === '/history?cursor=abc')).toBe(true));
+    fireEvent.click(screen.getByRole('button', { name: 'Interested' }));
+    await waitFor(() => expect(calls.some(c => c.path === '/history?outcome=interested')).toBe(true));
+  });
+
+  it('Setup ticks off what the rep has done', async () => {
+    answers['GET /me'] = { status: 200, body: ME };
+    answers['GET /wallet'] = { status: 200, body: { balance_microdollars: 10_000_000, held_microdollars: 0, activity: [], next_cursor: '', spent_this_month: { calls: 0, plan: 0, numbers: 0, total: 0 }, min_topup_microdollars: 5_000_000, max_topup_microdollars: 500_000_000, topup_provider: 'paystack' } };
+    answers['GET /numbers'] = { status: 200, body: { numbers: [{ id: 'n1' }], monthly_total_microdollars: 1_500_000, monthly_price_microdollars: 1_500_000, max_numbers: 20 } };
+    answers['GET /lists'] = { status: 200, body: { lists: [] } };
+    answers['GET /scripts'] = { status: 200, body: { scripts: [], fields: [], on_screen_free_until: null } };
+    const router = renderAt('/setup');
+    expect(await screen.findByText('4 of 6 done')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Upload leads' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/leads/upload'));
+  });
+
+  it('formats talk time, call length, initials and relative times', () => {
+    expect(talkTime(6720)).toBe('1h 52m');
+    expect(talkTime(29)).toBe('29s');
+    expect(talkTime(0)).toBe('0m');
+    expect(callCost(1_667)).toBe('<$0.01');
+    expect(callCost(0)).toBe('$0.00');
+    expect(callCost(52_084)).toBe('$0.05');
+    expect(callLength(252)).toBe('4:12');
+    expect(initialsOf('Lena Park')).toBe('LP');
+    expect(initialsOf('Sparkle')).toBe('SP');
+    const now = new Date('2026-10-04T12:00:00Z');
+    expect(relative('2026-10-04T14:00:00Z', now)).toBe('in 2 h');
+    expect(relative('2026-10-04T11:45:00Z', now)).toBe('15 min ago');
   });
 });
 

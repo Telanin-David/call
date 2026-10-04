@@ -710,6 +710,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/today": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The rep's day at a glance (the Today screen) */
+        get: operations["getToday"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/followups": {
         parameters: {
             query?: never;
@@ -717,10 +734,27 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List follow-ups (today, tomorrow, later) */
+        /** Open follow-ups in one tab, with counts for every tab */
         get: operations["listFollowups"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/followups/{followupId}/done": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Tick off a follow-up without calling */
+        post: operations["finishFollowup"];
         delete?: never;
         options?: never;
         head?: never;
@@ -734,7 +768,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Full call log */
+        /** Ended calls, newest first, 50 a page */
         get: operations["listHistory"];
         put?: never;
         post?: never;
@@ -1311,35 +1345,50 @@ export interface components {
              */
             follow_up_at?: string | null;
         };
+        LeadRef: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            company: string;
+            phone: string;
+            /** @description IANA zone; empty when unknown */
+            her_time_zone: string;
+        };
+        CallTotals: {
+            calls: number;
+            talk_seconds: number;
+            /** Format: int64 */
+            spent_microdollars: number;
+            interested: number;
+        };
         Followup: {
             /** Format: uuid */
-            id?: string;
-            /** Format: uuid */
-            lead_id?: string;
-            lead_name?: string;
-            lead_phone?: string;
+            id: string;
+            lead: components["schemas"]["LeadRef"];
             /** Format: date-time */
-            due_at?: string;
-            reason?: string;
+            due_at: string;
+            reason: string;
+            last_note: string;
+            last_outcome: string | null;
         };
         HistoryResponse: {
-            calls?: components["schemas"]["CallRecord"][];
-            total?: number;
-            page?: number;
+            calls: components["schemas"]["CallRecord"][];
+            /** @description Empty on the last page */
+            next_cursor: string;
+            week: components["schemas"]["CallTotals"];
         };
         CallRecord: {
             /** Format: uuid */
-            call_id?: string;
-            lead_name?: string;
-            lead_phone?: string;
-            from_number?: string;
+            id: string;
+            lead: components["schemas"]["LeadRef"] | null;
+            to: string;
             /** Format: date-time */
-            started_at?: string;
-            seconds?: number;
+            started_at: string;
+            seconds: number;
             /** Format: int64 */
-            cost_microdollars?: number;
-            outcome?: string;
-            note?: string;
+            cost_microdollars: number;
+            outcome: string | null;
+            note: string;
         };
         Recording: {
             /** Format: uuid */
@@ -2634,7 +2683,7 @@ export interface operations {
             };
         };
     };
-    listFollowups: {
+    getToday: {
         parameters: {
             query?: never;
             header?: never;
@@ -2650,8 +2699,85 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        followups?: components["schemas"]["Followup"][];
+                        dials_today: number;
+                        /** @description Null on Pro (no limit) */
+                        dial_limit: number | null;
+                        today: components["schemas"]["CallTotals"];
+                        yesterday: components["schemas"]["CallTotals"];
+                        /** @description Open follow-ups due by the end of the rep's day, overdue included */
+                        followups_due: number;
+                        /** @description The first 5 of them */
+                        due: components["schemas"]["Followup"][];
+                        /** @description The list to call next (last called with leads left, else the newest) */
+                        ready_list: {
+                            /** Format: uuid */
+                            id: string;
+                            name: string;
+                            left: number;
+                            script_name: string;
+                        } | null;
                     };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listFollowups: {
+        parameters: {
+            query?: {
+                /** @description today includes anything overdue; week is the rest of the next 7 days */
+                tab?: "today" | "tomorrow" | "week" | "later";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        counts: {
+                            today: number;
+                            tomorrow: number;
+                            week: number;
+                            later: number;
+                        };
+                        followups: components["schemas"]["Followup"][];
+                    };
+                };
+            };
+        };
+    };
+    finishFollowup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                followupId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Done */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not one of the rep's follow-ups */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Blocked"];
                 };
             };
         };
@@ -2659,8 +2785,11 @@ export interface operations {
     listHistory: {
         parameters: {
             query?: {
-                page?: number;
-                per_page?: number;
+                outcome?: "interested" | "callback" | "not_interested" | "no_answer" | "wrong_number" | "do_not_call";
+                /** @description Part of a name, company or number */
+                q?: string;
+                /** @description next_cursor from the previous page */
+                cursor?: string;
             };
             header?: never;
             path?: never;
