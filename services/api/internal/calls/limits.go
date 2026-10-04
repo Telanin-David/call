@@ -79,6 +79,7 @@ var (
 	ErrLeadNotFound = &Blocked{http.StatusNotFound, "lead_not_found", "That lead isn't on your lists", "Pick a lead from your lists.", ""}
 	ErrCallNotFound = &Blocked{http.StatusNotFound, "call_not_found", "That call isn't one of yours", "", ""}
 	ErrOnACall      = &Blocked{http.StatusConflict, "on_a_call", "You're already on a call", "Finish that call first.", ""}
+	ErrBeingCalled  = &Blocked{http.StatusConflict, "being_called", "Someone is calling you", "Answer it, or add it to follow-ups, first.", ""}
 	ErrSuspended    = &Blocked{http.StatusForbidden, "suspended", "Your account is paused", "Contact support to find out why.", ""}
 	ErrNoNumber     = &Blocked{http.StatusForbidden, "no_number", "Get a number first", "Leads see your number when you call, and can call you back on it.", "get_number"}
 	ErrUnavailable  = &Blocked{http.StatusServiceUnavailable, "calling_unavailable", "Calling isn't working right now", "Try again in a few minutes. You were not charged.", ""}

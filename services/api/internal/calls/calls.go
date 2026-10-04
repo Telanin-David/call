@@ -129,12 +129,15 @@ func (s *Service) StartVia(ctx context.Context, u auth.User, leadID string, viaP
 		if status == "suspended" {
 			return ErrSuspended
 		}
-		var live bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM calls WHERE user_id = $1 AND status <> 'ended')`, u.ID).Scan(&live); err != nil {
-			return fmt.Errorf("read live calls: %w", err)
-		}
-		if live {
+		var liveDir, liveStatus string
+		err = tx.QueryRow(ctx, `SELECT direction::text, status FROM calls WHERE user_id = $1 AND status <> 'ended'`, u.ID).Scan(&liveDir, &liveStatus)
+		switch {
+		case err == nil && liveDir == "inbound" && liveStatus == "ringing":
+			return ErrBeingCalled
+		case err == nil:
 			return ErrOnACall
+		case !errors.Is(err, pgx.ErrNoRows):
+			return fmt.Errorf("read live calls: %w", err)
 		}
 
 		var l Lead
@@ -277,9 +280,15 @@ func (s *Service) StartVia(ctx context.Context, u auth.User, leadID string, viaP
 // login gets a browser-phone token, making the rep's provider login the
 // first time.
 func (s *Service) login(ctx context.Context, userID string) (string, error) {
+	token, _, err := s.loginAs(ctx, userID)
+	return token, err
+}
+
+// loginAs is login, also returning the rep's provider login id.
+func (s *Service) loginAs(ctx context.Context, userID string) (string, string, error) {
 	var cred *string
 	if err := s.DB.QueryRow(ctx, `SELECT telnyx_credential_id FROM users WHERE id = $1`, userID).Scan(&cred); err != nil {
-		return "", fmt.Errorf("read credential: %w", err)
+		return "", "", fmt.Errorf("read credential: %w", err)
 	}
 	have := ""
 	if cred != nil {
@@ -287,14 +296,14 @@ func (s *Service) login(ctx context.Context, userID string) (string, error) {
 	}
 	token, id, err := s.Provider.Login(ctx, userID, have)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if id != have {
 		if _, err := s.DB.Exec(ctx, `UPDATE users SET telnyx_credential_id = $2 WHERE id = $1`, userID, id); err != nil {
-			return "", fmt.Errorf("save credential: %w", err)
+			return "", "", fmt.Errorf("save credential: %w", err)
 		}
 	}
-	return token, nil
+	return token, id, nil
 }
 
 type fromNumber struct{ id, e164 string }

@@ -1368,6 +1368,31 @@ paths:
         "503":
           description: The ID check is unavailable
 
+  /incoming:
+    get:
+      tags: [calls]
+      summary: The call ringing the rep from a lead calling back, if any
+      description: |
+        The app polls this every 2 seconds on Starter and Pro; each poll keeps
+        the rep online for 10 seconds. A lead's call back rings the rep only
+        while they are online and not on another call; it rings for 30
+        seconds. Otherwise, or on Free, it is a missed call: the lead goes to
+        the top of Follow-ups. Answer in the browser phone; decline with
+        POST /calls/{callID}/hangup.
+      operationId: getIncoming
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [call]
+                properties:
+                  call:
+                    nullable: true
+                    allOf:
+                      - $ref: "#/components/schemas/IncomingCall"
   /pairing:
     get:
       tags: [pairing]
@@ -2239,7 +2264,7 @@ components:
 
     Followup:
       type: object
-      required: [id, lead, due_at, reason, last_note, last_outcome]
+      required: [id, lead, due_at, reason, missed, last_note, last_outcome]
       properties:
         id:
           type: string
@@ -2251,6 +2276,9 @@ components:
           format: date-time
         reason:
           type: string
+        missed:
+          type: boolean
+          description: The lead called the rep at due_at and nobody answered
         last_note:
           type: string
         last_outcome:
@@ -2359,6 +2387,46 @@ components:
           items:
             $ref: "#/components/schemas/ScriptPart"
 
+    IncomingCall:
+      type: object
+      required: [id, status, started_at, ring_until, caller, to, price_per_minute_microdollars, lead, script, phone]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [ringing]
+        started_at:
+          type: string
+          format: date-time
+        ring_until:
+          type: string
+          format: date-time
+          description: When it stops ringing and becomes a missed call
+        caller:
+          type: string
+          description: The lead's number, E.164
+        to:
+          type: string
+          description: The rep's number they called
+        price_per_minute_microdollars:
+          type: integer
+          format: int64
+          description: What answering costs a minute (the price of calling that number)
+        lead:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/QueueLead"
+        script:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/QueueScript"
+        phone:
+          type: string
+          enum: [telnyx, fake]
+          description: Which browser phone answers; fake only in development
+
     HistoryResponse:
       type: object
       required: [calls, next_cursor, week]
@@ -2375,7 +2443,7 @@ components:
 
     CallRecord:
       type: object
-      required: [id, lead, to, started_at, seconds, cost_microdollars, outcome, note]
+      required: [id, lead, to, incoming, answered, started_at, seconds, cost_microdollars, outcome, note]
       properties:
         id:
           type: string
@@ -2386,6 +2454,12 @@ components:
             - $ref: "#/components/schemas/LeadRef"
         to:
           type: string
+          description: The other side's number (who was called, or who called)
+        incoming:
+          type: boolean
+          description: Someone called the rep's number
+        answered:
+          type: boolean
         started_at:
           type: string
           format: date-time

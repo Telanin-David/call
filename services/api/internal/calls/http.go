@@ -23,6 +23,7 @@ func (s *Service) Routes(r chi.Router) {
 	r.With(auth.RequireUser).Get("/history", s.handleHistory)
 	r.With(auth.RequireUser).Get("/queue", s.handleQueue)
 	r.With(auth.RequireUser).Get("/pairing", s.handlePairingGet)
+	r.With(auth.RequireUser).Get("/incoming", s.handleIncoming)
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireConfirmed)
 		r.Post("/calls", s.handleStart)
@@ -48,6 +49,7 @@ func (s *Service) WebhookRoutes(r chi.Router) {
 // only does anything with the fake provider.
 func (s *Service) DevRoutes(r chi.Router) {
 	r.With(auth.RequireUser).Post("/dev/calls/{callID}/events/{event}", s.handleDevEvent)
+	r.With(auth.RequireUser).Post("/dev/incoming", s.handleDevIncoming)
 }
 
 type startedJSON struct {
@@ -248,6 +250,7 @@ type followupJSON struct {
 	Lead        leadRefJSON `json:"lead"`
 	DueAt       time.Time   `json:"due_at"`
 	Reason      string      `json:"reason"`
+	Missed      bool        `json:"missed"`
 	LastNote    string      `json:"last_note"`
 	LastOutcome *string     `json:"last_outcome"`
 }
@@ -255,7 +258,7 @@ type followupJSON struct {
 func followupsJSON(fs []Followup) []followupJSON {
 	out := make([]followupJSON, len(fs))
 	for i, f := range fs {
-		out[i] = followupJSON{f.ID, leadJSON(f.Lead), f.DueAt, f.Reason, f.LastNote, nullable(f.LastOutcome)}
+		out[i] = followupJSON{f.ID, leadJSON(f.Lead), f.DueAt, f.Reason, f.Missed, f.LastNote, nullable(f.LastOutcome)}
 	}
 	return out
 }
@@ -328,6 +331,8 @@ func (s *Service) handleHistory(w http.ResponseWriter, r *http.Request) {
 		ID        string       `json:"id"`
 		Lead      *leadRefJSON `json:"lead"`
 		To        string       `json:"to"`
+		Incoming  bool         `json:"incoming"`
+		Answered  bool         `json:"answered"`
 		StartedAt time.Time    `json:"started_at"`
 		Seconds   int64        `json:"seconds"`
 		Cost      int64        `json:"cost_microdollars"`
@@ -336,7 +341,7 @@ func (s *Service) handleHistory(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]itemJSON, len(items))
 	for i, h := range items {
-		out[i] = itemJSON{ID: h.ID, To: h.To, StartedAt: h.StartedAt, Seconds: h.Seconds, Cost: h.Cost, Outcome: nullable(h.Outcome), Note: h.Note}
+		out[i] = itemJSON{ID: h.ID, To: h.To, Incoming: h.Incoming, Answered: h.Answered, StartedAt: h.StartedAt, Seconds: h.Seconds, Cost: h.Cost, Outcome: nullable(h.Outcome), Note: h.Note}
 		if h.Lead != nil {
 			l := leadJSON(*h.Lead)
 			out[i].Lead = &l
@@ -425,21 +430,10 @@ func (s *Service) handleQueue(w http.ResponseWriter, r *http.Request) {
 		DialsToday: q.DialsToday, DialLimit: q.DialLimit, Balance: q.Balance, PricePerMin: q.PricePerMin, LiveCallID: nullable(q.LiveCallID),
 	}
 	for _, l := range q.Leads {
-		j := queueLeadJSON{
-			ID: l.ID, Name: l.Name, FirstName: l.FirstName, Company: l.Company, City: l.City, Email: l.Email, Phone: l.Phone, Notes: l.Notes,
-			HerTimeZone: l.HerTimeZone, Attempts: l.Attempts, ListName: l.ListName, ScriptID: nullable(l.ScriptID),
-		}
-		if l.LastCall != nil {
-			j.LastCall = &lastCallJSON{At: l.LastCall.At, Outcome: nullable(l.LastCall.Outcome), Note: l.LastCall.Note}
-		}
-		out.Leads = append(out.Leads, j)
+		out.Leads = append(out.Leads, queueLeadOut(l))
 	}
 	for _, sc := range q.Scripts {
-		parts := sc.Parts
-		if parts == nil {
-			parts = []scripts.Part{}
-		}
-		out.Scripts = append(out.Scripts, queueScriptJSON{ID: sc.ID, Name: sc.Name, Parts: parts})
+		out.Scripts = append(out.Scripts, queueScriptOut(sc))
 	}
 	if q.ScriptFreeUntil != nil {
 		d := q.ScriptFreeUntil.Format("2006-01-02")
@@ -570,4 +564,102 @@ func (s *Service) handlePairingEnd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type incomingJSON struct {
+	ID          string           `json:"id"`
+	Status      string           `json:"status"`
+	StartedAt   time.Time        `json:"started_at"`
+	RingUntil   time.Time        `json:"ring_until"`
+	Caller      string           `json:"caller"`
+	To          string           `json:"to"`
+	PricePerMin int64            `json:"price_per_minute_microdollars"`
+	Lead        *queueLeadJSON   `json:"lead"`
+	Script      *queueScriptJSON `json:"script"`
+	// Phone is who answers in this browser: "fake" in development, else "telnyx".
+	Phone string `json:"phone"`
+}
+
+func queueLeadOut(l QueueLead) queueLeadJSON {
+	j := queueLeadJSON{
+		ID: l.ID, Name: l.Name, FirstName: l.FirstName, Company: l.Company, City: l.City, Email: l.Email, Phone: l.Phone, Notes: l.Notes,
+		HerTimeZone: l.HerTimeZone, Attempts: l.Attempts, ListName: l.ListName, ScriptID: nullable(l.ScriptID),
+	}
+	if l.LastCall != nil {
+		j.LastCall = &lastCallJSON{At: l.LastCall.At, Outcome: nullable(l.LastCall.Outcome), Note: l.LastCall.Note}
+	}
+	return j
+}
+
+func queueScriptOut(sc QueueScript) queueScriptJSON {
+	parts := sc.Parts
+	if parts == nil {
+		parts = []scripts.Part{}
+	}
+	return queueScriptJSON{ID: sc.ID, Name: sc.Name, Parts: parts}
+}
+
+// handleIncoming is polled by the app every 2 seconds: it keeps the rep
+// online for calls coming in, and returns the one ringing them.
+func (s *Service) handleIncoming(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFrom(r.Context())
+	in, err := s.Ringing(r.Context(), u.ID)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if in == nil {
+		platform.JSON(w, http.StatusOK, map[string]any{"call": nil})
+		return
+	}
+	out := incomingJSON{
+		ID: in.Call.ID, Status: in.Call.Status, StartedAt: in.Call.StartedAt, RingUntil: in.RingUntil, Caller: in.Call.To, To: in.Call.FromNumber,
+		PricePerMin: in.Call.PricePerMin, Phone: s.phoneKind(false),
+	}
+	if in.Lead.ID != "" {
+		l := queueLeadOut(in.Lead)
+		out.Lead = &l
+	}
+	if in.Script != nil {
+		sc := queueScriptOut(*in.Script)
+		out.Script = &sc
+	}
+	platform.JSON(w, http.StatusOK, map[string]any{"call": out})
+}
+
+// handleDevIncoming plays a lead calling the rep's number:
+// {"lead_id": "..."} or {"from": "+1..."}.
+func (s *Service) handleDevIncoming(w http.ResponseWriter, r *http.Request) {
+	fake, ok := s.Provider.(*telephony.FakeCalls)
+	if !ok {
+		platform.ErrorJSON(w, http.StatusNotFound, "not_found", "Only with the fake phone provider.")
+		return
+	}
+	var in struct {
+		LeadID string `json:"lead_id"`
+		From   string `json:"from"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&in); err != nil {
+		platform.ErrorJSON(w, http.StatusBadRequest, "bad_request", "The request couldn't be read.")
+		return
+	}
+	u, _ := auth.UserFrom(r.Context())
+	from := in.From
+	if in.LeadID != "" {
+		if !uuidOK(in.LeadID) {
+			s.fail(w, r, ErrLeadNotFound)
+			return
+		}
+		if err := s.DB.QueryRow(r.Context(), `SELECT phone FROM leads WHERE id = $1 AND user_id = $2`, in.LeadID, u.ID).Scan(&from); err != nil {
+			s.fail(w, r, ErrLeadNotFound)
+			return
+		}
+	}
+	c, err := s.DevIncoming(r.Context(), fake, u.ID, from)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	out := toJSON(c)
+	platform.JSON(w, http.StatusCreated, map[string]any{"call": out, "hangup_cause": c.HangupCause})
 }

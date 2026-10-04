@@ -841,6 +841,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/incoming": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The call ringing the rep from a lead calling back, if any
+         * @description The app polls this every 2 seconds on Starter and Pro; each poll keeps
+         *     the rep online for 10 seconds. A lead's call back rings the rep only
+         *     while they are online and not on another call; it rings for 30
+         *     seconds. Otherwise, or on Free, it is a missed call: the lead goes to
+         *     the top of Follow-ups. Answer in the browser phone; decline with
+         *     POST /calls/{callID}/hangup.
+         */
+        get: operations["getIncoming"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/pairing": {
         parameters: {
             query?: never;
@@ -1433,6 +1458,8 @@ export interface components {
             /** Format: date-time */
             due_at: string;
             reason: string;
+            /** @description The lead called the rep at due_at and nobody answered */
+            missed: boolean;
             last_note: string;
             last_outcome: string | null;
         };
@@ -1491,6 +1518,35 @@ export interface components {
             name: string;
             parts: components["schemas"]["ScriptPart"][];
         };
+        IncomingCall: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "ringing";
+            /** Format: date-time */
+            started_at: string;
+            /**
+             * Format: date-time
+             * @description When it stops ringing and becomes a missed call
+             */
+            ring_until: string;
+            /** @description The lead's number, E.164 */
+            caller: string;
+            /** @description The rep's number they called */
+            to: string;
+            /**
+             * Format: int64
+             * @description What answering costs a minute (the price of calling that number)
+             */
+            price_per_minute_microdollars: number;
+            lead: components["schemas"]["QueueLead"] | null;
+            script: components["schemas"]["QueueScript"] | null;
+            /**
+             * @description Which browser phone answers; fake only in development
+             * @enum {string}
+             */
+            phone: "telnyx" | "fake";
+        };
         HistoryResponse: {
             calls: components["schemas"]["CallRecord"][];
             /** @description Empty on the last page */
@@ -1501,7 +1557,11 @@ export interface components {
             /** Format: uuid */
             id: string;
             lead: components["schemas"]["LeadRef"] | null;
+            /** @description The other side's number (who was called, or who called) */
             to: string;
+            /** @description Someone called the rep's number */
+            incoming: boolean;
+            answered: boolean;
             /** Format: date-time */
             started_at: string;
             seconds: number;
@@ -3107,6 +3167,28 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    getIncoming: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        call: components["schemas"]["IncomingCall"] | null;
+                    };
+                };
             };
         };
     };

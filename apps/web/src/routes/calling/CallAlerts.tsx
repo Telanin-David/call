@@ -1,35 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Avatar, Button, Icon, Modal, Tile, Toggle, cn, type IconName, type TileTone } from '@dialer/ui';
+import { Button, Icon, Modal, Tile, Toggle, cn, type IconName, type TileTone } from '@dialer/ui';
 import { fakeLeadsPickUp, setFakeLeadsPickUp } from '@/lib/phone';
-import type { Lead } from '@/lib/fake';
 import type { Block, Problem } from '@/lib/sim';
 
 /** Board 29: a lead rings your number back while you're on the dial screen. */
-export function CallbackAlert({ open, lead, sub, note, onAnswer, onLater }: {
-  open: boolean; lead: Lead; sub: string; note: string; onAnswer: () => void; onLater: () => void;
-}) {
-  return (
-    <Modal open={open} onClose={onLater} label={`${lead.name} is calling you back`} bare width="md"
-      className="bg-night px-[22px] pb-[max(22px,env(safe-area-inset-bottom))] pt-[22px] text-white max-sm:flex max-sm:h-dvh max-sm:max-h-none max-sm:flex-col max-sm:justify-center max-sm:rounded-none">
-      <div className="flex items-center gap-3.5 max-sm:flex-col max-sm:text-center">
-        <span className="rounded-full p-[3px] shadow-[0_0_0_3px_var(--success)]">
-          <Avatar initials={lead.initials} tone={lead.tone} size={52} />
-        </span>
-        <div className="min-w-0">
-          <span className="text-12 font-extrabold uppercase tracking-[.08em] text-success">Calling you back</span>
-          <b className="block text-24 font-extrabold tracking-[-0.02em]">{lead.name}</b>
-          <span className="text-14 text-zinc-400">{sub}</span>
-        </div>
-      </div>
-      <p className="mt-4 text-15 text-zinc-200"><b className="text-sun">Last note:</b> {note}</p>
-      <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
-        <Button variant="glass" size="lg" onClick={onLater}>Not now, add to follow-ups</Button>
-        <Button size="lg" className="bg-success font-bold text-white hover:bg-success" onClick={onAnswer}><Icon name="call" />Answer</Button>
-      </div>
-    </Modal>
-  );
-}
-
 interface BlockCopy { icon: IconName; tone: TileTone; title: string; body: string; primary: string; secondary?: string }
 
 export function blockCopy(block: Block, ctx: { limit: number | null; lead: string; next: string; balance: string }): BlockCopy {

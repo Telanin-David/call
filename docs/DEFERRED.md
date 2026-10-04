@@ -41,6 +41,23 @@ fine for checking screens but is not the production plan.
       browser phone as the laptop. With Telnyx keys, try a call through a real
       phone, mute from both sides, and lock the phone mid-call (the call must
       end within 15 seconds).
+- [ ] Incoming calls (a lead calling a rep's number back): numbers must sit on
+      the voice connection whose webhook is `/webhooks/telnyx`. The server
+      sends a call that should ring the rep to their browser phone with
+      Telnyx's `transfer` action to `sip:<sip_username>@sip.telnyx.com`
+      (`internal/telephony/calls.go`, `Ring`). With keys, check: the browser
+      phone rings while the app is open on any screen; Answer in the app
+      answers it there; the events after a transfer find the call (by its
+      client state or call control id); "Not now" and the 30-second limit
+      hang up the caller. In development, `POST /dev/incoming` plays a call in.
+- [ ] Decide what answering a call back costs. Today it is the price of
+      calling that number (the plan's rate), held a minute ahead like a call
+      out. Telnyx charges us for incoming minutes too (about $0.0032/min plus
+      the browser leg), so this keeps a margin. Free reps never pay: their
+      call backs are missed calls only.
+- [ ] A browser tab hidden for over 5 minutes checks in about once a minute
+      (Chrome slows its timers), so the rep shows as away and call backs go
+      to Follow-ups. Fine for a web app; the phone app (later) can use push.
 - [ ] Confirm Telnyx's monthly price for a US/Canada local number. The
       `numbers.Cost` constant ($1.00) must match it: reps pay it × 1.5, and
       numbers that cost more are not offered.

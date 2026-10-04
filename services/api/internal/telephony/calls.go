@@ -24,6 +24,10 @@ type Calls interface {
 	Hangup(ctx context.Context, callControlID string) error
 	// ParseEvent checks the provider's signature on a webhook, then reads it.
 	ParseEvent(h http.Header, body []byte, now time.Time) (CallEvent, error)
+	// Ring sends a call coming in to one of our numbers on to the rep's
+	// browser phone, which rings until the rep answers it there. Events for
+	// the call then carry clientState.
+	Ring(ctx context.Context, callControlID, credentialID, clientState string) error
 }
 
 // EventType is what happened to a call.
@@ -46,6 +50,8 @@ type CallEvent struct {
 	From, To    string
 	At          time.Time
 	HangupCause string
+	// Incoming is a call someone made to one of our numbers.
+	Incoming bool
 }
 
 var (
@@ -90,6 +96,7 @@ func parseTelnyxEvent(key ed25519.PublicKey, h http.Header, body []byte, now tim
 				From          string `json:"from"`
 				To            string `json:"to"`
 				HangupCause   string `json:"hangup_cause"`
+				Direction     string `json:"direction"`
 			} `json:"payload"`
 		} `json:"data"`
 	}
@@ -105,7 +112,7 @@ func parseTelnyxEvent(key ed25519.PublicKey, h http.Header, body []byte, now tim
 	}
 	return CallEvent{
 		ID: in.Data.ID, Type: EventType(in.Data.EventType), CallControlID: p.CallControlID, ClientState: state,
-		From: p.From, To: p.To, At: in.Data.OccurredAt, HangupCause: p.HangupCause,
+		From: p.From, To: p.To, At: in.Data.OccurredAt, HangupCause: p.HangupCause, Incoming: p.Direction == "incoming",
 	}, nil
 }
 
@@ -141,6 +148,29 @@ func (t Telnyx) Hangup(ctx context.Context, callControlID string) error {
 	if status == http.StatusUnprocessableEntity || status == http.StatusNotFound {
 		return nil
 	}
+	return err
+}
+
+// Ring transfers the incoming call to the rep's telephony credential, which
+// rings every browser phone signed in with it. Telnyx addresses a
+// credential by its SIP user name, read first.
+func (t Telnyx) Ring(ctx context.Context, callControlID, credentialID, clientState string) error {
+	var cred struct {
+		Data struct {
+			SIPUsername string `json:"sip_username"`
+		} `json:"data"`
+	}
+	if _, err := t.do(ctx, http.MethodGet, "/telephony_credentials/"+url.PathEscape(credentialID), nil, &cred); err != nil {
+		return err
+	}
+	if cred.Data.SIPUsername == "" {
+		return fmt.Errorf("%w: no sip user name", ErrProvider)
+	}
+	body := map[string]string{
+		"to":           "sip:" + cred.Data.SIPUsername + "@sip.telnyx.com",
+		"client_state": base64.StdEncoding.EncodeToString([]byte(clientState)),
+	}
+	_, err := t.do(ctx, http.MethodPost, "/calls/"+url.PathEscape(callControlID)+"/actions/transfer", body, nil)
 	return err
 }
 

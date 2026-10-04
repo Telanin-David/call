@@ -91,6 +91,9 @@ type FakeCalls struct {
 	key  ed25519.PrivateKey
 	n    int
 	Hung []string // call control ids hung up, in order
+	// Rung lists incoming calls sent on to a browser phone, as
+	// "call control id>credential id".
+	Rung []string
 	Fail bool
 }
 
@@ -126,6 +129,16 @@ func (f *FakeCalls) Hangup(_ context.Context, callControlID string) error {
 	return nil
 }
 
+func (f *FakeCalls) Ring(_ context.Context, callControlID, credentialID, _ string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Fail {
+		return ErrProvider
+	}
+	f.Rung = append(f.Rung, callControlID+">"+credentialID)
+	return nil
+}
+
 func (f *FakeCalls) ParseEvent(h http.Header, body []byte, now time.Time) (CallEvent, error) {
 	return parseTelnyxEvent(f.key.Public().(ed25519.PublicKey), h, body, now)
 }
@@ -139,11 +152,15 @@ func (f *FakeCalls) Event(e CallEvent) ([]byte, http.Header) {
 	if e.ID != "" {
 		id = e.ID
 	}
+	direction := "outgoing"
+	if e.Incoming {
+		direction = "incoming"
+	}
 	body, _ := json.Marshal(map[string]any{"data": map[string]any{
 		"id": id, "event_type": string(e.Type), "occurred_at": e.At.UTC().Format(time.RFC3339Nano),
 		"payload": map[string]string{
 			"call_control_id": e.CallControlID, "client_state": base64.StdEncoding.EncodeToString([]byte(e.ClientState)),
-			"from": e.From, "to": e.To, "hangup_cause": e.HangupCause,
+			"from": e.From, "to": e.To, "hangup_cause": e.HangupCause, "direction": direction,
 		},
 	}})
 	ts := strconv.FormatInt(e.At.Unix(), 10)

@@ -7,6 +7,7 @@ import { BALANCE, ME } from '@/lib/fake';
 import { homeFor, useMe } from '@/lib/account';
 import { ApiError } from '@/lib/api';
 import { isLive } from '@/lib/backend';
+import { IncomingCallAlert } from '@/components/IncomingCallAlert';
 
 export type Section = 'today' | 'calling' | 'followups' | 'leads' | 'history';
 
@@ -134,6 +135,7 @@ export default function AppLayout() {
       <main className={cn('relative min-h-0 flex-1 overflow-auto overscroll-contain', handle.white ? 'bg-surface' : 'bg-sunk')}>
         <Outlet />
       </main>
+      {isLive() && <IncomingCallAlert />}
       {!onboarding && (
         <nav aria-label="Main" className="grid flex-none grid-cols-5 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden">
           {NAV.map(n => (

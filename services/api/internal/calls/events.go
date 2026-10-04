@@ -36,18 +36,21 @@ type Call struct {
 	Outcome      string
 	Note         string
 	ClientState  string
+	// Direction is "outbound" (the rep called) or "inbound" (someone called
+	// the rep's number; To is then the caller).
+	Direction string
 }
 
 const callCols = `c.id, c.user_id, COALESCE(c.lead_id::text, ''), COALESCE(n.number, ''), c.to_number, c.status, COALESCE(c.telnyx_call_id, ''),
 	c.price_per_min, COALESCE(c.hold_id::text, ''), c.started_at, c.answered_at, c.ended_at, COALESCE(c.seconds, 0), COALESCE(c.cost_microdollars, 0),
-	c.low_balance_at, c.hangup_cause, COALESCE(c.outcome, ''), COALESCE(c.note, ''), COALESCE(c.client_state, '')`
+	c.low_balance_at, c.hangup_cause, COALESCE(c.outcome, ''), COALESCE(c.note, ''), COALESCE(c.client_state, ''), c.direction::text`
 
 const callFrom = ` FROM calls c LEFT JOIN numbers n ON n.id = c.from_number_id `
 
 func scanCall(row pgx.Row) (Call, error) {
 	var c Call
 	err := row.Scan(&c.ID, &c.UserID, &c.LeadID, &c.FromNumber, &c.To, &c.Status, &c.ProviderID, &c.PricePerMin, &c.HoldID,
-		&c.StartedAt, &c.AnsweredAt, &c.EndedAt, &c.Seconds, &c.Cost, &c.LowBalanceAt, &c.HangupCause, &c.Outcome, &c.Note, &c.ClientState)
+		&c.StartedAt, &c.AnsweredAt, &c.EndedAt, &c.Seconds, &c.Cost, &c.LowBalanceAt, &c.HangupCause, &c.Outcome, &c.Note, &c.ClientState, &c.Direction)
 	return c, err
 }
 
@@ -70,6 +73,9 @@ func (s *Service) Get(ctx context.Context, userID, callID string) (Call, error) 
 // passed the signature check. Events can come twice or out of order; each
 // step only moves forward.
 func (s *Service) HandleEvent(ctx context.Context, ev telephony.CallEvent) error {
+	if ev.Incoming && ev.Type == telephony.EventInitiated && ev.ClientState == "" {
+		return s.incoming(ctx, ev)
+	}
 	c, ok, err := s.find(ctx, ev)
 	if err != nil {
 		return err
@@ -85,6 +91,10 @@ func (s *Service) HandleEvent(ctx context.Context, ev telephony.CallEvent) error
 	}
 	switch ev.Type {
 	case telephony.EventInitiated:
+		if c.Direction == "inbound" {
+			// The leg that rings the rep's browser phone: nothing to check.
+			return nil
+		}
 		// The browser chose where to dial; only the number we checked may ring.
 		if (ev.To != "" && ev.To != c.To) || (ev.From != "" && c.FromNumber != "" && ev.From != c.FromNumber) {
 			s.log().WarnContext(ctx, "call to an unchecked number hung up", "call_id", c.ID, "to", ev.To, "want", c.To)
@@ -179,6 +189,9 @@ func (s *Service) finish(ctx context.Context, callID string, at time.Time, cause
 		if err != nil {
 			return fmt.Errorf("end call: %w", err)
 		}
+		if c.Direction == "inbound" && c.AnsweredAt == nil && c.LeadID != "" {
+			return missedFollowup(ctx, tx, c.UserID, c.LeadID, at)
+		}
 		return nil
 	})
 }
@@ -204,6 +217,9 @@ func (s *Service) Hangup(ctx context.Context, userID, callID string) (Call, erro
 		cause := "rep_cancelled"
 		if c.ProviderID != "" && s.Provider != nil {
 			cause = "rep_hung_up"
+			if c.Direction == "inbound" && c.AnsweredAt == nil {
+				cause = "declined"
+			}
 			if err := s.Provider.Hangup(ctx, c.ProviderID); err != nil {
 				s.log().ErrorContext(ctx, "hang up", "call_id", c.ID, "err", err)
 				return Call{}, ErrUnavailable
@@ -264,6 +280,13 @@ func (s *Service) tick(ctx context.Context, c Call, now time.Time, res *TickResu
 		}
 		return nil
 	case "ringing":
+		if c.Direction == "inbound" {
+			if now.Sub(c.StartedAt) > InboundRingFor {
+				res.Ended++
+				return s.endNow(ctx, c, now, "ring_timeout")
+			}
+			return nil
+		}
 		if now.Sub(c.StartedAt) > neverAnswered {
 			res.Ended++
 			return s.endNow(ctx, c, now, "no_answer_timeout")

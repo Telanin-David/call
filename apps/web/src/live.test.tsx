@@ -13,6 +13,7 @@ import { prettyNumber } from '@/lib/numbers';
 import { callCost, callLength, initialsOf, relative, talkTime } from '@/lib/activity';
 import { renderScript } from '@/lib/script';
 import { callbackAt, callbackLabel, costOf } from '@/lib/calling';
+import { callerLine, type IncomingCall } from '@/lib/incoming';
 
 // Live mode: the screens talk to an api. Here the api is a table of answers.
 type Answer = { status: number; body?: unknown };
@@ -784,5 +785,98 @@ describe('live phone as headset', () => {
     const router = renderAt('/link?code=482913');
     await waitFor(() => expect(router.state.location.pathname).toBe('/signin'));
     expect((router.state.location.state as { from?: string }).from).toBe('/link?code=482913');
+  });
+});
+
+describe('live incoming calls', () => {
+  const MARK = {
+    id: 'mark', name: 'Mark Reyes', first_name: 'Mark', company: 'Reyes Home Care', city: 'Queens', email: '', phone: '+16465550199', notes: '',
+    her_time_zone: 'America/New_York', attempts: 1, list_name: 'October leads', script_id: 's1',
+    last_call: { at: new Date(Date.now() - 86_400_000).toISOString(), outcome: 'callback', note: 'Asked for prices by email first.' },
+  };
+  const RINGING: IncomingCall = {
+    id: 'in1', status: 'ringing', started_at: new Date().toISOString(), ring_until: new Date(Date.now() + 30_000).toISOString(),
+    caller: '+16465550199', to: '+16465550000', price_per_minute_microdollars: 20_000, phone: 'fake', lead: MARK,
+    script: { id: 's1', name: 'Office cleaning', parts: [{ title: 'Open', body: 'Thanks for calling back, {first_name}.' }] },
+  };
+  const CALL = { id: 'in1', lead_id: 'mark', from: '+16465550000', to: '+16465550199', price_per_minute_microdollars: 20_000,
+    started_at: RINGING.started_at, low_balance: false, outcome: null, note: '' };
+  const TOTALS = { calls: 0, talk_seconds: 0, spent_microdollars: 0, interested: 0 };
+
+  beforeEach(() => {
+    answers['GET /me'] = { status: 200, body: { ...ME, plan: 'starter' } };
+    answers['GET /today'] = { status: 200, body: { dials_today: 0, dial_limit: 120, today: TOTALS, yesterday: TOTALS, followups_due: 0, due: [], ready_list: null } };
+    answers['GET /incoming'] = { status: 200, body: { call: RINGING } };
+  });
+
+  it('a lead calling back rings on any screen; Answer takes the call to the call screen', async () => {
+    answers['POST /dev/calls/in1/events/answered'] = { status: 200, body: { ...CALL, status: 'answered', answered_at: new Date().toISOString() } };
+    answers['GET /calls/in1'] = { status: 200, body: { ...CALL, status: 'answered', answered_at: new Date().toISOString(), ended_at: null, seconds: 0, cost_microdollars: 0 } };
+    answers['GET /queue'] = { status: 200, body: {
+      title: 'October leads', list_id: null, script_free_until: null, dials_today: 0, dial_limit: 120, balance_microdollars: 9_000_000,
+      price_per_minute_microdollars: 20_000, live_call_id: 'in1', scripts: [], leads: [{ ...MARK, last_call: null }],
+    } };
+    const ended = { ...CALL, status: 'ended', answered_at: '2026-10-04T13:00:00Z', ended_at: '2026-10-04T13:01:00Z', seconds: 60, cost_microdollars: 20_000 };
+    answers['POST /calls/in1/hangup'] = { status: 200, body: ended };
+    answers['POST /calls/in1/outcome'] = { status: 200, body: { ...ended, outcome: 'interested' } };
+    const router = renderAt('/');
+    const alert = await screen.findByRole('dialog', { name: 'Mark Reyes is calling you back' });
+    expect(alert.textContent).toContain('Reyes Home Care · last call yesterday');
+    expect(alert.textContent).toContain('Last note: Asked for prices by email first.');
+
+    answers['GET /incoming'] = { status: 200, body: { call: null } };
+    fireEvent.click(screen.getByRole('button', { name: 'Answer' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/call/mark'));
+    expect(calls.some(c => c.method === 'POST' && c.path === '/dev/calls/in1/events/answered')).toBe(true);
+    expect(await screen.findByText('CONNECTED')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Mark Reyes' })).toBeTruthy();
+    expect(screen.getByText('YOUR SCRIPT · OFFICE CLEANING')).toBeTruthy(); // the caller's own script
+    expect(screen.queryByText(/A call from before is still open/)).toBeNull();
+
+    fireEvent.keyDown(window, { key: '1' });
+    fireEvent.click(screen.getByRole('button', { name: /^Hang up/ }));
+    await waitFor(() => expect(calls.find(c => c.path === '/calls/in1/outcome')?.body).toEqual({ outcome: 'interested', note: '' }));
+    expect(calls.some(c => c.method === 'POST' && c.path === '/calls')).toBe(false);
+  });
+
+  it('"Not now" ends the call and sends the lead to Follow-ups', async () => {
+    answers['POST /calls/in1/hangup'] = { status: 200, body: { ...CALL, status: 'ended', answered_at: null, ended_at: null, seconds: 0, cost_microdollars: 0 } };
+    renderAt('/');
+    fireEvent.click(await screen.findByRole('button', { name: 'Not now, add to follow-ups' }));
+    await waitFor(() => expect(calls.some(c => c.method === 'POST' && c.path === '/calls/in1/hangup')).toBe(true));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Mark Reyes is calling you back' })).toBeNull());
+  });
+
+  it('Free has no alert: the app does not check for calls', async () => {
+    answers['GET /me'] = { status: 200, body: ME };
+    renderAt('/');
+    expect(await screen.findByText('No leads to call')).toBeTruthy();
+    expect(calls.some(c => c.path === '/incoming')).toBe(false);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('missed calls show on Follow-ups, Today and History', async () => {
+    answers['GET /incoming'] = { status: 200, body: { call: null } };
+    const lead = { id: 'mark', name: 'Mark Reyes', company: 'Reyes Home Care', phone: '+16465550199', her_time_zone: 'America/New_York' };
+    const missed = { id: 'f1', lead, due_at: new Date(Date.now() - 600_000).toISOString(), reason: 'Missed call', missed: true, last_note: 'Old note', last_outcome: 'callback' };
+    answers['GET /followups'] = { status: 200, body: { counts: { today: 1, tomorrow: 0, week: 0, later: 0 }, followups: [missed] } };
+    renderAt('/followups');
+    expect(await screen.findByText('Called your number back. No message.')).toBeTruthy();
+    expect(screen.getAllByText('Missed call').length).toBe(2); // when, and the result
+    cleanup();
+
+    answers['GET /history'] = { status: 200, body: { calls: [
+      { id: 'c1', lead, to: '+16465550199', incoming: true, answered: false, started_at: new Date().toISOString(), seconds: 0, cost_microdollars: 0, outcome: null, note: '' },
+    ], next_cursor: '', week: TOTALS } };
+    renderAt('/history');
+    expect(await screen.findByText('Called you · Reyes Home Care')).toBeTruthy();
+    expect(screen.getByText('Missed call')).toBeTruthy();
+  });
+
+  it('describes the caller from their last call', () => {
+    const now = new Date();
+    const line = callerLine({ ...RINGING, lead: { ...MARK, last_call: { at: now.toISOString(), outcome: null, note: '' } } }, now);
+    expect(line).toMatch(/^Reyes Home Care · last call today \d+:\d\d (am|pm)$/);
+    expect(callerLine({ ...RINGING, lead: { ...MARK, company: '', last_call: null } })).toBe('October leads');
   });
 });

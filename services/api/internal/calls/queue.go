@@ -252,7 +252,9 @@ func (s *Service) queueAccount(ctx context.Context, userID string, q *Queue) err
 		return err
 	}
 	q.PricePerMin = quote.PricePerMin
-	err = s.DB.QueryRow(ctx, `SELECT id FROM calls WHERE user_id = $1 AND status <> 'ended'`, userID).Scan(&q.LiveCallID)
+	// A call ringing in isn't one to end from here: the alert shows it.
+	err = s.DB.QueryRow(ctx, `SELECT id FROM calls WHERE user_id = $1 AND status <> 'ended' AND NOT (direction = 'inbound' AND status = 'ringing')`,
+		userID).Scan(&q.LiveCallID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("read live call: %w", err)
 	}
