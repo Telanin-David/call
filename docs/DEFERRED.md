@@ -31,6 +31,9 @@ fine for checking screens but is not the production plan.
 
 ## Before launch
 
+- [ ] Set `VITE_API_URL` on the production build (e.g. `https://api.dialer.app`)
+      and the same site in the API's `WEB_ORIGINS`. Without it the web app
+      stays in demo mode with fake data.
 - [ ] Set `VITE_DEV_TOOLS=false` on the production build. This hides the Dev
       button, plan switcher, Simulate menu and the `/screens` page.
 - [ ] Check the web app on a real iPhone and a real Android phone (install to

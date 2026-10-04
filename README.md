@@ -10,8 +10,16 @@ Reps upload a lead list and a script, rent a US or Canada number, and call from 
 # Prerequisites: Docker, Go 1.23+, Node 20+, pnpm 9+
 docker compose up -d          # Postgres + Valkey
 cd services/api && go run ./cmd/api   # API server on :8080
-cd apps/web && pnpm dev               # React app on :5173
+cd services/api && go run ./cmd/worker  # plan renewals, hourly
+cd apps/web && pnpm dev               # React app on :5173, demo data
+cd apps/web && VITE_API_URL=/api pnpm dev  # React app using the real API
 ```
+
+**Demo or live.** Without `VITE_API_URL` the web app shows fake data on every
+screen and calls nothing (this is what the hosted preview runs). With it, sign
+up, confirm, wallet, top-ups and plans use the API. In development the API
+prints sign-up codes in its log and pays top-ups with a test payment, so the
+whole flow works without Paystack, Stripe, Resend or Termii keys.
 
 ## Repo layout
 

@@ -1,9 +1,12 @@
-import { Link, Outlet, useMatches } from 'react-router-dom';
+import { Link, Navigate, Outlet, useLocation, useMatches } from 'react-router-dom';
 import { Brand, Icon, Pill, Signal, buttonClass, cn, type IconName, type PillTone } from '@dialer/ui';
 import { usePlan, PLAN_LABEL, type Plan } from '@/lib/plan';
 import { useDeviceStore, useCallStore } from '@/lib/store';
 import { formatUsd } from '@/lib/money';
 import { BALANCE, ME } from '@/lib/fake';
+import { homeFor, useMe } from '@/lib/account';
+import { ApiError } from '@/lib/api';
+import { isLive } from '@/lib/backend';
 
 export type Section = 'today' | 'calling' | 'followups' | 'leads' | 'history';
 
@@ -13,6 +16,8 @@ export interface ShellHandle {
   device?: boolean;
   balance?: number;
   white?: boolean;
+  /** Readable without an account (live mode), e.g. the rules. */
+  public?: boolean;
 }
 
 const NAV: { key: Section; to: string; label: string; icon: IconName }[] = [
@@ -56,10 +61,46 @@ function DeviceChip({ plan }: { plan: Plan }) {
   );
 }
 
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1]?.[0] ?? '' : '')).toUpperCase();
+}
+
 export default function AppLayout() {
   const { plan } = usePlan();
   const handle = useShellHandle();
   const onboarding = handle.onboarding === true;
+  const me = useMe();
+  const { pathname } = useLocation();
+
+  // Live: the app is for signed-in, confirmed reps only.
+  if (isLive()) {
+    if (me.isPending) return <div className="flex h-dvh items-center justify-center bg-sunk text-15 text-muted" role="status">Loading…</div>;
+    if (me.error instanceof ApiError && me.error.status === 401) {
+      if (handle.public) {
+        return (
+          <div className="flex h-dvh flex-col">
+            <header className="flex h-[calc(3.5rem+env(safe-area-inset-top))] flex-none items-center border-b border-line bg-surface px-4 pt-[env(safe-area-inset-top)] lg:h-[60px] lg:px-7">
+              <Link to="/signup" className="text-ink no-underline"><Brand /></Link>
+            </header>
+            <main className="min-h-0 flex-1 overflow-auto bg-sunk"><Outlet /></main>
+          </div>
+        );
+      }
+      return <Navigate to="/signin" replace state={{ from: pathname }} />;
+    }
+    if (me.error) {
+      return (
+        <div className="flex h-dvh flex-col items-center justify-center gap-4 bg-sunk px-4 text-center" role="alert">
+          <p className="text-15 text-muted">{me.error.message}</p>
+          <button type="button" className={buttonClass({ variant: 'outline' })} onClick={() => void me.refetch()}>Try again</button>
+        </div>
+      );
+    }
+    if (me.data && homeFor(me.data) !== '/') return <Navigate to={homeFor(me.data)} replace />;
+  }
+  const balance = me.data ? me.data.balance_microdollars : (handle.balance ?? BALANCE);
+  const initials = me.data ? initialsOf(me.data.name) : ME.initials;
 
   return (
     <div className="flex h-dvh flex-col">
@@ -79,13 +120,13 @@ export default function AppLayout() {
         {handle.device && <span className="hidden md:contents"><DeviceChip plan={plan} /></span>}
         <Pill tone={PLAN_PILL[plan]} className="h-7 max-sm:hidden">{plan === 'free' ? 'Free plan' : PLAN_LABEL[plan]}</Pill>
         <Link to="/wallet" aria-label="Wallet" className="flex flex-col items-end leading-none text-ink no-underline">
-          <b className="text-15 font-semibold tabular-nums">{formatUsd(handle.balance ?? BALANCE)}</b>
+          <b className="text-15 font-semibold tabular-nums">{formatUsd(balance)}</b>
           <span className="mt-[3px] text-11 text-muted">Balance</span>
         </Link>
         {!onboarding && <Link to="/wallet" className={cn(buttonClass({ variant: 'outline' }), 'max-sm:hidden')}>Top up</Link>}
         <Link to="/settings" aria-label="Settings"
           className="flex size-[34px] flex-none items-center justify-center rounded-full bg-warn-soft text-13 font-semibold text-warn-ink no-underline">
-          {ME.initials}
+          {initials}
         </Link>
       </header>
       <main className={cn('min-h-0 flex-1 overflow-auto', handle.white ? 'bg-surface' : 'bg-sunk')}>

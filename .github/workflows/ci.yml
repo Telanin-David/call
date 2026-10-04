@@ -94,6 +94,10 @@ jobs:
           node-version: "20"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: API types match openapi.yaml
+        run: |
+          pnpm --filter @dialer/api-client run generate
+          git diff --exit-code packages/api-client/src/schema.d.ts || { echo "Run make gen and commit packages/api-client/src/schema.d.ts"; exit 1; }
       - run: pnpm --filter @dialer/web run lint
       - run: pnpm --filter @dialer/web exec tsc --noEmit
       - run: pnpm --filter @dialer/web test

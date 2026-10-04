@@ -1,5 +1,11 @@
 import { useNavigate } from 'react-router-dom';
-import { Blobs, Button, Icon, Note, PageHeader, Pill, cn, type ButtonVariant, type PillTone } from '@dialer/ui';
+import { useState } from 'react';
+import { Blobs, Button, Icon, Modal, Note, PageHeader, Pill, cn, useToast, type ButtonVariant, type PillTone } from '@dialer/ui';
+import { UpgradeDialog } from '@/routes/calling/Upgrade';
+import { isLive } from '@/lib/backend';
+import { errorText } from '@/lib/api';
+import { useChangePlan, useMe, usePlans, useSubscription } from '@/lib/account';
+import { dayBefore, dayMonth } from '@/lib/dates';
 import { BackLink, Page } from '@/components/Page';
 import { usePlan, PLAN_LABEL, type Plan } from '@/lib/plan';
 import { BALANCE } from '@/lib/fake';
@@ -55,16 +61,42 @@ function CellView({ value }: { value: Cell }) {
   return <>{value}</>;
 }
 
+const RANK: Record<Plan, number> = { free: 0, starter: 1, pro: 2 };
+
 export default function ComparePlans() {
   const navigate = useNavigate();
   const { plan: current, setPlan } = usePlan();
+  const live = isLive();
+  const me = useMe();
+  const plans = usePlans();
+  const sub = useSubscription();
+  const change = useChangePlan();
+  const toast = useToast();
+  const [upgradeTo, setUpgradeTo] = useState<Exclude<Plan, 'free'> | null>(null);
+  const [downTo, setDownTo] = useState<Plan | null>(null);
+  const balance = live ? me.data?.balance_microdollars ?? 0 : BALANCE;
+  const intro = plans.data?.intro_eligible ?? true;
+  const renews = sub.data?.next_renewal;
+
+  /** Live prices come from the api: the same numbers the ledger charges. */
+  function price(p: Plan): { now: number; later: number } {
+    const info = plans.data?.plans.find(x => x.id === p);
+    if (!live || !info) return { now: FEE_INTRO[p], later: FEE_LATER[p] };
+    return { now: intro ? info.intro_fee_microdollars : info.monthly_fee_microdollars, later: info.monthly_fee_microdollars };
+  }
+
+  function choose(p: Plan) {
+    if (!live) { setPlan(p); navigate('/settings'); return; }
+    if (RANK[p] > RANK[current] && p !== 'free') setUpgradeTo(p);
+    else setDownTo(p);
+  }
 
   return (
     <Page className="gap-8 pb-12 pt-6 lg:gap-10 lg:pb-16 lg:pt-11">
       <PageHeader size="xl" title="Pick your plan" back={<BackLink to="/call">Back to calling</BackLink>}
         lede="Free never ends. Every plan pays for calls from your balance, and the higher the plan, the less you pay a minute. Prices are in US dollars."
         className="gap-6"
-        aside={<Note className="text-14"><Icon name="check" className="text-muted" /><span>Paid from your balance<br /><b className="tabular-nums">{formatUsd(BALANCE)} available</b></span></Note>} />
+        aside={<Note className="text-14"><Icon name="check" className="text-muted" /><span>Paid from your balance<br /><b className="tabular-nums">{formatUsd(balance)} available</b></span></Note>} />
 
       <div className="grid items-start gap-4 lg:grid-cols-3 lg:gap-5">
         {PLANS.map(p => {
@@ -76,17 +108,23 @@ export default function ComparePlans() {
               <div className="relative flex min-h-6 items-center"><Pill tone={c.pill} className={cn('font-bold', c.pillClass)}>{PLAN_LABEL[p]}</Pill></div>
               <div className="relative">
                 <div className="flex items-baseline gap-2">
-                  <b className="text-44 font-extrabold tracking-[-0.04em] sm:text-52">{formatUsd(FEE_INTRO[p]).replace('.00', '')}</b>
+                  <b className="text-44 font-extrabold tracking-[-0.04em] sm:text-52">{formatUsd(price(p).now).replace('.00', '')}</b>
                   <span className={cn('text-14', c.note)}>a month</span>
                 </div>
                 <p className={cn('mt-1 text-14', c.note)}>
-                  {p === 'free' ? 'No time limit. Keep calling as long as you like.' : `For your first 3 months. Then ${formatUsd(FEE_LATER[p])} a month after that.`}
+                  {p === 'free'
+                    ? 'No time limit. Keep calling as long as you like.'
+                    : price(p).now !== price(p).later
+                      ? `For your first 3 months. Then ${formatUsd(price(p).later)} a month after that.`
+                      : 'Every month. You have had the intro price before.'}
                 </p>
               </div>
               <div className="relative">
                 {p === current
                   ? <Button variant="current" size="lg" block disabled><Icon name="check" />Your plan</Button>
-                  : <Button variant={c.cta} size="lg" block onClick={() => { setPlan(p); navigate('/settings'); }}>Move to {PLAN_LABEL[p]}</Button>}
+                  : live && sub.data?.pending_change === p && renews
+                    ? <Button variant="current" size="lg" block disabled>Moving here on {dayMonth(renews)}</Button>
+                    : <Button variant={c.cta} size="lg" block onClick={() => choose(p)}>Move to {PLAN_LABEL[p]}</Button>}
               </div>
               <ul className={cn('relative flex list-none flex-col gap-3 border-t pt-[18px]', p === 'pro' ? 'border-white/12' : 'border-night/8')}>
                 {f.base && <li className="flex items-start gap-2.5 text-14"><Icon name="check" className={cn('mt-px', c.check)} /><span className={c.base}>{f.base}</span></li>}
@@ -135,6 +173,26 @@ export default function ComparePlans() {
           </div>
         ))}
       </div>
+      {upgradeTo && <UpgradeDialog open to={upgradeTo} reason={`Move up to ${PLAN_LABEL[upgradeTo]}`} onClose={() => setUpgradeTo(null)} />}
+      <Modal open={downTo !== null} onClose={() => setDownTo(null)} width="sm"
+        title={downTo && renews ? `Move to ${PLAN_LABEL[downTo]} on ${dayMonth(renews)}?` : 'Move plan?'}>
+        {downTo && renews && (
+          <>
+            <p className="mt-3 text-15 text-muted">
+              You keep {PLAN_LABEL[current]} until <b className="text-ink">{dayMonth(dayBefore(renews))}</b>, because you&apos;ve paid for it.
+              {downTo !== 'free' && <> Then {PLAN_LABEL[downTo]} costs {formatUsd(price(downTo).later)} a month from your balance.</>}
+            </p>
+            {change.error && <Note tone="danger" className="mt-3 text-14"><span role="alert">{errorText(change.error)}</span></Note>}
+            <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
+              <Button size="lg" onClick={() => setDownTo(null)}>Stay on {PLAN_LABEL[current]}</Button>
+              <Button variant="outlineDanger" size="lg" disabled={change.isPending}
+                onClick={() => change.mutate(downTo, { onSuccess: () => { toast(`You'll move to ${PLAN_LABEL[downTo]} on ${dayMonth(renews)}`); setDownTo(null); } })}>
+                Move on {dayMonth(renews)}
+              </Button>
+            </div>
+          </>
+        )}
+      </Modal>
     </Page>
   );
 }

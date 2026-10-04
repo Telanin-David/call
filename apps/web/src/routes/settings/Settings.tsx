@@ -1,11 +1,15 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Card, CardHead, DarkCard, DarkEyebrow, Field, Icon, Input, LinkButton, Modal, Select, cn, useToast, type IconName } from '@dialer/ui';
+import { Button, Card, CardHead, DarkCard, DarkEyebrow, Field, Icon, Input, LinkButton, Modal, Note, Select, cn, useToast, type IconName } from '@dialer/ui';
 import { usePlan, PLAN_LABEL } from '@/lib/plan';
 import { useSimStore } from '@/lib/sim';
 import { BALANCE, ME } from '@/lib/fake';
 import { formatUsd } from '@/lib/money';
 import { DIALS_PER_DAY, FEE_INTRO, FEE_LATER, NUMBER_MONTHLY, formatRate } from '@/lib/pricing';
+import { isLive } from '@/lib/backend';
+import { errorText } from '@/lib/api';
+import { useChangePlan, useMe, usePlans, useSignout, useSubscription } from '@/lib/account';
+import { dayBefore, dayMonth, dayMonthYear } from '@/lib/dates';
 
 type Section = 'account' | 'billing' | 'numbers' | 'calling' | 'verify' | 'rules';
 
@@ -86,8 +90,39 @@ export default function Settings() {
   const toast = useToast();
   const v = (label: string, fallback: string) => values[label] ?? fallback;
   const change = (label: string, fallback: string, extra?: Partial<Edit>) => () => setEdit({ label, value: v(label, fallback), ...extra });
-  const [movingToFree, setMovingToFree] = useState(false);
+  const [demoMovingToFree, setDemoMovingToFree] = useState(false);
   const paid = PLAN_LABEL[plan];
+  const live = isLive();
+  const me = useMe();
+  const sub = useSubscription();
+  const plans = usePlans();
+  const changePlan = useChangePlan();
+  const signout = useSignout();
+  const s = sub.data;
+  const movingToFree = live ? s?.pending_change === 'free' : demoMovingToFree;
+  const renews = live ? s?.next_renewal ?? '' : '2026-11-01';
+  const renewDay = renews ? dayMonth(renews) : '';
+  const lastPaidDay = renews ? dayMonth(dayBefore(renews)) : '';
+  const planInfo = plans.data?.plans.find(x => x.id === plan);
+  const fullFee = live ? planInfo?.monthly_fee_microdollars ?? FEE_LATER[plan] : FEE_LATER[plan];
+  const introFee = live ? planInfo?.intro_fee_microdollars ?? FEE_INTRO[plan] : FEE_INTRO[plan];
+  const balance = live ? me.data?.balance_microdollars ?? 0 : BALANCE;
+  const planLine = !live
+    ? `${formatUsd(FEE_INTRO[plan])} a month · month 1 of 3 · then ${formatUsd(FEE_LATER[plan])} from 1 Jan 2027`
+    : s?.intro_ends_on
+      ? `${formatUsd(introFee)} a month until ${dayMonthYear(s.intro_ends_on)} · then ${formatUsd(fullFee)}`
+      : `${formatUsd(fullFee)} a month`;
+  function setMoveToFree(on: boolean) {
+    if (!live) { setDemoMovingToFree(on); return; }
+    changePlan.mutate(on ? 'free' : plan, {
+      onSuccess: () => toast(on ? `You'll move to Free on ${renewDay}` : `You're staying on ${paid}`),
+      onError: err => toast(errorText(err)),
+    });
+  }
+  function signOut() {
+    if (!live) { navigate('/signin'); return; }
+    signout.mutate(undefined, { onSettled: () => navigate('/signin', { replace: true }) });
+  }
   const loses = [
     'Auto-dial. You tap Call on each lead',
     'Phone and laptop together',
@@ -126,20 +161,29 @@ export default function Settings() {
                   <div className="mt-0.5 text-14 text-zinc-300">
                     {plan === 'free'
                       ? 'Call by hand, 30 dials a day. No monthly fee.'
-                      : `${formatUsd(FEE_INTRO[plan])} a month · month 1 of 3 · then ${formatUsd(FEE_LATER[plan])} from 1 Jan 2027`}
+                      : planLine}
                   </div>
                 </div>
                 {plan !== 'pro' && <Button variant="lemon" size="lg" onClick={() => navigate('/plans')}>See {plan === 'free' ? 'Starter' : 'Pro'}</Button>}
                 <Button variant="glass" size="lg" onClick={() => navigate('/plans')}>Change plan</Button>
               </div>
             </DarkCard>
+            {live && s?.grace_ends_at && (
+              <Note tone="danger" className="text-14">
+                <span role="alert">Your {paid} renewal couldn&apos;t be paid. Add money by <b>{dayMonth(s.grace_ends_at)}</b> to keep it, or you move to Free.</span>
+              </Note>
+            )}
             <Section title="Billing">
-              {plan !== 'free' && <Kv label="Next plan charge">1 Nov 2026 · {formatUsd(FEE_INTRO[plan])}</Kv>}
-              <Kv label="Paid from">Your balance · {formatUsd(BALANCE)}</Kv>
+              {plan !== 'free' && !movingToFree && (
+                <Kv label="Next plan charge">
+                  {live ? `${dayMonthYear(renews)} · ${formatUsd(s?.next_charge_microdollars ?? 0)}${s?.pending_change ? ` for ${PLAN_LABEL[s.pending_change as 'free' | 'starter' | 'pro']}` : ''}` : `1 Nov 2026 · ${formatUsd(FEE_INTRO[plan])}`}
+                </Kv>
+              )}
+              <Kv label="Paid from">Your balance · {formatUsd(balance)}</Kv>
               <Kv label="Low balance alert" action="Change" onAction={change('Low balance alert', 'Below $5.00', { options: ['Below $2.00', 'Below $5.00', 'Below $10.00', 'Off'] })}>{v('Low balance alert', 'Below $5.00')}</Kv>
               {plan !== 'free' && (movingToFree
-                ? <Kv label="Moving to Free" action="Stay on plan" onAction={() => setMovingToFree(false)}>On 1 Nov. You keep {paid} until 31 Oct.</Kv>
-                : <Kv label="Move to Free" action="Move to Free" onAction={() => setAskFree(true)}>Starts at your next renewal, 1 Nov. You keep {paid} until then.</Kv>)}
+                ? <Kv label="Moving to Free" action="Stay on plan" onAction={() => setMoveToFree(false)}>On {renewDay}. You keep {paid} until {lastPaidDay}.</Kv>
+                : <Kv label="Move to Free" action="Move to Free" onAction={() => setAskFree(true)}>Starts at your next renewal, {renewDay}. You keep {paid} until then.</Kv>)}
             </Section>
             <NumbersPanel onEdit={setEdit} values={values} />
           </>
@@ -149,10 +193,22 @@ export default function Settings() {
 
         {section === 'account' && (
           <Section title="Account">
-            <Kv label="Name" action="Change" onAction={change('Name', ME.name)}>{v('Name', ME.name)}</Kv>
-            <Kv label="Email" action="Change" onAction={change('Email', ME.email)}>{v('Email', ME.email)}</Kv>
-            <Kv label="Phone" action="Change" onAction={change('Phone', '+234 803 123 4567')}>{v('Phone', '+234 803 123 4567')}</Kv>
-            <Kv label="Password" action="Change" onAction={() => setEdit({ label: 'Password', value: '', secret: true })}>{v('Password', 'Last changed 12 Sep')}</Kv>
+            {live && me.data ? (
+              <>
+                <Kv label="Name">{me.data.name}</Kv>
+                <Kv label="Email">{me.data.email}</Kv>
+                <Kv label="Phone">{me.data.phone}</Kv>
+                <Kv label="Password" action="Change" onAction={() => navigate('/forgot')}>Change it with a code sent to your phone</Kv>
+              </>
+            ) : (
+              <>
+                <Kv label="Name" action="Change" onAction={change('Name', ME.name)}>{v('Name', ME.name)}</Kv>
+                <Kv label="Email" action="Change" onAction={change('Email', ME.email)}>{v('Email', ME.email)}</Kv>
+                <Kv label="Phone" action="Change" onAction={change('Phone', '+234 803 123 4567')}>{v('Phone', '+234 803 123 4567')}</Kv>
+                <Kv label="Password" action="Change" onAction={() => setEdit({ label: 'Password', value: '', secret: true })}>{v('Password', 'Last changed 12 Sep')}</Kv>
+              </>
+            )}
+            <Button variant="outline" className="mt-3" disabled={signout.isPending} onClick={signOut}>Sign out</Button>
           </Section>
         )}
 
@@ -205,17 +261,17 @@ export default function Settings() {
         )}
       </Modal>
 
-      <Modal open={askFree} onClose={() => setAskFree(false)} title="Move to Free on 1 Nov?">
-        <p className="mt-3 text-15 text-muted">You keep {paid} until <b className="text-ink">31 Oct</b>, because you've paid for it. On 1 Nov you lose:</p>
+      <Modal open={askFree} onClose={() => setAskFree(false)} title={`Move to Free on ${renewDay}?`}>
+        <p className="mt-3 text-15 text-muted">You keep {paid} until <b className="text-ink">{lastPaidDay}</b>, because you've paid for it. On {renewDay} you lose:</p>
         <ul className="mt-4 flex list-none flex-col gap-3 rounded-2xl bg-danger-tint px-[18px] py-4 text-14">
           {loses.map(l => <li key={l} className="flex items-start gap-2.5"><Icon name="x" size={16} className="mt-0.5 text-danger" />{l}</li>)}
         </ul>
         <p className="mt-4 text-13 text-muted">
-          Your leads, follow-ups, history and number stay. Your intro price ends, so coming back later costs {formatUsd(FEE_LATER[plan]).replace('.00', '')} a month.
+          Your leads, follow-ups, history and number stay. Your intro price ends, so coming back later costs {formatUsd(fullFee).replace('.00', '')} a month.
         </p>
         <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
           <Button size="lg" onClick={() => setAskFree(false)}>Stay on {paid}</Button>
-          <Button variant="outlineDanger" size="lg" onClick={() => { setMovingToFree(true); setAskFree(false); }}>Move to Free on 1 Nov</Button>
+          <Button variant="outlineDanger" size="lg" disabled={changePlan.isPending} onClick={() => { setMoveToFree(true); setAskFree(false); }}>Move to Free on {renewDay}</Button>
         </div>
       </Modal>
     </div>

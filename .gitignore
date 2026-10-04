@@ -38,5 +38,3 @@ Thumbs.db
 # Docker volumes (local dev)
 infra/.volumes/
 
-# Generated API client (regenerate with make gen)
-packages/api-client/src/schema.d.ts

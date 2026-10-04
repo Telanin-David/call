@@ -12,8 +12,9 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
   return <select ref={ref} className={cn(control, className)} {...rest} />;
 });
 
-export function Field({ label, htmlFor, hint, end, className, children }: {
-  label: string; htmlFor?: string; hint?: ReactNode; end?: ReactNode; className?: string; children: ReactNode;
+/** A labelled control. `error` replaces the hint and is announced. */
+export function Field({ label, htmlFor, hint, error, end, className, children }: {
+  label: string; htmlFor?: string; hint?: ReactNode; error?: string; end?: ReactNode; className?: string; children: ReactNode;
 }) {
   return (
     <div className={cn('flex flex-col gap-1.5', className)}>
@@ -22,16 +23,18 @@ export function Field({ label, htmlFor, hint, end, className, children }: {
         {end}
       </div>
       {children}
-      {hint && <span className="text-13 text-muted">{hint}</span>}
+      {error
+        ? <span role="alert" className="text-13 font-medium text-danger-ink">{error}</span>
+        : hint && <span className="text-13 text-muted">{hint}</span>}
     </div>
   );
 }
 
-export function PasswordInput({ id, defaultValue = '' }: { id?: string; defaultValue?: string }) {
+export function PasswordInput({ defaultValue = '', ...rest }: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
   const [shown, setShown] = useState(false);
   return (
     <div className="relative">
-      <Input id={id} type={shown ? 'text' : 'password'} defaultValue={defaultValue} />
+      <Input type={shown ? 'text' : 'password'} defaultValue={defaultValue} {...rest} />
       <button type="button" className={cn(linkClass, 'absolute right-3 top-3 text-13')} onClick={() => setShown(s => !s)}>
         {shown ? 'Hide' : 'Show'}
       </button>
@@ -39,9 +42,10 @@ export function PasswordInput({ id, defaultValue = '' }: { id?: string; defaultV
   );
 }
 
-export function CodeBoxes({ digits, size = 'lg' }: { digits: string; size?: 'md' | 'lg' }) {
+/** Six boxes showing a code. `decorative` hides them from screen readers when a real input speaks for them. */
+export function CodeBoxes({ digits, size = 'lg', decorative }: { digits: string; size?: 'md' | 'lg'; decorative?: boolean }) {
   return (
-    <div className="flex gap-2 sm:gap-2.5" aria-label="6-digit code">
+    <div className="flex gap-2 sm:gap-2.5" {...(decorative ? { 'aria-hidden': true } : { 'aria-label': '6-digit code' })}>
       {Array.from({ length: 6 }, (_, i) => (
         <span key={i} className={cn(
           'flex min-w-0 max-w-[54px] flex-1 items-center justify-center rounded-md border border-transparent bg-sunk font-mono font-semibold text-ink',
@@ -51,6 +55,24 @@ export function CodeBoxes({ digits, size = 'lg' }: { digits: string; size?: 'md'
           {digits[i] ?? ''}
         </span>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Six digit boxes you can type into. A real (invisible) input sits on top,
+ * so paste, the phone's one-time-code suggestion and screen readers work.
+ */
+export function CodeInput({ value, onChange, size = 'lg', id, label = '6-digit code', autoFocus }: {
+  value: string; onChange: (code: string) => void; size?: 'md' | 'lg'; id?: string; label?: string; autoFocus?: boolean;
+}) {
+  return (
+    <div className="relative">
+      <CodeBoxes digits={value} size={size} decorative />
+      <input id={id} name="code" aria-label={label} autoFocus={autoFocus} value={value}
+        inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]*" maxLength={6}
+        onChange={e => onChange(e.target.value.replace(/\D/g, '').slice(0, 6))}
+        className="absolute inset-0 size-full cursor-text opacity-0" />
     </div>
   );
 }

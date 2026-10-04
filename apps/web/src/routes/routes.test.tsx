@@ -2,6 +2,7 @@ import { describe, expect, it, afterEach, beforeEach } from 'vitest';
 import { cleanup, render, screen, fireEvent, within } from '@testing-library/react';
 import { RouterProvider, createMemoryRouter } from 'react-router-dom';
 import { Suspense } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { routes } from './index';
 import { PlanProvider, type Plan } from '@/lib/plan';
 import { useSimStore } from '@/lib/sim';
@@ -16,9 +17,11 @@ afterEach(() => {
 function renderAt(path: string, plan: Plan = 'starter') {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   return render(
-    <PlanProvider initial={plan}>
-      <Suspense fallback={null}><RouterProvider router={router} /></Suspense>
-    </PlanProvider>,
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <PlanProvider initial={plan}>
+        <Suspense fallback={null}><RouterProvider router={router} /></Suspense>
+      </PlanProvider>
+    </QueryClientProvider>,
   );
 }
 

@@ -12,6 +12,7 @@ const GROUPS: { title: string; items: Entry[] }[] = [
       { name: 'Sign in', to: '/signin' },
       { name: 'Create account', to: '/signup' },
       { name: 'Check your email', to: '/check-email' },
+      { name: 'Email link opened', to: '/confirm-email?token=demo' },
       { name: 'Confirm email and phone', to: '/confirm' },
       { name: 'Reset password', to: '/forgot' },
       { name: 'Setup checklist and add money', to: '/setup' },
