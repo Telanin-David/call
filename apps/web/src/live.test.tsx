@@ -9,6 +9,7 @@ import { fullPhone, problemOf } from '@/lib/forms';
 import { ApiError } from '@/lib/api';
 import { leftOutLine, listNameFromFile, readCsvFile, remap } from '@/lib/leads';
 import { freshName, partsFromText } from '@/lib/scripts';
+import { prettyNumber } from '@/lib/numbers';
 import { renderScript } from '@/lib/script';
 
 // Live mode: the screens talk to an api. Here the api is a table of answers.
@@ -287,6 +288,77 @@ describe('live scripts', () => {
     expect(await screen.findByText('Office cleaning v2 deleted')).toBeTruthy();
     expect(calls.some(c => c.method === 'DELETE' && c.path === '/scripts/s2')).toBe(true);
     expect(screen.getByText('Not saved yet')).toBeTruthy();
+  });
+});
+
+describe('live numbers', () => {
+  const SEARCH = { monthly_price_microdollars: 1_500_000, numbers: [
+    { number: '+16465550142', city: 'New York, NY' },
+    { number: '+16465550149', city: 'New York, NY' },
+  ] };
+  const RENTED = {
+    id: 'n1', number: '+16465550149', city: 'New York, NY', country: 'US', is_default: true, monthly_price_microdollars: 1_500_000,
+    renews_on: '2026-11-04', cancel_on: null, renewal_failed_at: null, created_at: '2026-10-04T10:00:00Z',
+  };
+
+  it('searches an area code and rents the picked number', async () => {
+    answers['GET /me'] = { status: 200, body: ME };
+    answers['GET /numbers/available'] = { status: 200, body: SEARCH };
+    answers['POST /numbers'] = { status: 201, body: RENTED };
+    answers['GET /numbers'] = { status: 200, body: { numbers: [RENTED], monthly_total_microdollars: 1_500_000, monthly_price_microdollars: 1_500_000, max_numbers: 20 } };
+    const router = renderAt('/numbers?from=settings');
+    expect((await screen.findAllByText('+1 (646) 555-0142')).length).toBe(2); // in the list and the card
+    expect(calls.find(c => c.path.startsWith('/numbers/available'))?.path).toBe('/numbers/available?country=US&area_code=646');
+    expect(screen.getByText('$18.50')).toBeTruthy(); // balance after: $20.00 - $1.50
+    fireEvent.click(screen.getByRole('radio', { name: /555-0149/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rent for $1.50' }));
+    await waitFor(() => expect(router.state.location.search).toBe('?tab=numbers'));
+    expect(calls.find(c => c.method === 'POST' && c.path === '/numbers')?.body).toEqual({ number: '+16465550149', city: 'New York, NY', country: 'US' });
+  });
+
+  it('asks for a top-up first when the balance is short, and shows server errors', async () => {
+    answers['GET /me'] = { status: 200, body: { ...ME, balance_microdollars: 1_000_000 } };
+    answers['GET /numbers/available'] = { status: 200, body: SEARCH };
+    renderAt('/numbers');
+    expect(await screen.findByText(/Add \$0\.50 to your balance first/)).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Rent for $1.50' }) as HTMLButtonElement).disabled).toBe(true);
+    cleanup();
+
+    answers['GET /me'] = { status: 200, body: ME };
+    answers['POST /numbers'] = { status: 409, body: { code: 'number_gone', error: 'Someone just took that number. Pick another one.' } };
+    renderAt('/numbers');
+    const rent = await screen.findByRole('button', { name: 'Rent for $1.50' }) as HTMLButtonElement;
+    await waitFor(() => expect(rent.disabled).toBe(false));
+    fireEvent.click(rent);
+    expect(await screen.findByText('Someone just took that number. Pick another one.')).toBeTruthy();
+  });
+
+  it('settings lists numbers and cancels, keeps and sets the default', async () => {
+    const second = { ...RENTED, id: 'n2', number: '+13125550187', city: 'Chicago, IL', is_default: false, renews_on: '2026-11-09' };
+    answers['GET /me'] = { status: 200, body: ME };
+    answers['GET /subscription'] = { status: 200, body: { plan: 'free' } };
+    answers['GET /plans'] = { status: 200, body: { plans: [] } };
+    answers['GET /numbers'] = { status: 200, body: { numbers: [RENTED, second], monthly_total_microdollars: 3_000_000, monthly_price_microdollars: 1_500_000, max_numbers: 20 } };
+    answers['DELETE /numbers/n2'] = { status: 200, body: { ...second, cancel_on: '2026-11-09' } };
+    answers['PUT /numbers/n2/default'] = { status: 200, body: { ...second, is_default: true } };
+    renderAt('/settings?tab=numbers');
+    expect(await screen.findByText('2 numbers · $3.00 a month')).toBeTruthy();
+    expect(screen.getByText('New York, NY · default · renews 4 Nov · $1.50')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Make default' }));
+    expect(await screen.findByText('+1 (312) 555-0187 is your default now')).toBeTruthy();
+    expect(calls.some(c => c.method === 'PUT' && c.path === '/numbers/n2/default')).toBe(true);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cancel' })[1] as HTMLElement);
+    expect(screen.getByText(/You keep it until 8 Nov, the end of the month you paid for/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel number' }));
+    expect(await screen.findByText(/cancelled\. It's yours until 8 Nov/)).toBeTruthy();
+    expect(calls.some(c => c.method === 'DELETE' && c.path === '/numbers/n2')).toBe(true);
+  });
+
+  it('formats numbers', () => {
+    expect(prettyNumber('+16465550142')).toBe('+1 (646) 555-0142');
+    expect(prettyNumber('+442079460958')).toBe('+442079460958');
   });
 });
 

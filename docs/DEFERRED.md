@@ -23,6 +23,13 @@ fine for checking screens but is not the production plan.
       (`US/CA`, prefix `1`, cost 10,000 µ$/min = $0.01) with the confirmed
       provider's real per-minute costs, as a new migration. Every plan price
       is that cost × the plan multiplier, so this sets what reps pay.
+- [ ] Set `TELNYX_API_KEY` and `TELNYX_CONNECTION_ID` (the voice connection
+      new numbers join). Without the key, renting numbers is off outside
+      development. The Telnyx adapter was built from Telnyx's documented API
+      and tested against a stand-in; try one real search, rent and cancel.
+- [ ] Confirm Telnyx's monthly price for a US/Canada local number. The
+      `numbers.Cost` constant ($1.00) must match it: reps pay it × 1.5, and
+      numbers that cost more are not offered.
 
 ## API contract
 

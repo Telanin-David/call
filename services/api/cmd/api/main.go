@@ -23,9 +23,11 @@ import (
 	"github.com/telanin-david/call/services/api/internal/billing"
 	"github.com/telanin-david/call/services/api/internal/leads"
 	"github.com/telanin-david/call/services/api/internal/notify"
+	"github.com/telanin-david/call/services/api/internal/numbers"
 	"github.com/telanin-david/call/services/api/internal/plans"
 	"github.com/telanin-david/call/services/api/internal/platform"
 	"github.com/telanin-david/call/services/api/internal/scripts"
+	"github.com/telanin-david/call/services/api/internal/telephony"
 	"github.com/telanin-david/call/services/api/internal/wallet"
 )
 
@@ -72,6 +74,7 @@ func main() {
 	planSvc := &plans.Service{DB: db, Mail: mail, Log: logger}
 	leadSvc := &leads.Service{DB: db, Log: logger}
 	scriptSvc := &scripts.Service{DB: db, Log: logger}
+	numberSvc := &numbers.Service{DB: db, Provider: telephony.NumbersFromConfig(cfg), Mail: mail, Limiter: platform.ValkeyLimiter{Client: cache}, Log: logger}
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -100,6 +103,7 @@ func main() {
 		planSvc.Routes(r)
 		leadSvc.Routes(r)
 		scriptSvc.Routes(r)
+		numberSvc.Routes(r)
 		if cfg.Env == "development" {
 			wal.DevRoutes(r)
 		}
