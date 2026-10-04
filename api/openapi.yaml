@@ -1118,11 +1118,11 @@ paths:
         "204":
           description: Stopped
 
-  /followups:
+  /today:
     get:
-      tags: [followups]
-      summary: List follow-ups (today, tomorrow, later)
-      operationId: listFollowups
+      tags: [calls]
+      summary: The rep's day at a glance (the Today screen)
+      operationId: getToday
       responses:
         "200":
           description: OK
@@ -1130,28 +1130,126 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [dials_today, dial_limit, today, yesterday, followups_due, due, ready_list]
                 properties:
+                  dials_today:
+                    type: integer
+                  dial_limit:
+                    type: integer
+                    nullable: true
+                    description: Null on Pro (no limit)
+                  today:
+                    $ref: "#/components/schemas/CallTotals"
+                  yesterday:
+                    $ref: "#/components/schemas/CallTotals"
+                  followups_due:
+                    type: integer
+                    description: Open follow-ups due by the end of the rep's day, overdue included
+                  due:
+                    type: array
+                    description: The first 5 of them
+                    items:
+                      $ref: "#/components/schemas/Followup"
+                  ready_list:
+                    type: object
+                    nullable: true
+                    description: The list to call next (last called with leads left, else the newest)
+                    required: [id, name, left, script_name]
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      name:
+                        type: string
+                      left:
+                        type: integer
+                      script_name:
+                        type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /followups:
+    get:
+      tags: [followups]
+      summary: Open follow-ups in one tab, with counts for every tab
+      operationId: listFollowups
+      parameters:
+        - name: tab
+          in: query
+          schema:
+            type: string
+            enum: [today, tomorrow, week, later]
+            default: today
+          description: today includes anything overdue; week is the rest of the next 7 days
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [counts, followups]
+                properties:
+                  counts:
+                    type: object
+                    required: [today, tomorrow, week, later]
+                    properties:
+                      today:
+                        type: integer
+                      tomorrow:
+                        type: integer
+                      week:
+                        type: integer
+                      later:
+                        type: integer
                   followups:
                     type: array
                     items:
                       $ref: "#/components/schemas/Followup"
 
+  /followups/{followupId}/done:
+    post:
+      tags: [followups]
+      summary: Tick off a follow-up without calling
+      operationId: finishFollowup
+      parameters:
+        - name: followupId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Done
+        "404":
+          description: Not one of the rep's follow-ups
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Blocked"
+
   /history:
     get:
       tags: [history]
-      summary: Full call log
+      summary: Ended calls, newest first, 50 a page
       operationId: listHistory
       parameters:
-        - name: page
+        - name: outcome
           in: query
           schema:
-            type: integer
-            default: 1
-        - name: per_page
+            type: string
+            enum: [interested, callback, not_interested, no_answer, wrong_number, do_not_call]
+        - name: q
           in: query
+          description: Part of a name, company or number
           schema:
-            type: integer
-            default: 25
+            type: string
+        - name: cursor
+          in: query
+          description: next_cursor from the previous page
+          schema:
+            type: string
       responses:
         "200":
           description: OK
@@ -1994,48 +2092,83 @@ components:
           nullable: true
           description: Books a follow-up (not with do_not_call or wrong_number); within a year
 
-    Followup:
+    LeadRef:
       type: object
+      required: [id, name, company, phone, her_time_zone]
       properties:
         id:
           type: string
           format: uuid
-        lead_id:
+        name:
+          type: string
+        company:
+          type: string
+        phone:
+          type: string
+        her_time_zone:
+          type: string
+          description: IANA zone; empty when unknown
+
+    CallTotals:
+      type: object
+      required: [calls, talk_seconds, spent_microdollars, interested]
+      properties:
+        calls:
+          type: integer
+        talk_seconds:
+          type: integer
+        spent_microdollars:
+          type: integer
+          format: int64
+        interested:
+          type: integer
+
+    Followup:
+      type: object
+      required: [id, lead, due_at, reason, last_note, last_outcome]
+      properties:
+        id:
           type: string
           format: uuid
-        lead_name:
-          type: string
-        lead_phone:
-          type: string
+        lead:
+          $ref: "#/components/schemas/LeadRef"
         due_at:
           type: string
           format: date-time
         reason:
           type: string
+        last_note:
+          type: string
+        last_outcome:
+          type: string
+          nullable: true
 
     HistoryResponse:
       type: object
+      required: [calls, next_cursor, week]
       properties:
         calls:
           type: array
           items:
             $ref: "#/components/schemas/CallRecord"
-        total:
-          type: integer
-        page:
-          type: integer
+        next_cursor:
+          type: string
+          description: Empty on the last page
+        week:
+          $ref: "#/components/schemas/CallTotals"
 
     CallRecord:
       type: object
+      required: [id, lead, to, started_at, seconds, cost_microdollars, outcome, note]
       properties:
-        call_id:
+        id:
           type: string
           format: uuid
-        lead_name:
-          type: string
-        lead_phone:
-          type: string
-        from_number:
+        lead:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/LeadRef"
+        to:
           type: string
         started_at:
           type: string
@@ -2047,6 +2180,7 @@ components:
           format: int64
         outcome:
           type: string
+          nullable: true
         note:
           type: string
 

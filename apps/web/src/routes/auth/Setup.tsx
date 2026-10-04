@@ -3,6 +3,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AmountPicker, Button, DarkCard, DarkEyebrow, Icon, Note, PriceRow, Tile, cn, linkClass } from '@dialer/ui';
 import { TwoCol } from '@/components/Page';
 import { ME } from '@/lib/fake';
+import { isLive } from '@/lib/backend';
+import { useMe, useWallet } from '@/lib/account';
+import { useMyNumbers } from '@/lib/numbers';
+import { useLists } from '@/lib/leads';
+import { useScripts } from '@/lib/scripts';
 import { formatUsd, usd } from '@/lib/money';
 import { RATE_PER_MIN, formatRate } from '@/lib/pricing';
 
@@ -10,7 +15,9 @@ const AMOUNTS = [usd(5), usd(10), usd(20), usd(50)];
 
 type StepState = 'done' | 'now' | 'todo';
 
-const STEPS: { title: string; body: string; state: StepState; tag?: string }[] = [
+type Step = { title: string; body: string; state: StepState; tag?: string; go?: { to: string; label: string } };
+
+const STEPS: Step[] = [
   { title: 'Confirm email and phone', body: 'Done in the last step', state: 'done' },
   { title: 'Agree to the rules', body: 'Limits, numbers you can call, one account per person', state: 'done' },
   { title: 'Add money', body: 'Everything is prepaid. Calls and numbers come out of your balance.', state: 'now' },
@@ -25,25 +32,68 @@ const NUM: Record<StepState, string> = {
   todo: 'bg-well text-faint',
 };
 
+/** Live steps: done from the rep's account; the first one not done is "now". */
+function useLiveSteps(): Step[] | null {
+  const live = isLive();
+  const me = useMe();
+  const wallet = useWallet();
+  const numbers = useMyNumbers();
+  const lists = useLists();
+  const scripts = useScripts();
+  if (!live) return null;
+  const loaded = me.data && wallet.data && numbers.data && lists.data && scripts.data;
+  const flags = [
+    Boolean(me.data?.email_confirmed && me.data.phone_confirmed),
+    Boolean(me.data?.rules_accepted_at),
+    (wallet.data?.balance_microdollars ?? 0) > 0 || (wallet.data?.activity ?? []).some(e => e.type === 'topup'),
+    (numbers.data?.numbers.length ?? 0) > 0,
+    (lists.data?.lists.length ?? 0) > 0,
+    (scripts.data?.scripts.length ?? 0) > 0,
+  ];
+  const goes = [
+    undefined,
+    { to: '/rules', label: 'Read the rules' },
+    { to: '/wallet', label: 'Add money' },
+    { to: '/numbers', label: 'Get a number' },
+    { to: '/leads/upload?from=setup', label: 'Upload leads' },
+    { to: '/scripts?from=setup', label: 'Write your script' },
+  ];
+  const now = loaded ? flags.indexOf(false) : -1;
+  return STEPS.map((s, i) => ({
+    ...s,
+    state: flags[i] ? 'done' : i === now ? 'now' : 'todo',
+    body: i === 0 && flags[0] ? 'Done' : s.body,
+    tag: undefined,
+    go: goes[i],
+  }));
+}
+
 export default function Setup() {
   const navigate = useNavigate();
   const [amount, setAmount] = useState(usd(10));
-  const done = STEPS.filter(s => s.state === 'done').length;
+  const me = useMe();
+  const liveSteps = useLiveSteps();
+  const steps = liveSteps ?? STEPS;
+  const done = steps.filter(s => s.state === 'done').length;
+  const first = liveSteps ? (me.data?.name ?? '').split(' ')[0] : ME.first;
 
   return (
     <TwoCol side={300}>
       <div className="flex flex-col gap-3">
         <div className="pb-2.5">
-          <h1 className="text-28 font-extrabold tracking-[-0.04em] md:text-36">Let's get you calling, {ME.first}</h1>
+          <h1 className="text-28 font-extrabold tracking-[-0.04em] md:text-36">{liveSteps && done === steps.length ? `You're ready to call, ${first}` : `Let's get you calling, ${first}`}</h1>
           <div className="mt-3.5 flex flex-wrap items-center gap-x-3.5 gap-y-2 text-14 text-muted">
             <div className="h-2 min-w-[160px] max-w-[320px] flex-1 overflow-hidden rounded-sm bg-well-2">
-              <span className="block h-full rounded-sm bg-tangerine" style={{ width: `${Math.round((done / STEPS.length) * 100)}%` }} />
+              <span className="block h-full rounded-sm bg-tangerine" style={{ width: `${Math.round((done / steps.length) * 100)}%` }} />
             </div>
-            <span><b className="text-ink">{done} of {STEPS.length} done</b> · about 4 minutes left</span>
+            <span><b className="text-ink">{done} of {steps.length} done</b>{done < steps.length && ' · about 4 minutes left'}</span>
           </div>
         </div>
 
-        {STEPS.map((s, i) => (
+        {liveSteps && done === steps.length && (
+          <Button variant="primary" size="lg" className="self-start" onClick={() => navigate('/')}><Icon name="call" />Start calling</Button>
+        )}
+        {steps.map((s, i) => (
           <section key={s.title} className={cn('flex flex-col gap-[18px] rounded-2xl border bg-surface px-4 py-[18px] sm:px-5', s.state === 'now' ? 'border-2 border-tangerine' : 'border-line')}>
             <div className="flex items-center gap-3.5">
               <span className={cn('flex size-[30px] flex-none items-center justify-center rounded-full text-14 font-bold', NUM[s.state])}>
@@ -56,7 +106,12 @@ export default function Setup() {
               {s.state === 'done' && <span className="text-13 font-semibold text-success-ink">Done</span>}
               {s.tag && <span className="text-13 text-faint max-sm:hidden">{s.tag}</span>}
             </div>
-            {s.state === 'now' && (
+            {s.state === 'now' && liveSteps && s.go && (
+              <div className="sm:pl-11">
+                <Button variant="primary" size="lg" onClick={() => s.go && navigate(s.go.to)}>{s.go.label}</Button>
+              </div>
+            )}
+            {s.state === 'now' && !liveSteps && (
               <div className="grid gap-4 sm:pl-11 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-6">
                 <div className="flex flex-col gap-3.5">
                   <AmountPicker amounts={AMOUNTS} value={amount} onChange={setAmount} format={a => formatUsd(a).replace('.00', '')} />

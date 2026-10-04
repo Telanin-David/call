@@ -631,3 +631,109 @@ func TestHTTP(t *testing.T) {
 		t.Fatalf("outcome: %d %v", status, body)
 	}
 }
+
+func TestTodayFollowupsHistory(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	u, list := e.rep(10 * dollar)
+	_, _ = e.svc.DB.Exec(ctx, `UPDATE lead_lists SET name = 'October leads' WHERE id = $1`, list)
+	lena := e.lead(u.ID, list, "+12125550701", "Lena")
+	mark := e.lead(u.ID, list, "+12125550702", "Mark")
+	_ = e.lead(u.ID, list, "+12125550703", "Sara")
+
+	// Yesterday (Lagos time): one call. Today: two calls, Lena interested.
+	if _, err := e.svc.DB.Exec(ctx, `INSERT INTO calls (user_id, lead_id, to_number, status, seconds, cost_microdollars, outcome, started_at)
+		VALUES ($1, $2, '+12125550702', 'ended', 30, 12500, 'no_answer', $3)`, u.ID, mark, morning.AddDate(0, 0, -1)); err != nil {
+		t.Fatal(err)
+	}
+	for i, c := range []struct {
+		lead, to string
+		dur      time.Duration
+		outcome  Outcome
+		follow   *time.Time
+	}{
+		{mark, "+12125550702", 20 * time.Second, CallBack, ptr(morning.AddDate(0, 0, 3))},
+		{lena, "+12125550701", 125 * time.Second, Interested, ptr(morning.Add(2 * time.Hour))},
+	} {
+		begin := morning.Add(time.Duration(i) * 5 * time.Minute)
+		e.clock = begin
+		st, err := e.svc.Start(ctx, u, c.lead)
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.event(st, telephony.EventInitiated, begin, "")
+		e.event(st, telephony.EventAnswered, begin, "")
+		for s := 31 * time.Second; s < c.dur; s += 30 * time.Second {
+			e.clock = e.clock.Add(30 * time.Second)
+			_, _ = e.svc.Tick(ctx)
+		}
+		e.clock = begin.Add(c.dur)
+		e.event(st, telephony.EventHangup, begin.Add(c.dur), "")
+		if _, err := e.svc.SaveOutcome(ctx, u.ID, st.CallID, OutcomeInput{Outcome: c.outcome, Note: "note " + string(c.outcome), FollowUpAt: c.follow}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	e.clock = morning.Add(10 * time.Minute)
+	today, err := e.svc.Today(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lenaCost := int64((freeRate*125 + 59) / 60)
+	if today.DialsToday != 2 || today.DialLimit == nil || *today.DialLimit != 30 || today.Today.TalkSeconds != 145 || today.Today.Interested != 1 {
+		t.Fatalf("today = %+v", today)
+	}
+	if today.Today.Spent != lenaCost+int64((freeRate*20+59)/60) || today.Yesterday.Calls != 1 || today.Yesterday.Spent != 12500 {
+		t.Fatalf("money: today %+v yesterday %+v", today.Today, today.Yesterday)
+	}
+	if today.DueCount != 1 || len(today.DueToday) != 1 || today.DueToday[0].Lead.Name != "Lena" || today.DueToday[0].LastNote != "note interested" {
+		t.Fatalf("due = %d %+v", today.DueCount, today.DueToday)
+	}
+	if today.Ready == nil || today.Ready.Name != "October leads" || today.Ready.Left != 3 {
+		t.Fatalf("ready list = %+v", today.Ready)
+	}
+
+	due, counts, err := e.svc.Followups(ctx, u.ID, "week")
+	if err != nil || counts != (FollowupCounts{Today: 1, Week: 1}) || len(due) != 1 || due[0].Lead.Name != "Mark" || due[0].LastOutcome != "callback" || due[0].Lead.HerTimeZone != "America/New_York" {
+		t.Fatalf("week = %+v %+v %v", due, counts, err)
+	}
+	if err := e.svc.FollowupDone(ctx, u.ID, due[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	other, _ := e.rep(0)
+	if err := e.svc.FollowupDone(ctx, other.ID, today.DueToday[0].ID); !errors.Is(err, ErrFollowupNotFound) {
+		t.Fatalf("another rep's follow-up: %v", err)
+	}
+	if _, counts, _ := e.svc.Followups(ctx, u.ID, "today"); counts != (FollowupCounts{Today: 1}) {
+		t.Fatalf("after done: %+v", counts)
+	}
+
+	all, next, err := e.svc.History(ctx, u.ID, "", "", nil, 2)
+	if err != nil || len(all) != 2 || next == nil || all[0].Lead == nil || all[0].Lead.Name != "Lena" || all[0].Seconds != 125 || all[0].Cost != lenaCost {
+		t.Fatalf("history page 1 = %+v %v %v", all, next, err)
+	}
+	cur, err := ParseHistoryCursor(next.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rest, next, err := e.svc.History(ctx, u.ID, "", "", cur, 2)
+	if err != nil || len(rest) != 1 || next != nil || rest[0].Outcome != "no_answer" {
+		t.Fatalf("history page 2 = %+v %v %v", rest, next, err)
+	}
+	for _, tt := range []struct {
+		outcome, q string
+		want       int
+	}{{"interested", "", 1}, {"", "mar", 2}, {"", "555-0701", 1}, {"", "nobody", 0}} {
+		got, _, err := e.svc.History(ctx, u.ID, tt.outcome, tt.q, nil, 50)
+		if err != nil || len(got) != tt.want {
+			t.Errorf("History(%q, %q) = %d calls, %v; want %d", tt.outcome, tt.q, len(got), err, tt.want)
+		}
+	}
+	if _, err := ParseHistoryCursor("%%%"); !errors.Is(err, ErrBadCursor) {
+		t.Errorf("broken cursor: %v", err)
+	}
+	week, _ := e.svc.Week(ctx, u.ID)
+	if week.Calls != 3 {
+		t.Errorf("week = %+v", week)
+	}
+}

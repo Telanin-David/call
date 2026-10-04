@@ -17,11 +17,15 @@ import (
 // Routes mounts calls for signed-in reps (Sessions.Load must run first).
 func (s *Service) Routes(r chi.Router) {
 	r.With(auth.RequireUser).Get("/calls/{callID}", s.handleGet)
+	r.With(auth.RequireUser).Get("/today", s.handleToday)
+	r.With(auth.RequireUser).Get("/followups", s.handleFollowups)
+	r.With(auth.RequireUser).Get("/history", s.handleHistory)
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireConfirmed)
 		r.Post("/calls", s.handleStart)
 		r.Post("/calls/{callID}/hangup", s.handleHangup)
 		r.Post("/calls/{callID}/outcome", s.handleOutcome)
+		r.Post("/followups/{followupID}/done", s.handleFollowupDone)
 	})
 }
 
@@ -203,6 +207,133 @@ func (s *Service) handleDevEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	platform.JSON(w, http.StatusOK, toJSON(c))
+}
+
+type leadRefJSON struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Company     string `json:"company"`
+	Phone       string `json:"phone"`
+	HerTimeZone string `json:"her_time_zone"`
+}
+
+func leadJSON(l LeadRef) leadRefJSON {
+	return leadRefJSON{l.ID, l.Name, l.Company, l.Phone, l.HerTimeZone}
+}
+
+type totalsJSON struct {
+	Calls       int   `json:"calls"`
+	TalkSeconds int64 `json:"talk_seconds"`
+	Spent       int64 `json:"spent_microdollars"`
+	Interested  int   `json:"interested"`
+}
+
+func totalsOf(t Totals) totalsJSON { return totalsJSON{t.Calls, t.TalkSeconds, t.Spent, t.Interested} }
+
+type followupJSON struct {
+	ID          string      `json:"id"`
+	Lead        leadRefJSON `json:"lead"`
+	DueAt       time.Time   `json:"due_at"`
+	Reason      string      `json:"reason"`
+	LastNote    string      `json:"last_note"`
+	LastOutcome *string     `json:"last_outcome"`
+}
+
+func followupsJSON(fs []Followup) []followupJSON {
+	out := make([]followupJSON, len(fs))
+	for i, f := range fs {
+		out[i] = followupJSON{f.ID, leadJSON(f.Lead), f.DueAt, f.Reason, f.LastNote, nullable(f.LastOutcome)}
+	}
+	return out
+}
+
+func (s *Service) handleToday(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFrom(r.Context())
+	t, err := s.Today(r.Context(), u.ID)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	var ready any
+	if t.Ready != nil {
+		ready = map[string]any{"id": t.Ready.ID, "name": t.Ready.Name, "left": t.Ready.Left, "script_name": t.Ready.ScriptName}
+	}
+	platform.JSON(w, http.StatusOK, map[string]any{
+		"dials_today": t.DialsToday, "dial_limit": t.DialLimit, "today": totalsOf(t.Today), "yesterday": totalsOf(t.Yesterday),
+		"followups_due": t.DueCount, "due": followupsJSON(t.DueToday), "ready_list": ready,
+	})
+}
+
+func (s *Service) handleFollowups(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFrom(r.Context())
+	tab := r.URL.Query().Get("tab")
+	switch tab {
+	case "", "today", "tomorrow", "week", "later":
+	default:
+		platform.ErrorJSON(w, http.StatusBadRequest, "bad_tab", "Pick today, tomorrow, week or later.")
+		return
+	}
+	list, c, err := s.Followups(r.Context(), u.ID, tab)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	platform.JSON(w, http.StatusOK, map[string]any{
+		"counts":    map[string]int{"today": c.Today, "tomorrow": c.Tomorrow, "week": c.Week, "later": c.Later},
+		"followups": followupsJSON(list),
+	})
+}
+
+func (s *Service) handleFollowupDone(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFrom(r.Context())
+	if err := s.FollowupDone(r.Context(), u.ID, chi.URLParam(r, "followupID")); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Service) handleHistory(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFrom(r.Context())
+	q := r.URL.Query()
+	after, err := ParseHistoryCursor(q.Get("cursor"))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	items, next, err := s.History(r.Context(), u.ID, q.Get("outcome"), q.Get("q"), after, 50)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	week, err := s.Week(r.Context(), u.ID)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	type itemJSON struct {
+		ID        string       `json:"id"`
+		Lead      *leadRefJSON `json:"lead"`
+		To        string       `json:"to"`
+		StartedAt time.Time    `json:"started_at"`
+		Seconds   int64        `json:"seconds"`
+		Cost      int64        `json:"cost_microdollars"`
+		Outcome   *string      `json:"outcome"`
+		Note      string       `json:"note"`
+	}
+	out := make([]itemJSON, len(items))
+	for i, h := range items {
+		out[i] = itemJSON{ID: h.ID, To: h.To, StartedAt: h.StartedAt, Seconds: h.Seconds, Cost: h.Cost, Outcome: nullable(h.Outcome), Note: h.Note}
+		if h.Lead != nil {
+			l := leadJSON(*h.Lead)
+			out[i].Lead = &l
+		}
+	}
+	cursor := ""
+	if next != nil {
+		cursor = next.String()
+	}
+	platform.JSON(w, http.StatusOK, map[string]any{"calls": out, "next_cursor": cursor, "week": totalsOf(week)})
 }
 
 func (s *Service) fail(w http.ResponseWriter, r *http.Request, err error) {
