@@ -22,12 +22,17 @@ func (s *Service) Routes(r chi.Router) {
 	r.With(auth.RequireUser).Get("/followups", s.handleFollowups)
 	r.With(auth.RequireUser).Get("/history", s.handleHistory)
 	r.With(auth.RequireUser).Get("/queue", s.handleQueue)
+	r.With(auth.RequireUser).Get("/pairing", s.handlePairingGet)
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireConfirmed)
 		r.Post("/calls", s.handleStart)
 		r.Post("/calls/{callID}/hangup", s.handleHangup)
 		r.Post("/calls/{callID}/outcome", s.handleOutcome)
 		r.Post("/followups/{followupID}/done", s.handleFollowupDone)
+		r.Post("/pairing", s.handlePairingCreate)
+		r.Post("/pairing/join", s.handlePairingJoin)
+		r.Post("/pairing/mute", s.handlePairingMute)
+		r.Delete("/pairing", s.handlePairingEnd)
 	})
 }
 
@@ -89,13 +94,15 @@ func toJSON(c Call) callJSON {
 func (s *Service) handleStart(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		LeadID string `json:"lead_id"`
+		// Via is "phone" to call through the rep's linked phone.
+		Via string `json:"via"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&in); err != nil {
 		platform.ErrorJSON(w, http.StatusBadRequest, "bad_request", "The request couldn't be read.")
 		return
 	}
 	u, _ := auth.UserFrom(r.Context())
-	st, err := s.Start(r.Context(), u, in.LeadID)
+	st, err := s.StartVia(r.Context(), u, in.LeadID, in.Via == "phone")
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -103,7 +110,7 @@ func (s *Service) handleStart(w http.ResponseWriter, r *http.Request) {
 	platform.JSON(w, http.StatusCreated, startedJSON{
 		CallID: st.CallID, LeadID: st.Lead.ID, LeadName: st.Lead.Name(), From: st.From, To: st.To,
 		PricePerMin: st.PricePerMin, Held: st.Held, Token: st.Token, ClientState: st.ClientState, HerTimeZone: st.HerTimeZone,
-		Phone: s.phoneKind(),
+		Phone: s.phoneKind(st.ViaPhone),
 	})
 }
 
@@ -352,7 +359,12 @@ func (s *Service) fail(w http.ResponseWriter, r *http.Request, err error) {
 	platform.ErrorJSON(w, http.StatusInternalServerError, "internal", "Something went wrong. Try again.")
 }
 
-func (s *Service) phoneKind() string {
+// phoneKind says who dials: "paired" (the linked phone does), "fake" in
+// development, else "telnyx".
+func (s *Service) phoneKind(viaPhone bool) string {
+	if viaPhone {
+		return "paired"
+	}
 	if _, ok := s.Provider.(*telephony.FakeCalls); ok {
 		return "fake"
 	}
@@ -434,4 +446,126 @@ func (s *Service) handleQueue(w http.ResponseWriter, r *http.Request) {
 		out.ScriptFreeUntil = &d
 	}
 	platform.JSON(w, http.StatusOK, out)
+}
+
+type pairedCallJSON struct {
+	ID          string     `json:"id"`
+	Status      string     `json:"status"`
+	LeadName    string     `json:"lead_name"`
+	From        string     `json:"from"`
+	To          string     `json:"to"`
+	ClientState string     `json:"client_state"`
+	AnsweredAt  *time.Time `json:"answered_at"`
+	PricePerMin int64      `json:"price_per_minute_microdollars"`
+	NeedsDial   bool       `json:"needs_dial"`
+}
+
+type pairingJSON struct {
+	ID        *string         `json:"id"`
+	Status    PairingStatus   `json:"status"`
+	PhoneName string          `json:"phone_name"`
+	Muted     bool            `json:"muted"`
+	ExpiresAt *time.Time      `json:"expires_at"`
+	Call      *pairedCallJSON `json:"call"`
+	// Phone is who dials on the phone: "fake" in development, else "telnyx".
+	Phone string `json:"phone"`
+	// Code is only in the reply that made it; Token only in the join reply.
+	Code  string `json:"code,omitempty"`
+	Token string `json:"token,omitempty"`
+}
+
+func (s *Service) pairingOut(p Pairing) pairingJSON {
+	out := pairingJSON{ID: nullable(p.ID), Status: p.Status, PhoneName: p.PhoneName, Muted: p.Muted, Phone: s.phoneKind(false)}
+	if p.Status == PairingWaiting {
+		at := p.ExpiresAt
+		out.ExpiresAt = &at
+	}
+	if p.Call != nil {
+		c := p.Call
+		out.Call = &pairedCallJSON{ID: c.ID, Status: c.Status, LeadName: c.LeadName, From: c.From, To: c.To, ClientState: c.ClientState,
+			AnsweredAt: c.AnsweredAt, PricePerMin: c.PricePerMin, NeedsDial: c.NeedsDial}
+	}
+	return out
+}
+
+func (s *Service) handlePairingCreate(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFrom(r.Context())
+	p, code, err := s.CreatePairing(r.Context(), u)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	out := s.pairingOut(p)
+	out.Code = code
+	platform.JSON(w, http.StatusCreated, out)
+}
+
+// handlePairingGet is polled by both devices; ?as=phone is the phone
+// checking in.
+func (s *Service) handlePairingGet(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFrom(r.Context())
+	p, err := s.PairingState(r.Context(), u.ID, r.URL.Query().Get("as") == "phone")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	out := s.pairingOut(p)
+	if r.URL.Query().Get("as") != "phone" && out.Call != nil {
+		// Only the phone dials, so only the phone gets the call's secret.
+		out.Call.ClientState = ""
+	}
+	platform.JSON(w, http.StatusOK, out)
+}
+
+func (s *Service) handlePairingJoin(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Code      string `json:"code"`
+		PhoneName string `json:"phone_name"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&in); err != nil {
+		platform.ErrorJSON(w, http.StatusBadRequest, "bad_request", "The request couldn't be read.")
+		return
+	}
+	u, _ := auth.UserFrom(r.Context())
+	p, err := s.JoinPairing(r.Context(), u, in.Code, in.PhoneName)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	out := s.pairingOut(p)
+	if s.Provider != nil {
+		token, err := s.login(r.Context(), u.ID)
+		if err != nil {
+			s.log().ErrorContext(r.Context(), "phone login failed", "user_id", u.ID, "err", err)
+			s.fail(w, r, ErrUnavailable)
+			return
+		}
+		out.Token = token
+	}
+	platform.JSON(w, http.StatusOK, out)
+}
+
+func (s *Service) handlePairingMute(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Muted bool `json:"muted"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<10)).Decode(&in); err != nil {
+		platform.ErrorJSON(w, http.StatusBadRequest, "bad_request", "The request couldn't be read.")
+		return
+	}
+	u, _ := auth.UserFrom(r.Context())
+	if err := s.SetPairingMuted(r.Context(), u.ID, in.Muted); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Service) handlePairingEnd(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFrom(r.Context())
+	if err := s.EndPairing(r.Context(), u.ID); err != nil && !errors.Is(err, ErrNotPaired) {
+		s.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -244,6 +244,9 @@ func (s *Service) Tick(ctx context.Context) (TickResult, error) {
 			s.log().ErrorContext(ctx, "call tick failed", "call_id", c.ID, "err", err)
 		}
 	}
+	if err := s.endLostPhones(ctx, now, &res); err != nil {
+		s.log().ErrorContext(ctx, "lost phones", "err", err)
+	}
 	return res, nil
 }
 
