@@ -6,10 +6,11 @@ import type { Peek } from './NextLead';
 import { isBlock, isProblem, useSimStore } from '@/lib/sim';
 import { usePlan } from '@/lib/plan';
 import { useCallStore, useDeviceStore } from '@/lib/store';
-import { DETAILS, LEADS, QUEUE, RESULT_LABEL, type QueueItem } from '@/lib/fake';
+import { BALANCE, DETAILS, LEADS, QUEUE, RESULT_LABEL, type LeadDetail, type QueueItem } from '@/lib/fake';
 import { formatUsd, usd } from '@/lib/money';
-import { DIALS_PER_DAY, RATE_PER_MIN } from '@/lib/pricing';
-import type { MergeValues } from '@/lib/script';
+import { DIALS_PER_DAY, RATE_PER_MIN, formatRate } from '@/lib/pricing';
+import { callbackLabel } from '@/lib/calling';
+import { SCRIPT_NAME, SCRIPT_PARTS, type MergeValues, type ScriptPart } from '@/lib/script';
 
 /** `wrapup` is the phone's after-call screen; the laptop picks a result during the call. */
 export type Phase = 'ready' | 'pairing' | 'live' | 'wrapup';
@@ -29,6 +30,37 @@ export const WHEN = ['Tomorrow', 'In 3 days', 'Next week'] as const;
 export type When = string;
 
 const FIRST_OPEN = QUEUE.findIndex(q => !q.done);
+
+/**
+ * What the layouts show that the demo hard-codes and the live session reads
+ * from the api: the list, script, money, clocks, the call's state, and the
+ * live-only extras (Undo, errors, the fake phone's buttons).
+ */
+export interface SessionExtras {
+  demo: boolean;
+  details: Record<string, LeadDetail>;
+  listName: string;
+  script: { name: string; parts: ScriptPart[] } | null;
+  /** "1 Dec": the last day Free shows the script on screen; null on a paid plan. */
+  scriptFreeUntil: string | null;
+  balance: string;
+  rateLabel: string;
+  yourTime: string;
+  callState: 'ready' | 'calling' | 'connected' | 'ended';
+  /** The lead picked up (this call, or the one being wrapped up). */
+  answered: boolean;
+  lowBalance: boolean;
+  busy: boolean;
+  error: string | null;
+  clearError: () => void;
+  undo: { label: string; run: () => void } | null;
+  /** Development with the fake phone: play the lead's side. */
+  dev: { leadHangsUp: () => void } | null;
+  /** A call left open from before (a closed tab), to end it. */
+  staleCall: { end: () => void } | null;
+  loading: boolean;
+  loadError: string | null;
+}
 
 export function clockOf(seconds: number): string {
   return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
@@ -126,7 +158,7 @@ export function useCallSession() {
   /** Writes the result to the queue and moves to the next lead. */
   function save(thenCall: boolean) {
     const result = outcome === 'callback'
-      ? `Call back ${when.toLowerCase()}`
+      ? `Call back ${(WHEN as readonly string[]).includes(when) ? when.toLowerCase() : callbackLabel(when)}`
       : outcome ? (OUTCOMES.find(o => o.key === outcome)?.label ?? '') : RESULT_LABEL.no_answer;
     const next = queue.map((q, i) => (i === current ? { ...q, done: result } : q));
     setQueue(next);
@@ -231,7 +263,30 @@ export function useCallSession() {
     setSim(null);
   }
 
+  const extras: SessionExtras = {
+    demo: true,
+    details: DETAILS,
+    listName: 'October leads',
+    script: { name: SCRIPT_NAME, parts: SCRIPT_PARTS },
+    scriptFreeUntil: free ? '1 Dec' : null,
+    balance: formatUsd(BALANCE),
+    rateLabel: formatRate(plan),
+    yourTime: '8:14 pm',
+    callState: live ? 'connected' : phase === 'wrapup' ? 'ended' : 'ready',
+    answered: live || phase === 'wrapup',
+    lowBalance: false,
+    busy: false,
+    error: null,
+    clearError: () => {},
+    undo: null,
+    dev: null,
+    staleCall: null,
+    loading: false,
+    loadError: null,
+  };
+
   return {
+    ...extras,
     plan, free, sim, setSim, navigate,
     talkVia, via, phoneLinked, setTalkVia, canStart,
     queue, current, setCurrent, lead, detail, merge, left, dials, limit, made,

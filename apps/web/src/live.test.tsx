@@ -12,6 +12,7 @@ import { freshName, partsFromText } from '@/lib/scripts';
 import { prettyNumber } from '@/lib/numbers';
 import { callCost, callLength, initialsOf, relative, talkTime } from '@/lib/activity';
 import { renderScript } from '@/lib/script';
+import { callbackAt, callbackLabel, costOf } from '@/lib/calling';
 
 // Live mode: the screens talk to an api. Here the api is a table of answers.
 type Answer = { status: number; body?: unknown };
@@ -516,5 +517,103 @@ describe('form helpers', () => {
     expect(problemOf(new ApiError(429, 'too_many', 'Wait'))).toEqual({ field: undefined, message: 'Wait' });
     expect(problemOf(new Error('boom'))?.message).toBe('Something went wrong. Try again.');
     expect(problemOf(null)).toBeNull();
+  });
+});
+
+describe('live calling', () => {
+  const LEAD = (id: string, name: string, phone: string, zone: string, extra: Record<string, unknown> = {}) => ({
+    id, name, first_name: name.split(' ')[0], company: `${name.split(' ')[1]} Co`, city: 'Brooklyn', email: '', phone, notes: '',
+    her_time_zone: zone, attempts: 0, list_name: 'October leads', script_id: 's1', last_call: null, ...extra,
+  });
+  const QUEUE = {
+    title: 'October leads', list_id: 'l1', script_free_until: '2026-12-04', dials_today: 3, dial_limit: 30,
+    balance_microdollars: 13_990_000, price_per_minute_microdollars: 25_000, live_call_id: null,
+    scripts: [{ id: 's1', name: 'Office cleaning', parts: [{ title: 'Open', body: 'Hi {first_name}, is now ok at {her_time}?' }] }],
+    leads: [LEAD('ray', 'Ray Cole', '+12135550101', 'America/Los_Angeles'), LEAD('kim', 'Kim Park', '+16465550102', 'America/New_York')],
+  };
+  const CALL = { id: 'c1', lead_id: 'kim', from: '+16465550000', to: '+16465550102', price_per_minute_microdollars: 25_000,
+    started_at: '2026-10-04T13:00:00Z', ended_at: null, seconds: 0, cost_microdollars: 0, low_balance: false, outcome: null, note: '' };
+
+  beforeEach(() => {
+    answers['GET /me'] = { status: 200, body: ME };
+    answers['GET /queue'] = { status: 200, body: QUEUE };
+  });
+
+  it('shows the list, the script filled in, and the server\'s reason when a call is refused', async () => {
+    answers['POST /calls'] = { status: 403, body: {
+      code: 'calling_hours', error: 'Call between 8 am and 9 pm their time. Try the next lead.', title: "It's 5:54 am for Ray Cole", action: 'skip',
+    } };
+    renderAt('/call?list=l1');
+    expect(await screen.findByRole('heading', { name: 'Ray Cole' })).toBeTruthy();
+    expect(calls.some(c => c.path === '/queue?list=l1')).toBe(true);
+    expect(screen.getByText('YOUR SCRIPT · OFFICE CLEANING')).toBeTruthy();
+    expect(screen.getByText('Free until 4 Dec')).toBeTruthy();
+    expect(screen.getByText('US rate $0.025 / min')).toBeTruthy();
+    expect(screen.getByText('$13.99')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /^Call Ray/ }));
+    expect(await screen.findByText("It's 5:54 am for Ray Cole")).toBeTruthy();
+    expect(calls.find(c => c.method === 'POST' && c.path === '/calls')?.body).toEqual({ lead_id: 'ray' });
+    fireEvent.click(screen.getByRole('button', { name: 'Skip to next lead' }));
+    expect(await screen.findByText('Too early or late · skipped')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Kim Park' })).toBeTruthy();
+  });
+
+  it('calls, shows the live call, saves the result on hang up, and Undo changes it', async () => {
+    answers['POST /calls'] = { status: 201, body: {
+      call_id: 'c1', lead_id: 'kim', lead_name: 'Kim Park', from: '+16465550000', to: '+16465550102', price_per_minute_microdollars: 25_000,
+      held_microdollars: 25_000, token: 't', client_state: 'x', her_time_zone: 'America/New_York', phone: 'fake',
+    } };
+    answers['POST /dev/calls/c1/events/initiated'] = { status: 200, body: { ...CALL, status: 'ringing', answered_at: null } };
+    answers['GET /calls/c1'] = { status: 200, body: { ...CALL, status: 'answered', answered_at: '2026-10-04T13:00:03Z' } };
+    const ended = { ...CALL, status: 'ended', answered_at: '2026-10-04T13:00:03Z', ended_at: '2026-10-04T13:00:08Z', seconds: 5, cost_microdollars: 2084 };
+    answers['POST /calls/c1/hangup'] = { status: 200, body: ended };
+    answers['POST /calls/c1/outcome'] = { status: 200, body: { ...ended, outcome: 'interested' } };
+    answers['GET /queue'] = { status: 200, body: { ...QUEUE, list_id: null, leads: [QUEUE.leads[1]] } };
+    renderAt('/call/kim');
+    expect(await screen.findByRole('heading', { name: 'Kim Park' })).toBeTruthy();
+    expect(calls.some(c => c.path === '/queue?lead=kim')).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: /^Call Kim/ }));
+    expect(await screen.findByText('CONNECTED')).toBeTruthy();
+    expect(calls.some(c => c.path === '/dev/calls/c1/events/initiated')).toBe(true);
+    expect(screen.getByRole('button', { name: 'They hang up' })).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: '1' });
+    fireEvent.click(screen.getByRole('button', { name: /^Hang up/ }));
+    expect(await screen.findByText('Saved: Interested · Kim Park')).toBeTruthy();
+    expect(calls.find(c => c.path === '/calls/c1/outcome')?.body).toEqual({ outcome: 'interested', note: '' });
+    expect(await screen.findByText('Your list is done')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(await screen.findByText('CALL ENDED')).toBeTruthy();
+    expect(screen.getByText('Call ended after 0:05.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Call back' }));
+    fireEvent.change(screen.getByLabelText('Note'), { target: { value: 'After 3 pm' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.filter(c => c.path === '/calls/c1/outcome')).toHaveLength(2));
+    const again = calls.filter(c => c.path === '/calls/c1/outcome')[1]?.body as { outcome: string; note: string; follow_up_at: string };
+    expect(again.outcome).toBe('callback');
+    expect(again.note).toBe('After 3 pm');
+    const inHours = (new Date(again.follow_up_at).getTime() - Date.now()) / 3_600_000;
+    expect(inHours).toBeGreaterThan(23);
+    expect(inHours).toBeLessThan(25);
+  });
+
+  it('offers to end a call left open from before', async () => {
+    answers['GET /queue'] = { status: 200, body: { ...QUEUE, live_call_id: 'old' } };
+    answers['POST /calls/old/hangup'] = { status: 200, body: { ...CALL, id: 'old', status: 'ended', answered_at: null } };
+    renderAt('/call?list=l1');
+    fireEvent.click(await screen.findByRole('button', { name: 'End that call' }));
+    await waitFor(() => expect(calls.some(c => c.method === 'POST' && c.path === '/calls/old/hangup')).toBe(true));
+  });
+
+  it('works out when a call back lands', () => {
+    const now = new Date('2026-10-04T13:00:00Z');
+    expect(callbackAt('Tomorrow', now).toISOString()).toBe('2026-10-05T13:00:00.000Z');
+    expect(callbackAt('Next week', now).toISOString()).toBe('2026-10-11T13:00:00.000Z');
+    expect(callbackAt('2026-10-09', now).getDate()).toBe(9);
+    expect(callbackAt('2026-01-01', now).getTime()).toBeGreaterThan(now.getTime());
+    expect(callbackLabel('2026-10-09')).toBe('Fri 9 Oct');
+    expect(callbackLabel('Tomorrow')).toBe('Tomorrow');
+    expect(costOf(25_000, 5)).toBe(2084);
   });
 });

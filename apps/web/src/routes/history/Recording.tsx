@@ -19,7 +19,7 @@ const TRANSCRIPTS: Record<string, { lines: Line[]; summary: string[]; followup?:
       { you: false, text: 'Thursday works. After 10 am, my time.' },
     ],
     summary: ['Unhappy with current cleaner. They skip Fridays.', 'Two sites in Queens.', 'Open to a quote. Wants a call Thursday after 10 am her time.'],
-    followup: 'Thu 3 Oct, 10:30 am her time',
+    followup: 'Thu 3 Oct, 10:30 am their time',
   },
   lena: {
     lines: [
@@ -28,7 +28,7 @@ const TRANSCRIPTS: Record<string, { lines: Line[]; summary: string[]; followup?:
       { you: true, text: "Of course. I'll call you after 3 pm your time." },
     ],
     summary: ['Busy, asked for a call after 3 pm her time.', 'Still unhappy with the Friday cleaner.'],
-    followup: 'Today, 3:30 pm her time',
+    followup: 'Today, 3:30 pm their time',
   },
   rosa: {
     lines: [

@@ -87,7 +87,7 @@ type Started struct {
 	// ClientState goes with the call to the provider and comes back on its
 	// events. Only this browser knows it.
 	ClientState string
-	// HerTimeZone is the lead's time zone, for "her time" on screen.
+	// HerTimeZone is the lead's time zone, for "their time" on screen.
 	HerTimeZone string
 }
 

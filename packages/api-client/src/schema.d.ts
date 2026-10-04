@@ -476,7 +476,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete a list and its leads (refused once any lead was called) */
+        /** Delete a list, its leads and their follow-ups (calls stay in history; refused during a call to one of its leads) */
         delete: operations["deleteLeadList"];
         options?: never;
         head?: never;
@@ -770,6 +770,28 @@ export interface paths {
         };
         /** Ended calls, newest first, 50 a page */
         get: operations["listHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The leads the call screen works through, with their scripts and the rep's limits
+         * @description One of list, followups or lead; with none, the list Today offers.
+         *     Leaves out leads that can't be called (3 tries, do-not-call, done);
+         *     every rule is checked again on each dial.
+         */
+        get: operations["getQueue"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1303,8 +1325,13 @@ export interface components {
             token: string;
             /** @description Attach to the call; only this browser knows it */
             client_state: string;
-            /** @description IANA zone for "her time"; empty when unknown */
+            /** @description IANA zone for "their time"; empty when unknown */
             her_time_zone: string;
+            /**
+             * @description Which browser phone dials; fake only in development, where /dev/calls plays the provider
+             * @enum {string}
+             */
+            phone: "telnyx" | "fake";
         };
         Call: {
             /** Format: uuid */
@@ -1370,6 +1397,61 @@ export interface components {
             reason: string;
             last_note: string;
             last_outcome: string | null;
+        };
+        Queue: {
+            /** @description The list's name, or "Follow-ups due today" */
+            title: string;
+            /** Format: uuid */
+            list_id: string | null;
+            leads: components["schemas"]["QueueLead"][];
+            scripts: components["schemas"]["QueueScript"][];
+            /**
+             * Format: date
+             * @description Free only; from this day the script is a Starter feature on the call screen
+             */
+            script_free_until: string | null;
+            dials_today: number;
+            dial_limit: number | null;
+            /** Format: int64 */
+            balance_microdollars: number;
+            /**
+             * Format: int64
+             * @description The rep's price per minute to the US and Canada
+             */
+            price_per_minute_microdollars: number;
+            /**
+             * Format: uuid
+             * @description A call still open from before, to end it
+             */
+            live_call_id: string | null;
+        };
+        QueueLead: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            first_name: string;
+            company: string;
+            city: string;
+            email: string;
+            phone: string;
+            notes: string;
+            her_time_zone: string;
+            attempts: number;
+            list_name: string;
+            /** Format: uuid */
+            script_id: string | null;
+            last_call: {
+                /** Format: date-time */
+                at: string;
+                outcome: string | null;
+                note: string;
+            } | null;
+        };
+        QueueScript: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            parts: components["schemas"]["ScriptPart"][];
         };
         HistoryResponse: {
             calls: components["schemas"]["CallRecord"][];
@@ -2549,7 +2631,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Hung up; the bill follows when the provider confirms the end */
+            /** @description Ended and billed to the second, with the final time and cost */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2804,6 +2886,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HistoryResponse"];
+                };
+            };
+        };
+    };
+    getQueue: {
+        parameters: {
+            query?: {
+                list?: string;
+                /** @description 1: the leads with a follow-up due today, in due order */
+                followups?: "1";
+                /** @description Just this lead */
+                lead?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Queue"];
+                };
+            };
+            /** @description No such list or lead */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Blocked"];
                 };
             };
         };

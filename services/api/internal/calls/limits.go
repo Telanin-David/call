@@ -139,7 +139,7 @@ func outsideHours(name, herTime string) *Blocked {
 	if herTime != "" {
 		title = "It's " + herTime + " for " + name
 	}
-	return &Blocked{http.StatusForbidden, errHours.Code, title, "Call between 8 am and 9 pm her time. Try the next lead.", "skip"}
+	return &Blocked{http.StatusForbidden, errHours.Code, title, "Call between 8 am and 9 pm their time. Try the next lead.", "skip"}
 }
 
 func noRate(name string) *Blocked {
@@ -163,3 +163,6 @@ func dollars(micro int64) string {
 	}
 	return fmt.Sprintf("%s$%d.%02d", sign, cents/100, cents%100)
 }
+
+// ErrListNotFound is a call screen opened on a list that isn't the rep's.
+var ErrListNotFound = &Blocked{http.StatusNotFound, "list_not_found", "That list isn't one of yours", "Pick a list on the Leads page.", ""}

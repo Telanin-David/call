@@ -217,11 +217,32 @@ func TestAddAndLists(t *testing.T) {
 		if err := s.Delete(ctx, user, abroad.ID); !errors.Is(err, ErrListNotFound) {
 			t.Fatalf("deleted twice: %v", err)
 		}
-		if _, err := pool.Exec(ctx, `INSERT INTO calls (user_id, lead_id) SELECT user_id, id FROM leads WHERE list_id = $1 LIMIT 1`, main.ID); err != nil {
+		// A call that is still going keeps the list.
+		var callID string
+		if err := pool.QueryRow(ctx, `INSERT INTO calls (user_id, lead_id, to_number, status)
+			SELECT user_id, id, phone, 'answered' FROM leads WHERE list_id = $1 LIMIT 1 RETURNING id`, main.ID).Scan(&callID); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.Delete(ctx, user, main.ID); !errors.Is(err, ErrListHasCalls) {
-			t.Fatalf("list with calls: %v", err)
+		if err := s.Delete(ctx, user, main.ID); !errors.Is(err, ErrListOnCall) {
+			t.Fatalf("list on a call: %v", err)
+		}
+		// Once it ended the list goes, and the call stays in history without its lead.
+		if _, err := pool.Exec(ctx, `UPDATE calls SET status = 'ended', ended_at = now() WHERE id = $1`, callID); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Delete(ctx, user, main.ID); err != nil {
+			t.Fatalf("list with an ended call: %v", err)
+		}
+		var leadID *string
+		if err := pool.QueryRow(ctx, `SELECT lead_id::text FROM calls WHERE id = $1`, callID).Scan(&leadID); err != nil {
+			t.Fatalf("call kept: %v", err)
+		}
+		if leadID != nil {
+			t.Errorf("call still points at deleted lead %s", *leadID)
+		}
+		var left int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM leads WHERE list_id = $1`, main.ID).Scan(&left); err != nil || left != 0 {
+			t.Errorf("leads left after delete: %d, %v", left, err)
 		}
 	})
 }

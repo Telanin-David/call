@@ -163,7 +163,7 @@ export default function LinkPhone() {
           <h1 className="text-32 font-extrabold tracking-[-0.03em]">Lena Park</h1>
           <p className="text-17 tabular-nums text-zinc-300">{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</p>
           <div className="mt-3 flex justify-center gap-2 text-12 font-bold">
-            <span className="rounded-full bg-white/10 px-2.5 py-1">Her time 3:14 pm</span>
+            <span className="rounded-full bg-white/10 px-2.5 py-1">Their time 3:14 pm</span>
             <span className="rounded-full bg-tangerine/20 px-2.5 py-1 text-glow">{formatUsd3(Math.round((RATE_PER_MIN.starter * seconds) / 60))}</span>
           </div>
         </div>

@@ -192,22 +192,24 @@ func callLine(to string, seconds int64) string {
 	return fmt.Sprintf("Call to %s, %d:%02d", pretty, seconds/60, seconds%60)
 }
 
-// Hangup is the rep ending a call. The provider's hangup event bills it;
-// a call that never reached the provider is ended here.
+// Hangup is the rep ending a call. The provider is told to hang up and the
+// call is billed to now, so the screen shows the final time and cost at
+// once; the provider's own hangup event that follows is a no-op.
 func (s *Service) Hangup(ctx context.Context, userID, callID string) (Call, error) {
 	c, err := s.Get(ctx, userID, callID)
 	if err != nil {
 		return Call{}, err
 	}
-	switch {
-	case c.Status == "ended":
-	case c.ProviderID != "" && s.Provider != nil:
-		if err := s.Provider.Hangup(ctx, c.ProviderID); err != nil {
-			s.log().ErrorContext(ctx, "hang up", "call_id", c.ID, "err", err)
-			return Call{}, ErrUnavailable
+	if c.Status != "ended" {
+		cause := "rep_cancelled"
+		if c.ProviderID != "" && s.Provider != nil {
+			cause = "rep_hung_up"
+			if err := s.Provider.Hangup(ctx, c.ProviderID); err != nil {
+				s.log().ErrorContext(ctx, "hang up", "call_id", c.ID, "err", err)
+				return Call{}, ErrUnavailable
+			}
 		}
-	default:
-		if err := s.finish(ctx, c.ID, s.now(), "rep_cancelled"); err != nil {
+		if err := s.finish(ctx, c.ID, s.now(), cause); err != nil {
 			return Call{}, err
 		}
 	}

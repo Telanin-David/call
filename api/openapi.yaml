@@ -726,7 +726,7 @@ paths:
   /lists/{listId}:
     delete:
       tags: [lists]
-      summary: Delete a list and its leads (refused once any lead was called)
+      summary: Delete a list, its leads and their follow-ups (calls stay in history; refused during a call to one of its leads)
       operationId: deleteLeadList
       parameters:
         - name: listId
@@ -1027,7 +1027,7 @@ paths:
             format: uuid
       responses:
         "200":
-          description: Hung up; the bill follows when the provider confirms the end
+          description: Ended and billed to the second, with the final time and cost
           content:
             application/json:
               schema:
@@ -1257,6 +1257,47 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HistoryResponse"
+
+  /queue:
+    get:
+      tags: [calls]
+      summary: The leads the call screen works through, with their scripts and the rep's limits
+      description: |
+        One of list, followups or lead; with none, the list Today offers.
+        Leaves out leads that can't be called (3 tries, do-not-call, done);
+        every rule is checked again on each dial.
+      operationId: getQueue
+      parameters:
+        - name: list
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: followups
+          in: query
+          description: "1: the leads with a follow-up due today, in due order"
+          schema:
+            type: string
+            enum: ["1"]
+        - name: lead
+          in: query
+          description: Just this lead
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Queue"
+        "404":
+          description: No such list or lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Blocked"
 
   /recordings/{callId}:
     get:
@@ -1997,7 +2038,7 @@ components:
 
     StartedCall:
       type: object
-      required: [call_id, lead_id, lead_name, from, to, price_per_minute_microdollars, held_microdollars, token, client_state, her_time_zone]
+      required: [call_id, lead_id, lead_name, from, to, price_per_minute_microdollars, held_microdollars, token, client_state, her_time_zone, phone]
       properties:
         call_id:
           type: string
@@ -2026,7 +2067,11 @@ components:
           description: Attach to the call; only this browser knows it
         her_time_zone:
           type: string
-          description: IANA zone for "her time"; empty when unknown
+          description: IANA zone for "their time"; empty when unknown
+        phone:
+          type: string
+          enum: [telnyx, fake]
+          description: Which browser phone dials; fake only in development, where /dev/calls plays the provider
 
     Call:
       type: object
@@ -2142,6 +2187,108 @@ components:
         last_outcome:
           type: string
           nullable: true
+
+    Queue:
+      type: object
+      required: [title, list_id, leads, scripts, script_free_until, dials_today, dial_limit, balance_microdollars, price_per_minute_microdollars, live_call_id]
+      properties:
+        title:
+          type: string
+          description: The list's name, or "Follow-ups due today"
+        list_id:
+          type: string
+          format: uuid
+          nullable: true
+        leads:
+          type: array
+          maxItems: 200
+          items:
+            $ref: "#/components/schemas/QueueLead"
+        scripts:
+          type: array
+          items:
+            $ref: "#/components/schemas/QueueScript"
+        script_free_until:
+          type: string
+          format: date
+          nullable: true
+          description: Free only; from this day the script is a Starter feature on the call screen
+        dials_today:
+          type: integer
+        dial_limit:
+          type: integer
+          nullable: true
+        balance_microdollars:
+          type: integer
+          format: int64
+        price_per_minute_microdollars:
+          type: integer
+          format: int64
+          description: The rep's price per minute to the US and Canada
+        live_call_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: A call still open from before, to end it
+
+    QueueLead:
+      type: object
+      required: [id, name, first_name, company, city, email, phone, notes, her_time_zone, attempts, list_name, script_id, last_call]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        first_name:
+          type: string
+        company:
+          type: string
+        city:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        notes:
+          type: string
+        her_time_zone:
+          type: string
+        attempts:
+          type: integer
+        list_name:
+          type: string
+        script_id:
+          type: string
+          format: uuid
+          nullable: true
+        last_call:
+          type: object
+          nullable: true
+          required: [at, outcome, note]
+          properties:
+            at:
+              type: string
+              format: date-time
+            outcome:
+              type: string
+              nullable: true
+            note:
+              type: string
+
+    QueueScript:
+      type: object
+      required: [id, name, parts]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        parts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScriptPart"
 
     HistoryResponse:
       type: object

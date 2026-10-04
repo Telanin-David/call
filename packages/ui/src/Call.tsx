@@ -48,13 +48,27 @@ export function CallCard({ children }: { children: ReactNode }) {
   return <div className="relative flex flex-col gap-4 overflow-hidden rounded-3xl bg-night p-5 text-white dark:bg-[#1e1e22]">{children}</div>;
 }
 
-export function CallStatus({ live }: { live: boolean }) {
-  return live ? (
-    <span className="inline-flex h-[26px] items-center gap-2 rounded-[13px] bg-[rgba(18,183,106,.16)] px-2.5 text-12 font-semibold tracking-[.04em] text-[#5ee0a0]">
-      <span className="size-2 animate-ring rounded-full bg-success" aria-hidden="true" />CONNECTED
+/** READY, CALLING… while it rings, CONNECTED once they pick up, CALL ENDED after. */
+export function CallStatus({ live, state }: { live: boolean; state?: 'ready' | 'calling' | 'connected' | 'ended' }) {
+  const s = state ?? (live ? 'connected' : 'ready');
+  if (s === 'connected') {
+    return (
+      <span className="inline-flex h-[26px] items-center gap-2 rounded-[13px] bg-[rgba(18,183,106,.16)] px-2.5 text-12 font-semibold tracking-[.04em] text-[#5ee0a0]">
+        <span className="size-2 animate-ring rounded-full bg-success" aria-hidden="true" />CONNECTED
+      </span>
+    );
+  }
+  if (s === 'calling') {
+    return (
+      <span role="status" className="inline-flex h-[26px] items-center gap-2 rounded-[13px] bg-sun/15 px-2.5 text-12 font-semibold tracking-[.04em] text-sun">
+        <span className="size-2 animate-ring rounded-full bg-sun" aria-hidden="true" />CALLING…
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex h-[26px] items-center rounded-[13px] bg-white/8 px-2.5 text-12 font-semibold tracking-[.04em] text-zinc-300">
+      {s === 'ended' ? 'CALL ENDED' : 'READY'}
     </span>
-  ) : (
-    <span className="inline-flex h-[26px] items-center rounded-[13px] bg-white/8 px-2.5 text-12 font-semibold tracking-[.04em] text-zinc-300">READY</span>
   );
 }
 
@@ -73,7 +87,7 @@ export function CallFacts({ items }: { items: { label: string; value: ReactNode;
       {items.map(i => (
         <div key={i.label} className="flex flex-col gap-0.5 bg-night-2 px-3 py-2.5">
           <span className="text-11 leading-[14px] text-zinc-400">{i.label}</span>
-          <b className={cn('text-16 leading-[22px] font-semibold tabular-nums', i.hot && 'text-[#ff9f5e]')}>{i.value}</b>
+          <b className={cn('whitespace-nowrap text-16 leading-[22px] font-semibold tabular-nums', i.hot && 'text-[#ff9f5e]')}>{i.value}</b>
         </div>
       ))}
     </div>

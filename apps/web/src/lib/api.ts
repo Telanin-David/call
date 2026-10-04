@@ -8,6 +8,8 @@ export class ApiError extends Error {
     message: string,
     /** Seconds to wait before trying again, when the api says so. */
     public readonly retryAfter = 0,
+    /** The whole error body, for the few that say more (a refused call's title and next step). */
+    public readonly body: Record<string, unknown> = {},
   ) {
     super(message);
   }
@@ -26,12 +28,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(0, 'offline', "Can't reach Dialer. Check your internet and try again.");
   }
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: unknown; code?: unknown };
+    const raw: unknown = await res.json().catch(() => ({}));
+    const body = raw !== null && typeof raw === 'object' ? raw as Record<string, unknown> : {};
     throw new ApiError(
       res.status,
       typeof body.code === 'string' ? body.code : '',
       typeof body.error === 'string' ? body.error : 'Something went wrong. Try again.',
       Number(res.headers.get('Retry-After')) || 0,
+      body,
     );
   }
   if (res.status === 204) return undefined as T;

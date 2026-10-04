@@ -33,6 +33,10 @@ fine for checking screens but is not the production plan.
       only the countries we sell, as a second lock behind the server's checks.
       Run `cmd/dialer` next to the api: it tops up holds each minute and ends
       calls when the money runs out.
+- [ ] The call screen dials through a fake browser phone in development
+      (`apps/web/src/lib/phone.ts`): no sound, the lead "picks up" after 3
+      seconds. D3 part 5 adds Telnyx's browser phone there; the server side
+      (checks, holds, billing, events) is already the real one.
 - [ ] Confirm Telnyx's monthly price for a US/Canada local number. The
       `numbers.Cost` constant ($1.00) must match it: reps pay it × 1.5, and
       numbers that cost more are not offered.
