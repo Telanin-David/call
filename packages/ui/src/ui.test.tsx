@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { cn } from './cn';
 import { buttonClass } from './Button';
 import { Progress } from './Badge';
-import { CodeBoxes } from './Form';
+import { CodeBoxes, CodeInput, Field } from './Form';
 import { Modal, Toggle } from './Overlay';
 
 afterEach(cleanup);
@@ -73,5 +73,26 @@ describe('Toggle', () => {
     expect(sw.getAttribute('aria-checked')).toBe('false');
     fireEvent.click(sw);
     expect(seen).toEqual([true]);
+  });
+});
+
+describe('CodeInput', () => {
+  it('keeps digits only, at most six, and shows them in the boxes', () => {
+    let code = '';
+    const { container, rerender } = render(<CodeInput value={code} onChange={v => { code = v; }} />);
+    const input = container.querySelector('input')!;
+    fireEvent.change(input, { target: { value: '12a 34-5678' } });
+    expect(code).toBe('123456');
+    rerender(<CodeInput value={code} onChange={v => { code = v; }} />);
+    expect(container.textContent).toBe('123456');
+    expect(input.getAttribute('autocomplete')).toBe('one-time-code');
+  });
+});
+
+describe('Field', () => {
+  it('shows an error instead of the hint and announces it', () => {
+    const { getByRole, queryByText } = render(<Field label="Email" hint="We never share it" error="Enter a valid email address."><input /></Field>);
+    expect(getByRole('alert').textContent).toBe('Enter a valid email address.');
+    expect(queryByText('We never share it')).toBeNull();
   });
 });

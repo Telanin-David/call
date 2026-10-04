@@ -1,5 +1,7 @@
 import { Button, Icon, PageHeader, Tile, type IconName, type TileTone } from '@dialer/ui';
 import { BackLink, Page } from '@/components/Page';
+import { useMe } from '@/lib/account';
+import { isLive } from '@/lib/backend';
 
 const RULES: { icon: IconName; tone: TileTone; title: string; body: string }[] = [
   { icon: 'users', tone: 'brand', title: 'One account per person', body: 'Use your real name. The name on your card must match it. Shared or second accounts are closed.' },
@@ -12,11 +14,18 @@ const RULES: { icon: IconName; tone: TileTone; title: string; body: string }[] =
   { icon: 'lock', tone: 'grey', title: 'Breaking the rules', body: 'We may pause or close the account. Serious cases, like calling the do-not-call list on purpose, are closed straight away.' },
 ];
 
+function agreedOn(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 export default function Rules() {
+  const me = useMe();
+  const signedIn = !isLive() || Boolean(me.data);
+  const agreed = !isLive() ? '1 Oct 2026' : me.data?.rules_accepted_at ? agreedOn(me.data.rules_accepted_at) : null;
   return (
     <Page>
       <PageHeader title="The rules" lede="Short and fair. They keep your number working and keep leads willing to pick up."
-        back={<BackLink to="/settings">Back</BackLink>} />
+        back={<BackLink to={signedIn ? '/settings' : '/signup'}>Back</BackLink>} />
 
       <div className="grid gap-3.5 md:grid-cols-2">
         {RULES.map(r => (
@@ -31,7 +40,10 @@ export default function Rules() {
       </div>
 
       <div className="flex flex-col items-start gap-3.5 rounded-3xl bg-night px-[22px] py-5 text-15 text-white sm:flex-row sm:items-center">
-        <p className="flex-1">You agreed to these on <b>1 Oct 2026</b>. We'll tell you before any rule changes.</p>
+        <p className="flex-1">
+          {agreed ? <>You agreed to these on <b>{agreed}</b>. </> : 'You agree to these when you create your account. '}
+          We&apos;ll tell you before any rule changes.
+        </p>
         <Button variant="lemon" onClick={() => window.print()}>Download as PDF</Button>
       </div>
     </Page>

@@ -1032,6 +1032,7 @@ components:
   schemas:
     ErrorBody:
       type: object
+      required: [error, code]
       description: Every error has this shape. `error` is shown to the rep as is.
       properties:
         error:
@@ -1082,6 +1083,7 @@ components:
 
     User:
       type: object
+      required: [user_id, name, email, phone, country, timezone, email_confirmed, phone_confirmed, confirmed, rules_accepted_at, created_at]
       properties:
         user_id:
           type: string
@@ -1115,6 +1117,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/User"
         - type: object
+          required: [plan, balance_microdollars, held_microdollars]
           properties:
             plan:
               type: string
@@ -1138,6 +1141,7 @@ components:
 
     Plan:
       type: object
+      required: [id, monthly_fee_microdollars, intro_fee_microdollars, intro_months, rate_multiplier_pct, us_price_per_minute_microdollars, dials_per_day, features]
       properties:
         id:
           type: string
@@ -1166,6 +1170,7 @@ components:
 
     Subscription:
       type: object
+      required: [plan]
       properties:
         plan:
           type: string
@@ -1207,6 +1212,7 @@ components:
 
     PlanQuote:
       type: object
+      required: [from, to, kind, due_today_microdollars, intro_price, starts_on, next_renewal, next_charge_microdollars, balance_microdollars, balance_after_microdollars]
       properties:
         from:
           type: string
@@ -1239,6 +1245,7 @@ components:
 
     WalletResponse:
       type: object
+      required: [balance_microdollars, held_microdollars, spent_this_month, activity, next_cursor, min_topup_microdollars, max_topup_microdollars, topup_provider]
       properties:
         balance_microdollars:
           type: integer
@@ -1249,6 +1256,7 @@ components:
           format: int64
         spent_this_month:
           type: object
+          required: [calls, plan, numbers, total]
           properties:
             calls:
               type: integer
@@ -1280,6 +1288,7 @@ components:
 
     LedgerEntry:
       type: object
+      required: [id, type, amount_microdollars, description, created_at]
       properties:
         id:
           type: string
@@ -1310,6 +1319,7 @@ components:
 
     TopupResponse:
       type: object
+      required: [reference, payment_url, provider, amount_microdollars]
       properties:
         reference:
           type: string
