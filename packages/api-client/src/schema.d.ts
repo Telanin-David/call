@@ -1533,6 +1533,11 @@ export interface components {
              */
             expires_at: string | null;
             /**
+             * Format: date-time
+             * @description The phone's last check-in; a call on it is ended 15 seconds after
+             */
+            phone_seen_at: string | null;
+            /**
              * @description Which browser phone the linked phone uses
              * @enum {string}
              */

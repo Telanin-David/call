@@ -85,15 +85,21 @@ const PROBLEM_BADGE: Record<Problem, { text: string; className: string }> = {
  * Board 37: replaces the call card when the connection goes wrong. The lead
  * is never dropped without a warning, and there is always one next step.
  */
-export function ProblemCard({ problem, timer, lead, canUsePhone, onFix }: {
+export function ProblemCard({ problem, timer, lead, canUsePhone, onFix, switchLabel = 'Use this laptop for sound', startLeft = 15 }: {
   problem: Problem; timer: string; lead: string; canUsePhone: boolean; onFix: (action: 'laptop' | 'phone' | 'retry' | 'ok') => void;
+  /** The phone-lost button: live, the call can't move to the laptop, so it ends. */
+  switchLabel?: string;
+  /** Seconds left when the card appears: live, counted from the phone's last check-in. */
+  startLeft?: number;
 }) {
-  const [left, setLeft] = useState(15);
+  const [left, setLeft] = useState(startLeft);
   useEffect(() => {
-    setLeft(15);
+    setLeft(startLeft);
     if (problem !== 'internet' && problem !== 'phone') return;
     const t = setInterval(() => setLeft(l => Math.max(0, l - 1)), 1000);
     return () => clearInterval(t);
+    // startLeft only seeds the count when a problem starts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [problem]);
   useEffect(() => {
     if (problem === 'internet' && left === 0) onFix('ok');
@@ -119,7 +125,8 @@ export function ProblemCard({ problem, timer, lead, canUsePhone, onFix }: {
         <>
           <b className="text-20">{lead} is still on the line</b>
           <p className="text-14 text-zinc-400">Your phone stopped sending sound. We hold the call for 15 seconds: 0:{String(left).padStart(2, '0')} left.</p>
-          <Button size="lg" block className="bg-white font-bold text-night hover:bg-white" onClick={() => onFix('laptop')}>Use this laptop for sound</Button>
+          <Button size="lg" block className="bg-white font-bold text-night hover:bg-white" onClick={() => onFix('laptop')}>{switchLabel}</Button>
+          <Button variant="glass" size="lg" block onClick={() => onFix('phone')}>Link my phone again</Button>
         </>
       )}
       {problem === 'mic' && (

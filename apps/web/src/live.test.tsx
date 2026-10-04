@@ -552,7 +552,7 @@ describe('live calling', () => {
     expect(screen.getByText('$13.99')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /^Call Ray/ }));
     expect(await screen.findByText("It's 5:54 am for Ray Cole")).toBeTruthy();
-    expect(calls.find(c => c.method === 'POST' && c.path === '/calls')?.body).toEqual({ lead_id: 'ray' });
+    expect(calls.find(c => c.method === 'POST' && c.path === '/calls')?.body).toEqual({ lead_id: 'ray', via: 'laptop' });
     fireEvent.click(screen.getByRole('button', { name: 'Skip to next lead' }));
     expect(await screen.findByText('Too early or late · skipped')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Kim Park' })).toBeTruthy();
@@ -703,7 +703,7 @@ describe('live auto-dial', () => {
     expect(await screen.findByText('Too early or late · skipped')).toBeTruthy();
     expect(screen.queryByText("It's 5:15 am for Ray Cole")).toBeNull();
     expect(await screen.findByText('CONNECTED')).toBeTruthy();
-    expect(calls.filter(c => c.method === 'POST' && c.path === '/calls').map(c => c.body)).toEqual([{ lead_id: 'ray' }, { lead_id: 'kim' }]);
+    expect(calls.filter(c => c.method === 'POST' && c.path === '/calls').map(c => c.body)).toEqual([{ lead_id: 'ray', via: 'laptop' }, { lead_id: 'kim', via: 'laptop' }]);
 
     fireEvent.keyDown(window, { key: '1' });
     fireEvent.click(screen.getByRole('button', { name: /^Hang up/ }));
@@ -713,7 +713,7 @@ describe('live auto-dial', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Call now' }));
     await waitFor(() => expect(calls.find(c => c.path === '/calls/c1/outcome')?.body).toEqual({ outcome: 'interested', note: '' }));
     await waitFor(() => expect(calls.filter(c => c.method === 'POST' && c.path === '/calls')).toHaveLength(3));
-    expect(calls.filter(c => c.method === 'POST' && c.path === '/calls')[2]?.body).toEqual({ lead_id: 'lou' });
+    expect(calls.filter(c => c.method === 'POST' && c.path === '/calls')[2]?.body).toEqual({ lead_id: 'lou', via: 'laptop' });
   });
 
   it('Pause stops the countdown and leaves the result to save by hand', async () => {
@@ -728,5 +728,61 @@ describe('live auto-dial', () => {
     await new Promise(r => setTimeout(r, 1200));
     expect(calls.some(c => c.path === '/calls/c1/outcome')).toBe(false);
     expect(screen.queryByText(/^Calling Lou in/)).toBeNull();
+  });
+});
+
+describe('live phone as headset', () => {
+  const QUEUE = {
+    title: 'October leads', list_id: 'l1', script_free_until: null, dials_today: 3, dial_limit: 120,
+    balance_microdollars: 13_990_000, price_per_minute_microdollars: 20_000, live_call_id: null, scripts: [],
+    leads: [{ id: 'kim', name: 'Kim Park', first_name: 'Kim', company: '', city: '', email: '', phone: '+16465550102', notes: '',
+      her_time_zone: 'America/New_York', attempts: 0, list_name: 'October leads', script_id: null, last_call: null }],
+  };
+  const NONE = { id: null, status: 'none', phone_name: '', muted: false, expires_at: null, phone_seen_at: null, call: null, phone: 'fake' };
+
+  it('laptop: makes a code, sees the phone link, then calls through it', async () => {
+    answers['GET /me'] = { status: 200, body: { ...ME, plan: 'starter' } };
+    answers['GET /queue'] = { status: 200, body: QUEUE };
+    answers['GET /pairing'] = { status: 200, body: NONE };
+    answers['POST /pairing'] = { status: 201, body: { ...NONE, id: 'p1', status: 'waiting', code: '482913', expires_at: new Date(Date.now() + 600_000).toISOString() } };
+    renderAt('/call?list=l1');
+    fireEvent.click(await screen.findByText('Use my phone to talk'));
+    expect(await screen.findByText('482 913')).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Code to link your phone' }).getAttribute('data-qr')).toMatch(/\/link\?code=482913$/);
+    expect(calls.some(c => c.method === 'POST' && c.path === '/pairing')).toBe(true);
+
+    answers['GET /pairing'] = { status: 200, body: { ...NONE, id: 'p1', status: 'linked', phone_name: 'Pixel 6a', phone_seen_at: new Date().toISOString() } };
+    expect(await screen.findByText(/^Linked: Pixel 6a\./, {}, { timeout: 4000 })).toBeTruthy();
+    expect(screen.queryByText('482 913')).toBeNull();
+
+    answers['POST /calls'] = { status: 409, body: { code: 'phone_not_linked', error: 'Scan the code again with your phone, or talk on this laptop.', title: "Your phone isn't connected", action: '' } };
+    fireEvent.click(screen.getByRole('button', { name: /^Start calling/ }));
+    await waitFor(() => expect(calls.find(c => c.method === 'POST' && c.path === '/calls')?.body).toEqual({ lead_id: 'kim', via: 'phone' }));
+    expect(await screen.findByText("Your phone isn't connected")).toBeTruthy();
+  });
+
+  it('phone: joins with the code from the link, then asks for the mic', async () => {
+    answers['GET /me'] = { status: 200, body: { ...ME, plan: 'starter' } };
+    answers['POST /pairing/join'] = { status: 200, body: { ...NONE, id: 'p1', status: 'linked', phone_name: 'This phone', token: 't' } };
+    renderAt('/link?code=482913');
+    expect(await screen.findByText('Let them hear you')).toBeTruthy();
+    expect(calls.find(c => c.path === '/pairing/join')?.body).toMatchObject({ code: '482913' });
+  });
+
+  it('phone: a wrong code says why', async () => {
+    answers['GET /me'] = { status: 200, body: { ...ME, plan: 'starter' } };
+    answers['POST /pairing/join'] = { status: 404, body: { code: 'pairing_code', error: 'Codes last 10 minutes and only work for the account that made them. Make a new one on your laptop.', title: "That code didn't work" } };
+    renderAt('/link');
+    fireEvent.change(await screen.findByLabelText('Code from your laptop'), { target: { value: '123 456' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Link this phone' }));
+    expect(await screen.findByText(/^That code didn't work\. Codes last 10 minutes/)).toBeTruthy();
+    expect(calls.find(c => c.path === '/pairing/join')?.body).toMatchObject({ code: '123456' });
+  });
+
+  it('phone: signed out goes to sign in and comes back to the link', async () => {
+    answers['GET /me'] = { status: 401, body: { code: 'signed_out', error: 'Sign in to carry on.' } };
+    const router = renderAt('/link?code=482913');
+    await waitFor(() => expect(router.state.location.pathname).toBe('/signin'));
+    expect((router.state.location.state as { from?: string }).from).toBe('/link?code=482913');
   });
 });

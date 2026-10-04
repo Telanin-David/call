@@ -461,12 +461,14 @@ type pairedCallJSON struct {
 }
 
 type pairingJSON struct {
-	ID        *string         `json:"id"`
-	Status    PairingStatus   `json:"status"`
-	PhoneName string          `json:"phone_name"`
-	Muted     bool            `json:"muted"`
-	ExpiresAt *time.Time      `json:"expires_at"`
-	Call      *pairedCallJSON `json:"call"`
+	ID        *string       `json:"id"`
+	Status    PairingStatus `json:"status"`
+	PhoneName string        `json:"phone_name"`
+	Muted     bool          `json:"muted"`
+	ExpiresAt *time.Time    `json:"expires_at"`
+	// PhoneSeenAt is the phone's last check-in; a call on it ends 15 s after.
+	PhoneSeenAt *time.Time      `json:"phone_seen_at"`
+	Call        *pairedCallJSON `json:"call"`
 	// Phone is who dials on the phone: "fake" in development, else "telnyx".
 	Phone string `json:"phone"`
 	// Code is only in the reply that made it; Token only in the join reply.
@@ -475,7 +477,7 @@ type pairingJSON struct {
 }
 
 func (s *Service) pairingOut(p Pairing) pairingJSON {
-	out := pairingJSON{ID: nullable(p.ID), Status: p.Status, PhoneName: p.PhoneName, Muted: p.Muted, Phone: s.phoneKind(false)}
+	out := pairingJSON{ID: nullable(p.ID), Status: p.Status, PhoneName: p.PhoneName, Muted: p.Muted, Phone: s.phoneKind(false), PhoneSeenAt: p.PhoneSeenAt}
 	if p.Status == PairingWaiting {
 		at := p.ExpiresAt
 		out.ExpiresAt = &at

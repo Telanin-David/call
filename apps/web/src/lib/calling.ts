@@ -37,7 +37,7 @@ export function useQueue(f: QueueFor) {
   return useQuery({ queryKey: callingKeys.queue(f), queryFn: () => api.get<Queue>(queuePath(f)), enabled: isLive(), retry: false });
 }
 
-export const startCall = (leadId: string) => api.post<StartedCall>('/calls', { lead_id: leadId });
+export const startCall = (leadId: string, via: 'laptop' | 'phone' = 'laptop') => api.post<StartedCall>('/calls', { lead_id: leadId, via });
 export const getCall = (id: string) => api.get<LiveCall>(`/calls/${id}`);
 export const hangupCall = (id: string) => api.post<LiveCall>(`/calls/${id}/hangup`);
 export const saveOutcome = (id: string, body: { outcome: Outcome; note: string; follow_up_at?: string }) =>
@@ -66,9 +66,9 @@ export function refusalOf(err: unknown): Refusal {
 }
 
 /** Starts a call. A refusal comes back as a Refusal instead of throwing. */
-export async function dial(leadId: string): Promise<{ started: StartedCall } | { refused: Refusal }> {
+export async function dial(leadId: string, via: 'laptop' | 'phone' = 'laptop'): Promise<{ started: StartedCall } | { refused: Refusal }> {
   try {
-    return { started: await startCall(leadId) };
+    return { started: await startCall(leadId, via) };
   } catch (err) {
     if (err instanceof ApiError && err.status >= 400 && err.status < 500) {
       return { refused: refusalOf(err) };

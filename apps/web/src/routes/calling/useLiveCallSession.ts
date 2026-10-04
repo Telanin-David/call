@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { OUTCOMES, clockOf, type CallSession, type Outcome, type Phase, type When } from './useCallSession';
 import type { Peek } from './NextLead';
 import { usePlan } from '@/lib/plan';
-import { useCallStore } from '@/lib/store';
+import { useCallStore, useDeviceStore } from '@/lib/store';
 import { useMe } from '@/lib/account';
 import { apiBase } from '@/lib/backend';
 import { errorText } from '@/lib/api';
@@ -17,6 +17,7 @@ import {
   type LiveCall, type QueueLead, type Refusal,
 } from '@/lib/calling';
 import { fakeLeadHangsUp, phoneFor, type Softphone } from '@/lib/phone';
+import { createPairing, mutePairing, usePairing } from '@/lib/pairing';
 import type { LeadDetail, QueueItem } from '@/lib/fake';
 import type { MergeValues } from '@/lib/script';
 
@@ -126,9 +127,30 @@ export function useLiveCallSession(): CallSession {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [hold, setHold] = useState(false);
   const [dialedAt, setDialedAt] = useState<number | null>(null);
+  // Phone as headset (Starter and Pro): calls go through the linked phone.
+  const [viaPhone, setViaPhone] = useState(false);
+  const [pair, setPair] = useState<{ code: string; expiresAt: string | null } | null>(null);
+  const pairing = usePairing('laptop', viaPhone || pair !== null);
+  const linked = pairing.data?.status === 'linked';
+  const phoneLost = viaPhone && pairing.data?.status === 'lost';
+  const device = useDeviceStore();
   const phone = useRef<Softphone | null>(null);
   const liveCall = useRef<string | null>(null);
   useEffect(() => { liveCall.current = phase === 'live' ? callId : null; }, [phase, callId]);
+
+  const { setTalkVia: storeVia, setPhoneLinked: storeLinked, setPhoneName: storeName } = device;
+  useEffect(() => {
+    storeVia(viaPhone ? 'phone' : 'computer');
+    storeLinked(viaPhone && linked);
+    storeName(pairing.data?.phone_name ?? '');
+  }, [viaPhone, linked, pairing.data?.phone_name, storeVia, storeLinked, storeName]);
+  useEffect(() => {
+    if (pair && linked) setPair(null);
+  }, [pair, linked]);
+  // The phone is gone: auto-dial stops, so no call is sent to a phone that can't take it.
+  useEffect(() => {
+    if (phoneLost && phase !== 'live') { setAuto(false); setCountdown(null); }
+  }, [phoneLost, phase]);
 
   // Start of a new queue: back to its first lead.
   useEffect(() => { setCurrent(0); setUndo(null); }, [key]);
@@ -250,7 +272,7 @@ export function useLiveCallSession(): CallSession {
     setBusy(true);
     let res: Awaited<ReturnType<typeof dial>>;
     try {
-      res = await dial(it.lead.id);
+      res = await dial(it.lead.id, viaPhone ? 'phone' : 'laptop');
     } catch (e) {
       setError(errorText(e));
       setBusy(false);
@@ -297,6 +319,7 @@ export function useLiveCallSession(): CallSession {
 
   /** Free calls the lead picked; Starter and Pro start auto-dial from here. */
   function start() {
+    if (viaPhone && !linked) { void openPairing(); return; }
     const on = !free;
     setAuto(on);
     setPauseAfter(false);
@@ -483,24 +506,61 @@ export function useLiveCallSession(): CallSession {
   const setMuted = (v: boolean | ((m: boolean) => boolean)) => {
     setMutedState(m => {
       const next = typeof v === 'function' ? v(m) : v;
-      phone.current?.setMuted(next);
+      if (viaPhone) void mutePairing(next).catch(e => setError(errorText(e)));
+      else phone.current?.setMuted(next);
       return next;
     });
+  };
+
+  /** Shows a new code for the phone to scan. */
+  async function openPairing() {
+    setError(null);
+    try {
+      const p = await createPairing();
+      setPair({ code: p.code ?? '', expiresAt: p.expires_at });
+      void qc.invalidateQueries({ queryKey: ['pairing'] });
+    } catch (e) {
+      setError(errorText(e));
+      setViaPhone(false);
+    }
+  }
+
+  function chooseVia(v: 'computer' | 'phone') {
+    if (v === 'computer') { setViaPhone(false); setPair(null); return; }
+    if (free) { setUpgrade({ to: 'starter', reason: 'Talk on your phone with Starter' }); return; }
+    setViaPhone(true);
+    if (!linked) void openPairing();
+  }
+
+  /** The phone dropped during a call: end it now and carry on from this laptop, or scan again. */
+  const fixProblem = (action: 'laptop' | 'phone' | 'retry' | 'ok') => {
+    if (action === 'laptop') {
+      setViaPhone(false);
+      if (phase === 'live') void endNow().then(c => { if (c) { if (c.answered_at === null) setOutcome(o => o ?? 'no_answer'); setPhase('wrapup'); } });
+    }
+    if (action === 'phone') void openPairing();
   };
 
   const staleId = q?.live_call_id && q.live_call_id !== callId ? q.live_call_id : null;
 
   return {
-    plan, free, sim: null, setSim: () => {}, navigate,
-    talkVia: 'computer', via: 'computer', phoneLinked: false, setTalkVia: () => {}, canStart: Boolean(lead) && !busy,
+    plan, free, sim: phoneLost && phase === 'live' ? 'phone' : null, setSim: () => {}, navigate,
+    talkVia: viaPhone ? 'phone' : 'computer', via: viaPhone ? 'phone' : 'computer', phoneLinked: linked, setTalkVia: chooseVia,
+    canStart: Boolean(lead) && !busy && (!viaPhone || linked),
     queue: items, current, setCurrent, lead, detail, merge, left, dials, limit, made,
     phase, setPhase, live, seconds, cost, clock: clockOf(seconds), muted, setMuted,
     outcome, setOutcome, when, setWhen, note, setNote, scriptSize, setScriptSize, scriptLocked,
     upgrade, setUpgrade, blockOpen, setBlockOpen, block: copy, peek, setPeek, nextPick, setNextPick,
     multiDial, setMultiDial, pauseAfter, setPauseAfter, nextIndex, nextLead, nextOpen: (after: number) => nextOpen(after),
-    start, startAt: (i: number) => { void startAt(i); }, save, hangUp, endCall, skip, fixProblem: () => {}, answerCallback: () => {}, resolveBlock,
+    start, startAt: (i: number) => { void startAt(i); }, save, hangUp, endCall, skip, fixProblem, answerCallback: () => {}, resolveBlock,
 
     demo: false,
+    pair: pair ? { ...pair, renew: () => { void openPairing(); }, close: () => { setPair(null); if (!linked) setViaPhone(false); } } : null,
+    openPairing: () => { void openPairing(); },
+    phoneName: pairing.data?.phone_name ?? '',
+    phoneLostLeft: pairing.data?.phone_seen_at
+      ? Math.max(0, Math.round(15 - (Date.now() - Date.parse(pairing.data.phone_seen_at)) / 1000))
+      : 15,
     auto,
     countdown,
     callNow: () => setCountdown(c => (c === null ? null : 0)),

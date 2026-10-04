@@ -194,10 +194,10 @@ function ReadyView({ s }: { s: CallSession }) {
             <span><b className="block text-15 font-semibold">Just this phone</b><span className="block text-13 text-muted">Script and buttons here. Talk through the phone.</span></span>
             <Radio />
           </ChoiceCard>
-          <ChoiceCard checked={laptop} locked={!s.demo} onClick={() => { if (s.demo) setLaptop(true); }}>
+          <ChoiceCard checked={laptop} onClick={() => setLaptop(true)}>
             <Tile tone="grey" size={36}><Icon name="laptop" /></Tile>
             <span><b className="block text-15 font-semibold">With my laptop</b><span className="block text-13 text-muted">Script on the laptop. This phone is the mic and speaker.</span></span>
-            {s.demo ? <Radio /> : <Pill className="ml-auto flex-none">Soon</Pill>}
+            <Radio />
           </ChoiceCard>
         </div>
         <p className="text-13 text-muted">Calls use the internet, not your airtime. You can change this any time.</p>

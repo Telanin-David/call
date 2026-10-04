@@ -1,8 +1,16 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
-import { Brand, Button, Icon, Input, LinkButton, Tile, cn, linkClass, type IconName } from '@dialer/ui';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
+import { Brand, Button, Icon, Input, LinkButton, Note, Tile, cn, linkClass, type IconName } from '@dialer/ui';
 import { formatUsd3 } from '@/lib/money';
 import { RATE_PER_MIN } from '@/lib/pricing';
+import { isLive } from '@/lib/backend';
+import { ApiError, errorText } from '@/lib/api';
+import { useMe } from '@/lib/account';
+import { DEV_TOOLS } from '@/lib/devtools';
+import { hangupCall, refusalOf } from '@/lib/calling';
+import { phoneFor, type Softphone } from '@/lib/phone';
+import { endPairing, joinPairing, mutePairing, phoneName, toStarted, usePairing } from '@/lib/pairing';
+import { FakePickUpSwitch } from '@/routes/calling/CallAlerts';
 
 type Step = 'intro' | 'scan' | 'mic' | 'blocked' | 'linked' | 'call';
 
@@ -57,6 +65,10 @@ function RoundButton({ icon, label, danger, pressed, onClick }: { icon: IconName
 }
 
 export default function LinkPhone() {
+  return isLive() ? <LiveLinkPhone /> : <DemoLinkPhone />;
+}
+
+function DemoLinkPhone() {
   const [step, setStep] = useState<Step>('intro');
   const [typing, setTyping] = useState(false);
   const [found, setFound] = useState(false);
@@ -235,6 +247,211 @@ export default function LinkPhone() {
         <Button variant="primary" size="xl" block onClick={() => setStep('scan')}><Icon name="qr" />Scan code</Button>
       )}
       <LinkButton className="self-center text-15" onClick={() => setTyping(t => !t)}>{typing ? 'Scan the code instead' : 'Type the code instead'}</LinkButton>
+    </Screen>
+  );
+}
+
+type LiveStep = 'intro' | 'joining' | 'mic' | 'blocked' | 'linked';
+
+/** The phone's call screen while the laptop runs a call through it. */
+function PhoneCall({ name, status, answeredAt, price, muted, onMute, onEnd }: {
+  name: string; status: string; answeredAt: string | null; price: number; muted: boolean; onMute: () => void; onEnd: () => void;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(t);
+  }, []);
+  const seconds = answeredAt ? Math.max(0, Math.floor((now - Date.parse(answeredAt)) / 1000)) : 0;
+  return (
+    <Screen dark>
+      <p className="flex items-center justify-center gap-1.5 text-13 text-zinc-400"><Icon name="laptop" size={14} />Dialer · script on your laptop</p>
+      <div className="text-center">
+        <h1 className="text-32 font-extrabold tracking-[-0.03em]">{name}</h1>
+        {status === 'answered'
+          ? <p className="text-17 tabular-nums text-zinc-300">{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</p>
+          : <p role="status" className="text-17 text-sun">Calling…</p>}
+        {status === 'answered' && (
+          <div className="mt-3 flex justify-center gap-2 text-12 font-bold">
+            <span className="rounded-full bg-tangerine/20 px-2.5 py-1 text-glow">{formatUsd3(Math.ceil((price * seconds) / 60))}</span>
+          </div>
+        )}
+      </div>
+      <div className="flex flex-col gap-2 rounded-3xl bg-white/8 p-4 text-14 text-zinc-300">
+        <b className="flex items-center gap-2 text-15 text-white"><Icon name="phone" size={16} />Keep this screen open</b>
+        If you lock the phone or switch apps, the call ends after 15 seconds.
+      </div>
+      <span className="flex-1" />
+      <div className="flex justify-center gap-8">
+        <RoundButton icon={muted ? 'micoff' : 'mic'} label={muted ? 'Unmute' : 'Mute'} pressed={muted} onClick={onMute} />
+      </div>
+      <div className="flex justify-center pb-4"><RoundButton icon="hangup" label="End" danger onClick={onEnd} /></div>
+    </Screen>
+  );
+}
+
+/**
+ * Live: this phone joins the laptop with the code (from the QR or typed),
+ * asks for the mic, then checks in every second and carries the calls the
+ * laptop starts: it dials them, plays the sound, and can mute or end them.
+ */
+function LiveLinkPhone() {
+  const me = useMe();
+  const location = useLocation();
+  const [params] = useSearchParams();
+  const urlCode = params.get('code') ?? '';
+  const [step, setStep] = useState<LiveStep>('intro');
+  const [typed, setTyped] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [token, setToken] = useState('');
+  const [ended, setEnded] = useState(false);
+  const tried = useRef(false);
+  const dialed = useRef(new Set<string>());
+  const softphone = useRef<Softphone | null>(null);
+  const pairing = usePairing('phone', step === 'linked');
+  const p = pairing.data;
+  const call = p?.call ?? null;
+
+  async function join(code: string) {
+    setError(null);
+    setStep('joining');
+    try {
+      const res = await joinPairing(code, phoneName());
+      setToken(res.token ?? '');
+      setEnded(false);
+      setStep('mic');
+    } catch (e) {
+      const r = refusalOf(e);
+      setError(e instanceof ApiError && r.title ? `${r.title}. ${r.message}` : errorText(e));
+      setStep('intro');
+    }
+  }
+
+  useEffect(() => {
+    if (urlCode && !tried.current && me.isSuccess) {
+      tried.current = true;
+      void join(urlCode);
+    }
+  }, [urlCode, me.isSuccess]);
+
+  async function askMic() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(t => t.stop());
+      setStep('linked');
+    } catch {
+      setStep('blocked');
+    }
+  }
+
+  // The laptop started a call through this phone: dial it.
+  useEffect(() => {
+    if (!call || !p || !call.needs_dial || dialed.current.has(call.id)) return;
+    dialed.current.add(call.id);
+    try {
+      softphone.current = phoneFor(toStarted(call, p.phone, token));
+      void softphone.current.dial(toStarted(call, p.phone, token)).catch((e: unknown) => setError(e instanceof Error ? e.message : "The call couldn't connect."));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "The call couldn't connect.");
+    }
+  }, [call, p, token]);
+  useEffect(() => { softphone.current?.setMuted(Boolean(p?.muted)); }, [p?.muted]);
+  useEffect(() => { if (!call) softphone.current?.stop(); }, [call]);
+
+  // Unlinked from the laptop, or a new code replaced this phone.
+  useEffect(() => {
+    if (step === 'linked' && p?.status === 'none') { setEnded(true); setStep('intro'); }
+  }, [step, p?.status]);
+
+  // Keep the screen on while linked.
+  useEffect(() => {
+    if (step !== 'linked' || !('wakeLock' in navigator)) return;
+    let lock: { release: () => Promise<void> } | null = null;
+    navigator.wakeLock.request('screen').then(l => { lock = l; }, () => { /* not allowed: the tip on screen says why it matters */ });
+    return () => { void lock?.release(); };
+  }, [step]);
+
+  if (me.isPending) return <Screen><p className="py-12 text-center text-muted">Loading…</p></Screen>;
+  if (me.error instanceof ApiError && me.error.status === 401) {
+    return <Navigate to="/signin" replace state={{ from: `/link${location.search}` }} />;
+  }
+
+  if (step === 'linked' && call) {
+    return (
+      <PhoneCall name={call.lead_name || 'Your lead'} status={call.status} answeredAt={call.answered_at} price={call.price_per_minute_microdollars}
+        muted={Boolean(p?.muted)} onMute={() => void mutePairing(!p?.muted).then(() => pairing.refetch())}
+        onEnd={() => void hangupCall(call.id).then(() => pairing.refetch(), (e: unknown) => setError(errorText(e)))} />
+    );
+  }
+
+  if (step === 'linked') {
+    const laptop = p?.status === 'linked' || p?.status === 'lost';
+    return (
+      <Screen>
+        <div className="flex justify-end"><Link to="/" className={cn(linkClass, 'text-15')}>Done</Link></div>
+        <Devices linked />
+        <div className="text-center">
+          <h1 className="text-28 font-extrabold tracking-[-0.03em]">Linked</h1>
+          <p className="mt-1 text-15 text-muted">Press Start calling on your laptop. Calls come through this phone.</p>
+        </div>
+        <ul className="flex list-none flex-col rounded-2xl bg-surface">
+          <StatusRow icon="laptop" tone="bg-night" label="Laptop" value={laptop ? 'Linked' : 'Connecting…'} ok={laptop} />
+          <StatusRow icon="mic" tone="bg-success" label="Microphone" value="Working" ok />
+        </ul>
+        <div className="flex items-center gap-3 rounded-2xl bg-surface p-4">
+          <Tile tone="lemon" size={34}><Icon name="sun" size={17} /></Tile>
+          <span><b className="block text-15">Keep the screen on</b><span className="text-13 text-muted">If this phone locks or you switch apps, a call on it ends after 15 seconds.</span></span>
+        </div>
+        {error && <Note tone="danger" className="text-14"><Icon name="wrong" size={16} /><span role="alert">{error}</span></Note>}
+        {DEV_TOOLS && <FakePickUpSwitch />}
+        <Button variant="outlineDanger" size="lg" block onClick={() => void endPairing().then(() => { setEnded(true); setStep('intro'); })}>Unlink</Button>
+      </Screen>
+    );
+  }
+
+  if (step === 'mic' || step === 'blocked') {
+    const blocked = step === 'blocked';
+    return (
+      <Screen>
+        <b className="text-center text-15">Step 2 of 2</b>
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+          <span className="flex size-[72px] items-center justify-center rounded-3xl bg-tangerine text-night"><Icon name={blocked ? 'micoff' : 'mic'} size={32} /></span>
+          <h1 className="text-28 font-extrabold tracking-[-0.03em]">{blocked ? 'Allow the mic' : 'Let them hear you'}</h1>
+          <p className="text-15 text-muted">
+            {blocked ? "Your browser blocked the microphone. Tap the icon left of the web address, allow Microphone, then try again." : 'We only use the mic during calls. Your browser will ask once.'}
+          </p>
+        </div>
+        <Button variant="primary" size="xl" block onClick={() => void askMic()}>{blocked ? 'Try again' : 'Allow microphone'}</Button>
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen>
+      <div className="flex items-center justify-between">
+        <Link to="/" className={cn(linkClass, 'flex items-center gap-1 text-15')}><Icon name="left" size={16} />Today</Link>
+        <Brand className="text-15" />
+      </div>
+      <h1 className="text-32 font-extrabold tracking-[-0.035em]">Use with laptop</h1>
+      <Devices />
+      {ended && <Note className="text-14"><Icon name="phone" size={16} /><span>This phone is no longer linked. Link it again with a new code from your laptop.</span></Note>}
+      {error && <Note tone="danger" className="text-14"><Icon name="wrong" size={16} /><span role="alert">{error}</span></Note>}
+      <p className="text-15 text-muted">Read the script on your laptop's big screen. Talk through this phone. Starter and Pro only.</p>
+      <ol className="flex list-none flex-col rounded-2xl bg-surface">
+        {['Open Dialer on your laptop and start calling', 'Choose Use my phone to talk', "Scan its code with this phone's camera, or type the 6 digits below"].map((t, i) => (
+          <li key={t} className="flex items-center gap-3 border-t border-line px-4 py-3.5 text-15 font-semibold first:border-t-0">
+            <span className="flex size-6 flex-none items-center justify-center rounded-full bg-night text-12 font-bold text-white">{i + 1}</span>{t}
+          </li>
+        ))}
+      </ol>
+      <span className="flex-1" />
+      <form className="flex flex-col gap-2.5" onSubmit={e => { e.preventDefault(); if (typed.replace(/\D/g, '').length === 6) void join(typed.replace(/\D/g, '')); }}>
+        <Input aria-label="Code from your laptop" placeholder="6-digit code" inputMode="numeric" autoComplete="one-time-code" value={typed}
+          onChange={e => setTyped(e.target.value)} className="h-12 text-center font-mono text-18 tracking-[.2em]" />
+        <Button type="submit" variant="primary" size="xl" block disabled={step === 'joining' || typed.replace(/\D/g, '').length !== 6}>
+          {step === 'joining' ? 'Linking…' : 'Link this phone'}
+        </Button>
+      </form>
     </Screen>
   );
 }

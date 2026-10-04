@@ -2423,7 +2423,7 @@ components:
 
     Pairing:
       type: object
-      required: [id, status, phone_name, muted, expires_at, call, phone]
+      required: [id, status, phone_name, muted, expires_at, phone_seen_at, call, phone]
       properties:
         id:
           type: string
@@ -2441,6 +2441,11 @@ components:
           format: date-time
           nullable: true
           description: While waiting, when the code stops working
+        phone_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: The phone's last check-in; a call on it is ended 15 seconds after
         phone:
           type: string
           enum: [telnyx, fake]
