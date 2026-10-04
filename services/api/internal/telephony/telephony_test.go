@@ -265,3 +265,32 @@ func TestTelnyxLoginAndHangup(t *testing.T) {
 		t.Fatalf("hanging up an ended call: %v", err)
 	}
 }
+
+func TestTelnyxRing(t *testing.T) {
+	srv, tx := newTelnyx(t)
+	srv.answer("GET /telephony_credentials/cred-1", 200, `{"data":{"id":"cred-1","sip_username":"gencredABC"}}`)
+	srv.answer("POST /calls/v3:in/actions/transfer", 200, `{"data":{"result":"ok"}}`)
+	if err := tx.Ring(context.Background(), "v3:in", "cred-1", "state-1"); err != nil {
+		t.Fatal(err)
+	}
+	want := `{"client_state":"c3RhdGUtMQ==","to":"sip:gencredABC@sip.telnyx.com"}`
+	if len(srv.bodies) != 2 || srv.bodies[1] != want {
+		t.Fatalf("transfer body = %v, want %s", srv.bodies, want)
+	}
+	srv.answer("GET /telephony_credentials/cred-2", 200, `{"data":{"id":"cred-2"}}`)
+	if err := tx.Ring(context.Background(), "v3:in", "cred-2", "s"); !errors.Is(err, ErrProvider) {
+		t.Fatalf("credential without a sip user name: %v", err)
+	}
+}
+
+func TestIncomingEvent(t *testing.T) {
+	f := NewFakeCalls()
+	at := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
+	for _, in := range []bool{true, false} {
+		body, h := f.Event(CallEvent{Type: EventInitiated, CallControlID: "v3:x", From: "+16465550142", To: "+12125550101", At: at, Incoming: in})
+		got, err := f.ParseEvent(h, body, at)
+		if err != nil || got.Incoming != in || got.ClientState != "" {
+			t.Errorf("incoming %v: %+v, %v", in, got, err)
+		}
+	}
+}

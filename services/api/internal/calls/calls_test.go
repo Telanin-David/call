@@ -630,6 +630,38 @@ func TestHTTP(t *testing.T) {
 	if status != 200 || body["outcome"] != "callback" || body["note"] != "Thursday" {
 		t.Fatalf("outcome: %d %v", status, body)
 	}
+
+	// Lena calls back while the app is open on Starter.
+	if _, err := e.svc.DB.Exec(context.Background(), `INSERT INTO subscriptions (user_id, plan_id, next_renewal) VALUES ($1, 'starter', '2026-11-05')`, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if status, body := call(http.MethodGet, "/incoming", nil, nil); status != 200 || body["call"] != nil {
+		t.Fatalf("nothing ringing: %d %v", status, body)
+	}
+	status, body = call(http.MethodPost, "/dev/incoming", map[string]string{"lead_id": lead}, nil)
+	in, _ := body["call"].(map[string]any)
+	if status != 201 || in["status"] != "ringing" {
+		t.Fatalf("dev incoming: %d %v", status, body)
+	}
+	status, body = call(http.MethodGet, "/incoming", nil, nil)
+	ringing, _ := body["call"].(map[string]any)
+	l, _ := ringing["lead"].(map[string]any)
+	last, _ := l["last_call"].(map[string]any)
+	if status != 200 || ringing["id"] != in["id"] || ringing["caller"] != "+12125550601" || ringing["phone"] != "fake" || l["name"] != "Lena" || last["note"] != "Thursday" {
+		t.Fatalf("ringing: %d %v", status, body)
+	}
+	if _, ok := ringing["client_state"]; ok {
+		t.Error("the call's secret is sent to the app")
+	}
+	if status, body := call(http.MethodPost, "/dev/calls/"+in["id"].(string)+"/events/answered", nil, nil); status != 200 || body["status"] != "answered" {
+		t.Fatalf("answer: %d %v", status, body)
+	}
+	if _, body := call(http.MethodGet, "/incoming", nil, nil); body["call"] != nil {
+		t.Errorf("answered, still ringing: %v", body)
+	}
+	if status, body := call(http.MethodPost, "/calls/"+in["id"].(string)+"/hangup", nil, nil); status != 200 || body["status"] != "ended" {
+		t.Fatalf("hang up: %d %v", status, body)
+	}
 }
 
 func TestTodayFollowupsHistory(t *testing.T) {

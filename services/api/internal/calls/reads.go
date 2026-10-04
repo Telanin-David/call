@@ -44,7 +44,8 @@ func (s *Service) repDay(ctx context.Context, userID string, now time.Time) (day
 	return day{start, start.AddDate(0, 0, 1)}, nil
 }
 
-// Totals add up calls over a time span.
+// Totals add up calls over a time span. Calls counts calls out (dials);
+// talk time and money include calls answered from leads calling back.
 type Totals struct {
 	Calls       int
 	TalkSeconds int64
@@ -55,9 +56,9 @@ type Totals struct {
 func (s *Service) totals(ctx context.Context, userID string, from, to time.Time) (Totals, error) {
 	var t Totals
 	err := s.DB.QueryRow(ctx, `
-		SELECT count(*), COALESCE(SUM(seconds), 0)::BIGINT, COALESCE(SUM(cost_microdollars), 0)::BIGINT,
+		SELECT count(*) FILTER (WHERE direction = 'outbound'), COALESCE(SUM(seconds), 0)::BIGINT, COALESCE(SUM(cost_microdollars), 0)::BIGINT,
 			count(*) FILTER (WHERE outcome = 'interested')
-		FROM calls WHERE user_id = $1 AND direction = 'outbound' AND started_at >= $2 AND started_at < $3`,
+		FROM calls WHERE user_id = $1 AND started_at >= $2 AND started_at < $3`,
 		userID, from, to).Scan(&t.Calls, &t.TalkSeconds, &t.Spent, &t.Interested)
 	if err != nil {
 		return Totals{}, fmt.Errorf("add up calls: %w", err)
@@ -65,12 +66,14 @@ func (s *Service) totals(ctx context.Context, userID string, from, to time.Time)
 	return t, nil
 }
 
-// Followup is a call the rep booked.
+// Followup is a call the rep booked, or a lead who called and was missed.
 type Followup struct {
-	ID          string
-	Lead        LeadRef
-	DueAt       time.Time
-	Reason      string
+	ID     string
+	Lead   LeadRef
+	DueAt  time.Time
+	Reason string
+	// Missed: the lead called the rep at DueAt and nobody answered.
+	Missed      bool
 	LastNote    string
 	LastOutcome string
 }
@@ -109,7 +112,7 @@ func (s *Service) Followups(ctx context.Context, userID, tab string) ([]Followup
 
 func (s *Service) followups(ctx context.Context, userID string, from, to time.Time, limit int) ([]Followup, error) {
 	rows, err := s.DB.Query(ctx, `
-		SELECT f.id, l.id, `+leadName+`, l.company, l.phone, f.due_at, f.reason,
+		SELECT f.id, l.id, `+leadName+`, l.company, l.phone, f.due_at, f.reason, f.kind = 'missed_call',
 			COALESCE(lc.note, ''), COALESCE(lc.outcome, '')
 		FROM followups f JOIN leads l ON l.id = f.lead_id
 		LEFT JOIN LATERAL (
@@ -124,7 +127,7 @@ func (s *Service) followups(ctx context.Context, userID string, from, to time.Ti
 	out := []Followup{}
 	for rows.Next() {
 		var f Followup
-		if err := rows.Scan(&f.ID, &f.Lead.ID, &f.Lead.Name, &f.Lead.Company, &f.Lead.Phone, &f.DueAt, &f.Reason, &f.LastNote, &f.LastOutcome); err != nil {
+		if err := rows.Scan(&f.ID, &f.Lead.ID, &f.Lead.Name, &f.Lead.Company, &f.Lead.Phone, &f.DueAt, &f.Reason, &f.Missed, &f.LastNote, &f.LastOutcome); err != nil {
 			return nil, fmt.Errorf("scan follow-up: %w", err)
 		}
 		f.Lead.HerTimeZone = herZone(f.Lead.Phone)
@@ -228,9 +231,13 @@ func (s *Service) Today(ctx context.Context, userID string) (Today, error) {
 
 // HistoryItem is one past call.
 type HistoryItem struct {
-	ID        string
-	Lead      *LeadRef
-	To        string
+	ID   string
+	Lead *LeadRef
+	// To is the other side's number: who the rep called, or who called.
+	To string
+	// Incoming: the lead called the rep. Answered says whether anyone picked up.
+	Incoming  bool
+	Answered  bool
 	StartedAt time.Time
 	Seconds   int64
 	Cost      int64
@@ -286,9 +293,10 @@ func (s *Service) History(ctx context.Context, userID, outcome, q string, after 
 	}
 	rows, err := s.DB.Query(ctx, `
 		SELECT c.id, COALESCE(l.id::text, ''), COALESCE(`+leadName+`, ''), COALESCE(l.company, ''), c.to_number, c.started_at,
-			COALESCE(c.seconds, 0), COALESCE(c.cost_microdollars, 0), COALESCE(c.outcome, ''), COALESCE(c.note, '')
+			COALESCE(c.seconds, 0), COALESCE(c.cost_microdollars, 0), COALESCE(c.outcome, ''), COALESCE(c.note, ''),
+			c.direction = 'inbound', c.answered_at IS NOT NULL
 		FROM calls c LEFT JOIN leads l ON l.id = c.lead_id
-		WHERE c.user_id = $1 AND c.status = 'ended' AND c.direction = 'outbound'
+		WHERE c.user_id = $1 AND c.status = 'ended'
 		  AND ($2 = '' OR c.outcome = $2)
 		  AND ($3 = '' OR l.first_name || ' ' || l.last_name ILIKE '%' || $3 || '%' OR l.company ILIKE '%' || $3 || '%'
 		       OR ($4 <> '' AND c.to_number LIKE '%' || $4 || '%'))
@@ -303,7 +311,7 @@ func (s *Service) History(ctx context.Context, userID, outcome, q string, after 
 	for rows.Next() {
 		var h HistoryItem
 		var lead LeadRef
-		if err := rows.Scan(&h.ID, &lead.ID, &lead.Name, &lead.Company, &h.To, &h.StartedAt, &h.Seconds, &h.Cost, &h.Outcome, &h.Note); err != nil {
+		if err := rows.Scan(&h.ID, &lead.ID, &lead.Name, &lead.Company, &h.To, &h.StartedAt, &h.Seconds, &h.Cost, &h.Outcome, &h.Note, &h.Incoming, &h.Answered); err != nil {
 			return nil, nil, fmt.Errorf("scan call: %w", err)
 		}
 		if lead.ID != "" {
