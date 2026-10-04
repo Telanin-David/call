@@ -7,6 +7,7 @@ import { routes } from './routes';
 import { PlanProvider } from '@/lib/plan';
 import { fullPhone, problemOf } from '@/lib/forms';
 import { ApiError } from '@/lib/api';
+import { leftOutLine, listNameFromFile, readCsvFile, remap } from '@/lib/leads';
 
 // Live mode: the screens talk to an api. Here the api is a table of answers.
 type Answer = { status: number; body?: unknown };
@@ -114,6 +115,137 @@ describe('live mode', () => {
     expect(await screen.findByText(/Add \$5\.00 to your balance first/)).toBeTruthy();
     expect((screen.getByRole('button', { name: /and upgrade/ }) as HTMLButtonElement).disabled).toBe(true);
     expect(calls.some(c => c.method === 'POST' && c.path === '/subscription')).toBe(false);
+  });
+});
+
+describe('live leads', () => {
+  const CHECK = {
+    columns: [
+      { header: 'Name', sample: 'Lena Park', field: 'full_name' },
+      { header: 'Phone', sample: '(646) 555-0110', field: 'phone' },
+      { header: 'Business', sample: 'Sparkle Offices', field: 'company' },
+    ],
+    rows: 4, ready: 2, abroad: 1,
+    left_out: { invalid: 0, premium: 0, duplicate: 1, dnc: 0, listed: 0, abroad: 1 },
+    left_out_rows: [
+      { row: 4, name: 'Kofi Asante', phone: '+233 24 555 0190', reason: 'abroad', same_as_row: null, list_name: null },
+      { row: 5, name: 'Lena Park', phone: '646.555.0110', reason: 'duplicate', same_as_row: 2, list_name: null },
+    ],
+    problem: null,
+  };
+  const LIST = { id: 'l1', name: 'October leads', region: 'us_ca', status: 'active', lead_count: 40, called_count: 10, followup_count: 3, script: null, created_at: '2026-10-04T09:00:00Z' };
+
+  it('the lists page shows the real lists, and an empty state', async () => {
+    answers['GET /me'] = { status: 200, body: ME };
+    answers['GET /lists'] = { status: 200, body: { lists: [LIST] } };
+    renderAt('/leads');
+    expect(await screen.findByText('October leads')).toBeTruthy();
+    expect(screen.getByText('30 left')).toBeTruthy();
+    expect(screen.getByText('In use')).toBeTruthy();
+    expect(screen.getAllByText(/No script yet/).length).toBeGreaterThan(0);
+    expect(screen.queryByText('Dental offices NY')).toBeNull();
+    cleanup();
+
+    answers['GET /lists'] = { status: 200, body: { lists: [] } };
+    renderAt('/leads');
+    expect(await screen.findByText('No lists yet')).toBeTruthy();
+  });
+
+  it('upload checks the file, lets the rep fix columns, then adds the list', async () => {
+    answers['GET /me'] = { status: 200, body: ME };
+    answers['POST /imports/check'] = { status: 200, body: CHECK };
+    answers['POST /imports'] = { status: 201, body: { lists: [{ ...LIST, called_count: 0, status: 'new', lead_count: 2 }] } };
+    answers['GET /lists'] = { status: 200, body: { lists: [] } };
+    const router = renderAt('/leads/upload');
+    await screen.findByRole('button', { name: 'Choose file' });
+    const csv = 'Name,Phone,Business\nLena Park,(646) 555-0110,Sparkle Offices\n';
+    const input = document.querySelector('input[type=file]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File([csv], 'october-leads.csv', { type: 'text/csv' })] } });
+
+    expect(await screen.findByText('october-leads.csv')).toBeTruthy();
+    expect(calls.find(c => c.path === '/imports/check')?.body).toEqual({ csv });
+    expect(screen.getByText('4 rows · 3 columns')).toBeTruthy();
+    expect(screen.getByText('2 rows left out')).toBeTruthy();
+    expect(screen.getByText('1 not US or Canada')).toBeTruthy();
+    expect((screen.getByLabelText('List name') as HTMLInputElement).value).toBe('October leads');
+
+    // Picking Phone for the Business column moves it off the Phone column.
+    fireEvent.change(screen.getByLabelText('Save Business as'), { target: { value: 'phone' } });
+    await waitFor(() => expect(calls.filter(c => c.path === '/imports/check')).toHaveLength(2));
+    expect(calls.at(-1)?.body).toEqual({ csv, mapping: ['full_name', 'skip', 'phone'] });
+    fireEvent.change(screen.getByLabelText('Save Business as'), { target: { value: 'company' } });
+    fireEvent.change(screen.getByLabelText('Save Phone as'), { target: { value: 'phone' } });
+
+    fireEvent.change(screen.getByLabelText('List name'), { target: { value: 'Dentists' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Add 2 leads' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/leads'));
+    expect(calls.find(c => c.method === 'POST' && c.path === '/imports')?.body).toEqual({ csv, mapping: ['full_name', 'phone', 'company'], name: 'Dentists' });
+  });
+
+  it('shows why a file was refused and what to fix in the columns', async () => {
+    answers['GET /me'] = { status: 200, body: ME };
+    answers['POST /imports/check'] = { status: 422, body: { code: 'empty_file', error: 'That file has no leads in it.' } };
+    renderAt('/leads/upload');
+    await screen.findByRole('button', { name: 'Choose file' });
+    const input = document.querySelector('input[type=file]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File(['Name\n'], 'empty.csv')] } });
+    expect(await screen.findByText('That file has no leads in it.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Choose another file' })).toBeTruthy();
+
+    answers['POST /imports/check'] = { status: 200, body: {
+      ...CHECK, ready: 0, abroad: 0, columns: CHECK.columns.map(c => ({ ...c, field: c.field === 'phone' ? 'skip' : c.field })),
+      left_out: { ...CHECK.left_out, duplicate: 0, abroad: 0 }, left_out_rows: [],
+      problem: { code: 'no_phone_column', error: 'Pick the column with the phone numbers.' },
+    } };
+    fireEvent.change(input, { target: { files: [new File(['Name,Phone\nLena,6465550110\n'], 'leads.csv')] } });
+    expect(await screen.findByText('Pick the column with the phone numbers.')).toBeTruthy();
+    expect((screen.getByRole('button', { name: /^Add/ }) as HTMLButtonElement).disabled).toBe(true);
+  });
+  it('a new file shows its own columns, not the last file\'s', async () => {
+    answers['GET /me'] = { status: 200, body: ME };
+    answers['POST /imports/check'] = { status: 200, body: CHECK };
+    renderAt('/leads/upload');
+    await screen.findByRole('button', { name: 'Choose file' });
+    const input = document.querySelector('input[type=file]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File(['Name,Phone,Business\nA,6465550110,B\n'], 'first.csv')] } });
+    expect(await screen.findByLabelText('Save Business as')).toBeTruthy();
+
+    answers['POST /imports/check'] = { status: 200, body: { ...CHECK, columns: [{ header: 'Mobile', sample: '2125550188', field: 'phone' }] } };
+    fireEvent.click(screen.getByRole('button', { name: 'Change file' }));
+    fireEvent.change(input, { target: { files: [new File(['Mobile\n2125550188\n'], 'second.csv')] } });
+    expect(await screen.findByLabelText('Save Mobile as')).toBeTruthy();
+    expect(screen.queryByLabelText('Save Business as')).toBeNull();
+    expect(screen.getByText('second.csv')).toBeTruthy();
+  });
+});
+
+describe('lead helpers', () => {
+  it('remap keeps each field on one column', () => {
+    expect(remap(['first_name', 'phone', 'skip'], 2, 'phone')).toEqual(['first_name', 'skip', 'phone']);
+    expect(remap(['first_name', 'last_name', 'phone'], 0, 'full_name')).toEqual(['full_name', 'skip', 'phone']);
+    expect(remap(['full_name', 'skip', 'phone'], 1, 'last_name')).toEqual(['skip', 'last_name', 'phone']);
+    expect(remap(['skip', 'skip', 'phone'], 0, 'skip')).toEqual(['skip', 'skip', 'phone']);
+  });
+
+  it('names a list after its file', () => {
+    expect(listNameFromFile('october-leads.csv')).toBe('October leads');
+    expect(listNameFromFile('dental_offices__NY.CSV')).toBe('Dental offices NY');
+    expect(listNameFromFile('.csv')).toBe('New list');
+  });
+
+  it('reads Excel files saved as Windows Latin-1', async () => {
+    const latin1 = new Blob([new Uint8Array([0x5a, 0x6f, 0xeb])]); // "Zoë"
+    expect(await readCsvFile(latin1)).toBe('Zoë');
+    expect(await readCsvFile(new Blob(['Zoë']))).toBe('Zoë');
+    await expect(readCsvFile(new Blob([new Uint8Array(3 << 20)]))).rejects.toThrow(/too big/);
+  });
+
+  it('says why a row was left out', () => {
+    expect(leftOutLine({ row: 23, name: 'Lena Park', phone: '(646) 555-0110', reason: 'duplicate', same_as_row: 4, list_name: null }))
+      .toBe('Row 23 · Lena Park · (646) 555-0110 · duplicate of row 4');
+    expect(leftOutLine({ row: 9, name: '', phone: '', reason: 'invalid', same_as_row: null, list_name: null })).toBe('Row 9 · no phone number');
+    expect(leftOutLine({ row: 3, name: 'Tom', phone: '917-555-0142', reason: 'listed', same_as_row: null, list_name: 'September' }))
+      .toBe('Row 3 · Tom · 917-555-0142 · already in September');
   });
 });
 

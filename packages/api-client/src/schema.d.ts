@@ -438,18 +438,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List all lead lists */
+        /** The rep's lead lists with progress, newest first */
         get: operations["listLeadLists"];
         put?: never;
-        /** Create a lead list */
-        post: operations["createLeadList"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/lists/{listId}/imports": {
+    "/lists/{listId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -458,15 +457,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Upload a CSV and get column mapping suggestions */
-        post: operations["uploadCSV"];
-        delete?: never;
+        post?: never;
+        /** Delete a list and its leads (refused once any lead was called) */
+        delete: operations["deleteLeadList"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/lists/{listId}/imports/{importId}/confirm": {
+    "/imports/check": {
         parameters: {
             query?: never;
             header?: never;
@@ -475,8 +474,35 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Confirm column mapping and import leads */
-        post: operations["confirmImport"];
+        /**
+         * Read a CSV and say what uploading it would add and leave out
+         * @description Without a mapping, the server suggests one from the column names.
+         *     A mapping that can't be used yet (no phone column) comes back as
+         *     `problem`, with the columns, so the rep can fix it. Nothing is saved.
+         */
+        post: operations["checkImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload a CSV as a new list
+         * @description Everything is checked again on the server. US and Canada numbers go
+         *     into the named list; numbers elsewhere go into a second list named
+         *     "<name> · outside US and Canada".
+         */
+        post: operations["createImport"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1032,30 +1058,79 @@ export interface components {
         };
         LeadList: {
             /** Format: uuid */
-            id?: string;
-            name?: string;
-            lead_count?: number;
-            called_count?: number;
+            id: string;
+            name: string;
+            /** @enum {string} */
+            region: "us_ca" | "abroad";
+            /** @enum {string} */
+            status: "new" | "active" | "done" | "abroad";
+            lead_count: number;
+            /** @description Leads called at least once */
+            called_count: number;
+            /** @description Follow-ups not done yet */
+            followup_count: number;
+            script: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+            } | null;
             /** Format: date-time */
-            created_at?: string;
+            created_at: string;
         };
-        ImportPreview: {
-            /** Format: uuid */
-            import_id?: string;
-            row_count?: number;
-            columns?: string[];
-            /** @description Suggested column→field mapping */
-            suggestions?: Record<string, never>;
-            duplicates?: number;
-            dnc_hits?: number;
+        /**
+         * @description What a CSV column is saved as. full_name is split into first and last name.
+         * @enum {string}
+         */
+        LeadField: "first_name" | "last_name" | "full_name" | "company" | "phone" | "email" | "city" | "notes" | "skip";
+        ImportRequest: {
+            /** @description The file's text, up to 2 MB and 5,000 rows */
+            csv: string;
+            /** @description One field per column, in column order */
+            mapping?: components["schemas"]["LeadField"][];
+            name?: string;
         };
-        ColumnMapping: {
-            phone?: string;
-            first_name?: string;
-            last_name?: string;
-            company?: string;
-            city?: string;
-            timezone?: string;
+        ImportCheck: {
+            columns: {
+                header: string;
+                /** @description The first value in the column */
+                sample: string;
+                field: components["schemas"]["LeadField"];
+            }[];
+            /** @description Lead rows in the file (blank lines don't count) */
+            rows: number;
+            /** @description US and Canada leads that would go into the list */
+            ready: number;
+            /** @description Leads that would go into the separate list */
+            abroad: number;
+            /** @description Rows not added to the list, by reason */
+            left_out: {
+                invalid: number;
+                premium: number;
+                duplicate: number;
+                dnc: number;
+                listed: number;
+                abroad: number;
+            };
+            /** @description The first 200 rows not added */
+            left_out_rows: components["schemas"]["LeftOutRow"][];
+            /** @description Why the mapping can't be used yet; counts are zero until it's fixed */
+            problem: {
+                code: string;
+                error: string;
+            } | null;
+        };
+        LeftOutRow: {
+            /** @description Line in the file; the header is line 1 */
+            row: number;
+            name: string;
+            /** @description As written in the file */
+            phone: string;
+            /** @enum {string} */
+            reason: "invalid" | "premium" | "duplicate" | "dnc" | "listed" | "abroad";
+            /** @description For a duplicate, the line it repeats */
+            same_as_row: number | null;
+            /** @description For a number already listed, the list it's in */
+            list_name: string | null;
         };
         Script: {
             /** Format: uuid */
@@ -1821,13 +1896,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        lists?: components["schemas"]["LeadList"][];
+                        lists: components["schemas"]["LeadList"][];
                     };
                 };
             };
+            401: components["responses"]["Unauthorized"];
         };
     };
-    createLeadList: {
+    deleteLeadList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                listId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such list */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+        };
+    };
+    checkImport: {
         parameters: {
             query?: never;
             header?: never;
@@ -1836,75 +1942,67 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    name: string;
-                };
+                "application/json": components["schemas"]["ImportRequest"];
             };
         };
         responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LeadList"];
-                };
-            };
-        };
-    };
-    uploadCSV: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                listId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": {
-                    /** Format: binary */
-                    file?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Import preview with column mapping */
+            /** @description What the upload would do */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImportPreview"];
+                    "application/json": components["schemas"]["ImportCheck"];
                 };
             };
+            403: components["responses"]["Forbidden"];
+            /** @description File over 2 MB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
         };
     };
-    confirmImport: {
+    createImport: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                listId: string;
-                importId: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ColumnMapping"];
+                "application/json": components["schemas"]["ImportRequest"] & Record<string, never>;
             };
         };
         responses: {
-            /** @description Import started */
-            202: {
+            /** @description The lists created */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        lists: components["schemas"]["LeadList"][];
+                    };
+                };
             };
+            403: components["responses"]["Forbidden"];
+            /** @description File over 2 MB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
         };
     };
     listScripts: {

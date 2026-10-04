@@ -21,6 +21,7 @@ import (
 	"github.com/telanin-david/call/services/api/internal/accounts"
 	"github.com/telanin-david/call/services/api/internal/auth"
 	"github.com/telanin-david/call/services/api/internal/billing"
+	"github.com/telanin-david/call/services/api/internal/leads"
 	"github.com/telanin-david/call/services/api/internal/notify"
 	"github.com/telanin-david/call/services/api/internal/plans"
 	"github.com/telanin-david/call/services/api/internal/platform"
@@ -68,6 +69,7 @@ func main() {
 	}
 	wal := &wallet.Service{DB: db, Providers: providers, Charges: charges, WebURL: cfg.WebURL, Log: logger}
 	planSvc := &plans.Service{DB: db, Mail: mail, Log: logger}
+	leadSvc := &leads.Service{DB: db, Log: logger}
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -94,16 +96,19 @@ func main() {
 		acct.Routes(r)
 		wal.Routes(r)
 		planSvc.Routes(r)
+		leadSvc.Routes(r)
 		if cfg.Env == "development" {
 			wal.DevRoutes(r)
 		}
 	})
 
 	srv := &http.Server{
-		Addr:         cfg.Addr,
-		Handler:      r,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		Addr:              cfg.Addr,
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+		// Lead files can take a while to arrive over a slow mobile connection.
+		ReadTimeout:  60 * time.Second,
+		WriteTimeout: 90 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}
 
