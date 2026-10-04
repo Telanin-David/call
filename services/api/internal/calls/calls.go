@@ -34,7 +34,9 @@ type Service struct {
 	DB *pgxpool.Pool
 	// Provider is nil when no phone provider is set up: calling is off.
 	Provider telephony.Calls
-	Log      *slog.Logger
+	// Recording is on when file storage is set up to keep recordings.
+	Recording bool
+	Log       *slog.Logger
 	// Now is the clock; tests set it.
 	Now func() time.Time
 }

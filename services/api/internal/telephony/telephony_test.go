@@ -294,3 +294,86 @@ func TestIncomingEvent(t *testing.T) {
 		}
 	}
 }
+
+func TestTelnyxRecording(t *testing.T) {
+	srv, tx := newTelnyx(t)
+	srv.answer("POST /calls/v3:abc/actions/record_start", 200, `{"data":{"result":"ok"}}`)
+	if err := tx.StartRecording(context.Background(), "v3:abc"); err != nil {
+		t.Fatal(err)
+	}
+	if srv.bodies[0] != `{"channels":"dual","format":"mp3","play_beep":false}` {
+		t.Errorf("record_start body = %s", srv.bodies[0])
+	}
+
+	files := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" {
+			t.Error("the api key was sent to the file address")
+		}
+		if r.URL.Path == "/gone.mp3" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		_, _ = w.Write([]byte("ID3audio"))
+	}))
+	defer files.Close()
+	tx.Client = files.Client()
+	rec, err := tx.FetchRecording(context.Background(), files.URL+"/rec.mp3?X-Amz-Signature=x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(rec.Body)
+	_ = rec.Body.Close()
+	if string(b) != "ID3audio" || rec.Ext != ".mp3" || rec.ContentType != "audio/mpeg" {
+		t.Errorf("fetched %q %+v", b, rec)
+	}
+	if _, err := tx.FetchRecording(context.Background(), files.URL+"/gone.mp3"); !errors.Is(err, ErrProvider) {
+		t.Errorf("expired address: %v", err)
+	}
+	for _, bad := range []string{"http://example.com/a.mp3", "file:///etc/passwd", "not a url"} {
+		if _, err := tx.FetchRecording(context.Background(), bad); !errors.Is(err, ErrProvider) {
+			t.Errorf("%s: %v", bad, err)
+		}
+	}
+}
+
+func TestFakeRecording(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
+	f := NewFakeCalls()
+	f.Now = func() time.Time { return now }
+	if err := f.StartRecording(ctx, "cc-1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Sent()) != 0 {
+		t.Fatal("saved before the call ended")
+	}
+	now = now.Add(42 * time.Second)
+	_ = f.Hangup(ctx, "cc-1")
+	f.Ended("cc-2") // never recorded
+	sent := f.Sent()
+	if len(sent) != 1 || sent[0].Type != EventRecordingSaved || sent[0].RecordingSeconds != 42 || sent[0].CallControlID != "cc-1" {
+		t.Fatalf("sent = %+v", sent)
+	}
+	if len(f.Sent()) != 0 {
+		t.Error("events are sent once")
+	}
+
+	// It arrives signed, like Telnyx's.
+	body, h := f.Event(sent[0])
+	ev, err := f.ParseEvent(h, body, now)
+	if err != nil || ev.RecordingURL != sent[0].RecordingURL || ev.RecordingSeconds != 42 {
+		t.Fatalf("parsed %+v, %v", ev, err)
+	}
+
+	rec, err := NewFakeCalls().FetchRecording(ctx, ev.RecordingURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wav, _ := io.ReadAll(rec.Body)
+	if string(wav[:4]) != "RIFF" || string(wav[8:12]) != "WAVE" || len(wav) != 44+42*8000*2 || rec.Ext != ".wav" {
+		t.Errorf("wav: %q… %d bytes, %+v", wav[:12], len(wav), rec)
+	}
+	if _, err := f.FetchRecording(ctx, "https://elsewhere/x.mp3"); !errors.Is(err, ErrProvider) {
+		t.Errorf("not a fake address: %v", err)
+	}
+}

@@ -7,9 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -28,6 +31,20 @@ type Calls interface {
 	// browser phone, which rings until the rep answers it there. Events for
 	// the call then carry clientState.
 	Ring(ctx context.Context, callControlID, credentialID, clientState string) error
+	// StartRecording records both sides of an answered call, on two
+	// channels. The provider sends EventRecordingSaved after the call ends.
+	StartRecording(ctx context.Context, callControlID string) error
+	// FetchRecording downloads a saved recording from the address in its
+	// EventRecordingSaved. The caller closes the body.
+	FetchRecording(ctx context.Context, source string) (Recording, error)
+}
+
+// Recording is a saved recording being downloaded.
+type Recording struct {
+	Body        io.ReadCloser
+	ContentType string
+	// Ext is the file name ending, like ".mp3".
+	Ext string
 }
 
 // EventType is what happened to a call.
@@ -37,6 +54,9 @@ const (
 	EventInitiated EventType = "call.initiated"
 	EventAnswered  EventType = "call.answered"
 	EventHangup    EventType = "call.hangup"
+	// EventRecordingSaved: a call's recording can be downloaded, for a
+	// few minutes, from RecordingURL.
+	EventRecordingSaved EventType = "call.recording.saved"
 )
 
 // CallEvent is one call webhook.
@@ -52,6 +72,9 @@ type CallEvent struct {
 	HangupCause string
 	// Incoming is a call someone made to one of our numbers.
 	Incoming bool
+	// RecordingURL and RecordingSeconds come with EventRecordingSaved.
+	RecordingURL     string
+	RecordingSeconds int64
 }
 
 var (
@@ -97,6 +120,12 @@ func parseTelnyxEvent(key ed25519.PublicKey, h http.Header, body []byte, now tim
 				To            string `json:"to"`
 				HangupCause   string `json:"hangup_cause"`
 				Direction     string `json:"direction"`
+				RecordingURLs struct {
+					MP3 string `json:"mp3"`
+					WAV string `json:"wav"`
+				} `json:"recording_urls"`
+				RecordingStartedAt *time.Time `json:"recording_started_at"`
+				RecordingEndedAt   *time.Time `json:"recording_ended_at"`
 			} `json:"payload"`
 		} `json:"data"`
 	}
@@ -110,10 +139,20 @@ func parseTelnyxEvent(key ed25519.PublicKey, h http.Header, body []byte, now tim
 			state = string(b)
 		}
 	}
-	return CallEvent{
+	ev := CallEvent{
 		ID: in.Data.ID, Type: EventType(in.Data.EventType), CallControlID: p.CallControlID, ClientState: state,
 		From: p.From, To: p.To, At: in.Data.OccurredAt, HangupCause: p.HangupCause, Incoming: p.Direction == "incoming",
-	}, nil
+	}
+	if ev.Type == EventRecordingSaved {
+		ev.RecordingURL = p.RecordingURLs.MP3
+		if ev.RecordingURL == "" {
+			ev.RecordingURL = p.RecordingURLs.WAV
+		}
+		if p.RecordingStartedAt != nil && p.RecordingEndedAt != nil && p.RecordingEndedAt.After(*p.RecordingStartedAt) {
+			ev.RecordingSeconds = int64(math.Ceil(p.RecordingEndedAt.Sub(*p.RecordingStartedAt).Seconds()))
+		}
+	}
+	return ev, nil
 }
 
 // Login makes the rep a Telnyx telephony credential on the voice
@@ -172,6 +211,44 @@ func (t Telnyx) Ring(ctx context.Context, callControlID, credentialID, clientSta
 	}
 	_, err := t.do(ctx, http.MethodPost, "/calls/"+url.PathEscape(callControlID)+"/actions/transfer", body, nil)
 	return err
+}
+
+// StartRecording calls POST /calls/{id}/actions/record_start: an MP3 with
+// the rep and the lead on separate channels, for clearer transcripts.
+func (t Telnyx) StartRecording(ctx context.Context, callControlID string) error {
+	body := map[string]any{"format": "mp3", "channels": "dual", "play_beep": false}
+	_, err := t.do(ctx, http.MethodPost, "/calls/"+url.PathEscape(callControlID)+"/actions/record_start", body, nil)
+	return err
+}
+
+// FetchRecording downloads from the presigned address in the saved event
+// (it works for about 10 minutes). Only https addresses are fetched.
+func (t Telnyx) FetchRecording(ctx context.Context, source string) (Recording, error) {
+	u, err := url.Parse(source)
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return Recording{}, fmt.Errorf("%w: recording address %q", ErrProvider, source)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, source, nil)
+	if err != nil {
+		return Recording{}, fmt.Errorf("telnyx: %w", err)
+	}
+	client := t.Client
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Minute}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return Recording{}, fmt.Errorf("telnyx: %w: %w", ErrProvider, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
+		return Recording{}, fmt.Errorf("telnyx: %w: recording download: %d", ErrProvider, resp.StatusCode)
+	}
+	ext, ct := ".mp3", "audio/mpeg"
+	if strings.HasSuffix(strings.ToLower(u.Path), ".wav") {
+		ext, ct = ".wav", "audio/wav"
+	}
+	return Recording{Body: resp.Body, ContentType: ct, Ext: ext}, nil
 }
 
 // ParseEvent checks a Telnyx call webhook against PublicKey.

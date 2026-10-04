@@ -800,6 +800,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/recordings/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether the rep's calls are recorded */
+        get: operations["getRecordingSetting"];
+        /**
+         * Turn recording on (Pro, agreeing to tell every lead) or off
+         * @description On needs Pro and agree true: the rep tells every lead at the start of
+         *     the call that it may be recorded. Answered calls are then recorded.
+         */
+        put: operations["setRecordingSetting"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/recordings/{callId}": {
         parameters: {
             query?: never;
@@ -807,11 +829,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get recording metadata (Pro) */
+        /**
+         * A call's recording, with links to play and download it
+         * @description The links work for 10 minutes; ask again for fresh ones.
+         */
         get: operations["getRecording"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete a recording for good */
+        delete: operations["deleteRecording"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1489,6 +1515,8 @@ export interface components {
              * @description A call still open from before, to end it
              */
             live_call_id: string | null;
+            /** @description Answered calls are recorded, so the rep starts by saying so */
+            record_calls: boolean;
         };
         QueueLead: {
             /** Format: uuid */
@@ -1562,6 +1590,8 @@ export interface components {
             /** @description Someone called the rep's number */
             incoming: boolean;
             answered: boolean;
+            /** @enum {string} */
+            recording: "none" | "processing" | "ready";
             /** Format: date-time */
             started_at: string;
             seconds: number;
@@ -1570,15 +1600,48 @@ export interface components {
             outcome: string | null;
             note: string;
         };
+        RecordingSetting: {
+            /** @description Answered calls are recorded */
+            on: boolean;
+            /**
+             * Format: date-time
+             * @description When the rep agreed to tell leads; null when off
+             */
+            agreed_at: string | null;
+            pro: boolean;
+            /** @description False when recording isn't set up on this server */
+            available: boolean;
+        };
         Recording: {
             /** Format: uuid */
-            call_id?: string;
-            file_url?: string;
-            seconds?: number;
-            transcript?: string | null;
-            summary?: string | null;
-            /** Format: date */
-            suggested_followup_at?: string | null;
+            call_id: string;
+            /** @enum {string} */
+            status: "processing" | "ready" | "failed" | "deleted";
+            seconds: number;
+            /** @description Plays it; works for 10 minutes. Only when ready */
+            url: string | null;
+            /** @description Saves it as a file; works for 10 minutes. Only when ready */
+            download_url: string | null;
+            /**
+             * Format: date-time
+             * @description When it is deleted on its own (90 days)
+             */
+            keep_until: string | null;
+            call: {
+                /** Format: uuid */
+                lead_id: string | null;
+                lead_name: string;
+                lead_company: string;
+                to: string;
+                incoming: boolean;
+                /** Format: date-time */
+                started_at: string;
+                seconds: number;
+                /** Format: int64 */
+                cost_microdollars: number;
+                outcome: string | null;
+                note: string;
+            };
         };
         Pairing: {
             /** Format: uuid */
@@ -3087,6 +3150,74 @@ export interface operations {
             };
         };
     };
+    getRecordingSetting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingSetting"];
+                };
+            };
+        };
+    };
+    setRecordingSetting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    on: boolean;
+                    agree?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingSetting"];
+                };
+            };
+            /** @description Recording is part of Pro (code recording_plan) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Didn't agree to tell leads (code recording_agree) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Recording isn't set up on this server */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     getRecording: {
         parameters: {
             query?: never;
@@ -3106,6 +3237,40 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Recording"];
                 };
+            };
+            /** @description The call has no recording */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteRecording: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                callId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted (also when it already was) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The call has no recording */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

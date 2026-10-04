@@ -75,6 +75,9 @@ type Queue struct {
 	// LiveCallID is a call still open from before (a closed tab, say), so
 	// the screen can end it.
 	LiveCallID string
+	// RecordCalls: answered calls are recorded, so the rep starts by
+	// saying the call may be recorded.
+	RecordCalls bool
 }
 
 const queueCols = `l.id, ` + leadName + `, l.first_name, l.company, l.city, l.email, l.phone, l.notes, l.attempts, ll.name, COALESCE(ll.script_id::text, ''),
@@ -252,6 +255,11 @@ func (s *Service) queueAccount(ctx context.Context, userID string, q *Queue) err
 		return err
 	}
 	q.PricePerMin = quote.PricePerMin
+	if s.Recording {
+		if q.RecordCalls, err = RecordsCalls(ctx, s.DB, userID); err != nil {
+			return err
+		}
+	}
 	// A call ringing in isn't one to end from here: the alert shows it.
 	err = s.DB.QueryRow(ctx, `SELECT id FROM calls WHERE user_id = $1 AND status <> 'ended' AND NOT (direction = 'inbound' AND status = 'ringing')`,
 		userID).Scan(&q.LiveCallID)

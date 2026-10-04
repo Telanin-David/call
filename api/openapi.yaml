@@ -1303,10 +1303,56 @@ paths:
               schema:
                 $ref: "#/components/schemas/Blocked"
 
+  /recordings/settings:
+    get:
+      tags: [recordings]
+      summary: Whether the rep's calls are recorded
+      operationId: getRecordingSetting
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordingSetting"
+    put:
+      tags: [recordings]
+      summary: Turn recording on (Pro, agreeing to tell every lead) or off
+      description: |
+        On needs Pro and agree true: the rep tells every lead at the start of
+        the call that it may be recorded. Answered calls are then recorded.
+      operationId: setRecordingSetting
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [on]
+              properties:
+                "on":
+                  type: boolean
+                agree:
+                  type: boolean
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordingSetting"
+        "403":
+          description: Recording is part of Pro (code recording_plan)
+        "422":
+          description: Didn't agree to tell leads (code recording_agree)
+        "503":
+          description: Recording isn't set up on this server
+
   /recordings/{callId}:
     get:
       tags: [recordings]
-      summary: Get recording metadata (Pro)
+      summary: A call's recording, with links to play and download it
+      description: The links work for 10 minutes; ask again for fresh ones.
       operationId: getRecording
       parameters:
         - name: callId
@@ -1322,6 +1368,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Recording"
+        "404":
+          description: The call has no recording
+    delete:
+      tags: [recordings]
+      summary: Delete a recording for good
+      operationId: deleteRecording
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted (also when it already was)
+        "404":
+          description: The call has no recording
 
   /verification:
     get:
@@ -2287,7 +2351,7 @@ components:
 
     Queue:
       type: object
-      required: [title, list_id, leads, scripts, script_free_until, dials_today, dial_limit, balance_microdollars, price_per_minute_microdollars, live_call_id]
+      required: [title, list_id, leads, scripts, script_free_until, dials_today, dial_limit, balance_microdollars, price_per_minute_microdollars, live_call_id, record_calls]
       properties:
         title:
           type: string
@@ -2327,6 +2391,9 @@ components:
           format: uuid
           nullable: true
           description: A call still open from before, to end it
+        record_calls:
+          type: boolean
+          description: Answered calls are recorded, so the rep starts by saying so
 
     QueueLead:
       type: object
@@ -2443,7 +2510,7 @@ components:
 
     CallRecord:
       type: object
-      required: [id, lead, to, incoming, answered, started_at, seconds, cost_microdollars, outcome, note]
+      required: [id, lead, to, incoming, answered, recording, started_at, seconds, cost_microdollars, outcome, note]
       properties:
         id:
           type: string
@@ -2460,6 +2527,9 @@ components:
           description: Someone called the rep's number
         answered:
           type: boolean
+        recording:
+          type: string
+          enum: [none, processing, ready]
         started_at:
           type: string
           format: date-time
@@ -2474,26 +2544,78 @@ components:
         note:
           type: string
 
+    RecordingSetting:
+      type: object
+      required: ["on", agreed_at, pro, available]
+      properties:
+        "on":
+          type: boolean
+          description: Answered calls are recorded
+        agreed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the rep agreed to tell leads; null when off
+        pro:
+          type: boolean
+        available:
+          type: boolean
+          description: False when recording isn't set up on this server
+
     Recording:
       type: object
+      required: [call_id, status, seconds, url, download_url, keep_until, call]
       properties:
         call_id:
           type: string
           format: uuid
-        file_url:
+        status:
           type: string
+          enum: [processing, ready, failed, deleted]
         seconds:
           type: integer
-        transcript:
+        url:
           type: string
           nullable: true
-        summary:
+          description: Plays it; works for 10 minutes. Only when ready
+        download_url:
           type: string
           nullable: true
-        suggested_followup_at:
+          description: Saves it as a file; works for 10 minutes. Only when ready
+        keep_until:
           type: string
-          format: date
+          format: date-time
           nullable: true
+          description: When it is deleted on its own (90 days)
+        call:
+          type: object
+          required: [lead_id, lead_name, lead_company, to, incoming, started_at, seconds, cost_microdollars, outcome, note]
+          properties:
+            lead_id:
+              type: string
+              format: uuid
+              nullable: true
+            lead_name:
+              type: string
+            lead_company:
+              type: string
+            to:
+              type: string
+            incoming:
+              type: boolean
+            started_at:
+              type: string
+              format: date-time
+            seconds:
+              type: integer
+            cost_microdollars:
+              type: integer
+              format: int64
+            outcome:
+              type: string
+              nullable: true
+            note:
+              type: string
 
     Pairing:
       type: object

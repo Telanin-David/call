@@ -236,8 +236,10 @@ type HistoryItem struct {
 	// To is the other side's number: who the rep called, or who called.
 	To string
 	// Incoming: the lead called the rep. Answered says whether anyone picked up.
-	Incoming  bool
-	Answered  bool
+	Incoming bool
+	Answered bool
+	// Recording is "none", "processing" (being saved) or "ready".
+	Recording string
 	StartedAt time.Time
 	Seconds   int64
 	Cost      int64
@@ -294,8 +296,9 @@ func (s *Service) History(ctx context.Context, userID, outcome, q string, after 
 	rows, err := s.DB.Query(ctx, `
 		SELECT c.id, COALESCE(l.id::text, ''), COALESCE(`+leadName+`, ''), COALESCE(l.company, ''), c.to_number, c.started_at,
 			COALESCE(c.seconds, 0), COALESCE(c.cost_microdollars, 0), COALESCE(c.outcome, ''), COALESCE(c.note, ''),
-			c.direction = 'inbound', c.answered_at IS NOT NULL
-		FROM calls c LEFT JOIN leads l ON l.id = c.lead_id
+			c.direction = 'inbound', c.answered_at IS NOT NULL,
+			CASE WHEN r.status IN ('recording', 'saved') THEN 'processing' WHEN r.status = 'stored' THEN 'ready' ELSE 'none' END
+		FROM calls c LEFT JOIN leads l ON l.id = c.lead_id LEFT JOIN recordings r ON r.call_id = c.id
 		WHERE c.user_id = $1 AND c.status = 'ended'
 		  AND ($2 = '' OR c.outcome = $2)
 		  AND ($3 = '' OR l.first_name || ' ' || l.last_name ILIKE '%' || $3 || '%' OR l.company ILIKE '%' || $3 || '%'
@@ -311,7 +314,7 @@ func (s *Service) History(ctx context.Context, userID, outcome, q string, after 
 	for rows.Next() {
 		var h HistoryItem
 		var lead LeadRef
-		if err := rows.Scan(&h.ID, &lead.ID, &lead.Name, &lead.Company, &h.To, &h.StartedAt, &h.Seconds, &h.Cost, &h.Outcome, &h.Note, &h.Incoming, &h.Answered); err != nil {
+		if err := rows.Scan(&h.ID, &lead.ID, &lead.Name, &lead.Company, &h.To, &h.StartedAt, &h.Seconds, &h.Cost, &h.Outcome, &h.Note, &h.Incoming, &h.Answered, &h.Recording); err != nil {
 			return nil, nil, fmt.Errorf("scan call: %w", err)
 		}
 		if lead.ID != "" {
