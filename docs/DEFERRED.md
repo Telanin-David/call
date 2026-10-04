@@ -37,6 +37,10 @@ fine for checking screens but is not the production plan.
       (`apps/web/src/lib/phone.ts`): no sound, the lead "picks up" after 3
       seconds. D3 part 5 adds Telnyx's browser phone there; the server side
       (checks, holds, billing, events) is already the real one.
+- [ ] Phone as headset: the linked phone page (`/link`) dials with the same
+      browser phone as the laptop. With Telnyx keys, try a call through a real
+      phone, mute from both sides, and lock the phone mid-call (the call must
+      end within 15 seconds).
 - [ ] Confirm Telnyx's monthly price for a US/Canada local number. The
       `numbers.Cost` constant ($1.00) must match it: reps pay it × 1.5, and
       numbers that cost more are not offered.

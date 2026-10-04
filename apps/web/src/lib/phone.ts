@@ -58,8 +58,12 @@ export function fakeLeadHangsUp(callId: string): Promise<unknown> {
   return api.post(`/dev/calls/${callId}/events/hangup`);
 }
 
+/** The laptop's side of a call its linked phone dials and carries: nothing to do here. */
+const onLinkedPhone: Softphone = { async dial() { /* the phone dials */ }, stop() { /* the server ends it */ }, setMuted() { /* sent to the phone */ } };
+
 /** The phone for a call the server approved. Telnyx's browser phone comes with D3 part 5. */
 export function phoneFor(call: StartedCall): Softphone {
+  if (call.phone === 'paired') return onLinkedPhone;
   if (call.phone === 'fake') return fakePhone();
   throw new Error('The browser phone for real calls is not set up yet.');
 }

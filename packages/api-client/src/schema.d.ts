@@ -848,11 +848,21 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * The rep's link between laptop and phone; both poll it
+         * @description `?as=phone` is the phone checking in (about every second). A phone not
+         *     seen for 6 seconds shows as lost; a call on it is ended after 15.
+         *     Only the phone gets the live call's client_state.
+         */
+        get: operations["getPairing"];
         put?: never;
-        /** Create a QR pairing code (laptop side) */
+        /**
+         * Make a 6-digit code to link a phone (laptop side; Starter and Pro)
+         * @description Replaces any open link. The code works once, for 10 minutes, for this account only; 5 wrong codes end it.
+         */
         post: operations["createPairing"];
-        delete?: never;
+        /** Unlink the phone (either side); a call going through it ends */
+        delete: operations["endPairing"];
         options?: never;
         head?: never;
         patch?: never;
@@ -867,8 +877,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Join as phone audio leg using pairing code */
+        /** Link this phone with the code from the laptop */
         post: operations["joinPairing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pairing/mute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mute or unmute the linked phone from the laptop */
+        post: operations["mutePairing"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1339,10 +1366,10 @@ export interface components {
             /** @description IANA zone for "their time"; empty when unknown */
             her_time_zone: string;
             /**
-             * @description Which browser phone dials; fake only in development, where /dev/calls plays the provider
+             * @description Which browser phone dials; fake only in development, where /dev/calls plays the provider; paired means the linked phone dials
              * @enum {string}
              */
-            phone: "telnyx" | "fake";
+            phone: "telnyx" | "fake" | "paired";
         };
         Call: {
             /** Format: uuid */
@@ -1492,6 +1519,50 @@ export interface components {
             summary?: string | null;
             /** Format: date */
             suggested_followup_at?: string | null;
+        };
+        Pairing: {
+            /** Format: uuid */
+            id: string | null;
+            /** @enum {string} */
+            status: "none" | "waiting" | "linked" | "lost";
+            phone_name: string;
+            muted: boolean;
+            /**
+             * Format: date-time
+             * @description While waiting, when the code stops working
+             */
+            expires_at: string | null;
+            /**
+             * Format: date-time
+             * @description The phone's last check-in; a call on it is ended 15 seconds after
+             */
+            phone_seen_at: string | null;
+            /**
+             * @description Which browser phone the linked phone uses
+             * @enum {string}
+             */
+            phone: "telnyx" | "fake";
+            /** @description Only in the reply that made it */
+            code?: string;
+            /** @description Only in the join reply */
+            token?: string;
+            call: {
+                /** Format: uuid */
+                id: string;
+                /** @enum {string} */
+                status: "dialing" | "ringing" | "answered";
+                lead_name: string;
+                from: string;
+                to: string;
+                /** @description Empty except for the phone */
+                client_state: string;
+                /** Format: date-time */
+                answered_at: string | null;
+                /** Format: int64 */
+                price_per_minute_microdollars: number;
+                /** @description The laptop started it and the phone hasn't dialled yet */
+                needs_dial: boolean;
+            } | null;
         };
         Verification: {
             /**
@@ -2553,6 +2624,11 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /**
+                     * @description phone sends the call through the rep's linked phone (Starter and Pro); it must be online
+                     * @enum {string}
+                     */
+                    via?: "laptop" | "phone";
                     /** Format: uuid */
                     lead_id: string;
                 };
@@ -3034,6 +3110,28 @@ export interface operations {
             };
         };
     };
+    getPairing: {
+        parameters: {
+            query?: {
+                as?: "laptop" | "phone";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK (status none when nothing is linked) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pairing"];
+                };
+            };
+        };
+    };
     createPairing: {
         parameters: {
             query?: never;
@@ -3043,19 +3141,33 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description One-time code (5 min TTL) */
-            200: {
+            /** @description Code made (only in this reply) */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        code?: string;
-                        qr_url?: string;
-                        /** Format: date-time */
-                        expires_at?: string;
-                    };
+                    "application/json": components["schemas"]["Pairing"];
                 };
+            };
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    endPairing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unlinked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -3070,20 +3182,50 @@ export interface operations {
             content: {
                 "application/json": {
                     code: string;
+                    phone_name?: string;
                 };
             };
         };
         responses: {
-            /** @description Joined; Telnyx WebRTC token for phone leg */
+            /** @description Linked; token signs the phone's browser phone in */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        token?: string;
-                    };
+                    "application/json": components["schemas"]["Pairing"];
                 };
+            };
+            /** @description Wrong, old or another account's code */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    mutePairing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    muted: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Done */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

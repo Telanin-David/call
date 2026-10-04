@@ -89,11 +89,19 @@ type Started struct {
 	ClientState string
 	// HerTimeZone is the lead's time zone, for "their time" on screen.
 	HerTimeZone string
+	// ViaPhone: the rep's linked phone dials it and carries the sound.
+	ViaPhone bool
 }
 
 // Start checks every rule for calling leadID now, holds the first minute
 // and records the call. It returns a Blocked error when a rule says no.
 func (s *Service) Start(ctx context.Context, u auth.User, leadID string) (Started, error) {
+	return s.StartVia(ctx, u, leadID, false)
+}
+
+// StartVia is Start; with viaPhone the call goes through the rep's linked
+// phone, which must be online.
+func (s *Service) StartVia(ctx context.Context, u auth.User, leadID string, viaPhone bool) (Started, error) {
 	if !uuidOK(leadID) {
 		return Started{}, ErrLeadNotFound
 	}
@@ -206,11 +214,25 @@ func (s *Service) Start(ctx context.Context, u auth.User, leadID string) (Starte
 		if err != nil {
 			return err
 		}
+		var pairingID *string
+		device := "laptop"
+		if viaPhone {
+			var id string
+			err := tx.QueryRow(ctx, `SELECT id FROM pairings WHERE user_id = $1 AND ended_at IS NULL AND joined_at IS NOT NULL AND phone_seen_at > $2`,
+				u.ID, now.Add(-PhoneOnlineWithin)).Scan(&id)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrPhoneNotLinked
+			}
+			if err != nil {
+				return fmt.Errorf("read linked phone: %w", err)
+			}
+			pairingID, device = &id, "linked"
+		}
 		var callID string
 		if err := tx.QueryRow(ctx, `
-			INSERT INTO calls (user_id, lead_id, from_number_id, to_number, price_per_min, started_at, client_state)
-			VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-			u.ID, l.ID, from.id, l.Phone, quote.PricePerMin, now, state).Scan(&callID); err != nil {
+			INSERT INTO calls (user_id, lead_id, from_number_id, to_number, price_per_min, started_at, client_state, pairing_id, device)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+			u.ID, l.ID, from.id, l.Phone, quote.PricePerMin, now, state, pairingID, device).Scan(&callID); err != nil {
 			return fmt.Errorf("insert call: %w", err)
 		}
 		hold, err := ledger.PlaceHold(ctx, tx, u.ID, callID, quote.Hold(), "call:"+callID+":hold")
@@ -230,7 +252,7 @@ func (s *Service) Start(ctx context.Context, u auth.User, leadID string) (Starte
 		if _, err := tx.Exec(ctx, `UPDATE leads SET attempts = attempts + 1, status = CASE WHEN status = 'new' THEN 'called' ELSE status END WHERE id = $1`, l.ID); err != nil {
 			return fmt.Errorf("count attempt: %w", err)
 		}
-		st = Started{CallID: callID, Lead: l, From: from.e164, To: l.Phone, PricePerMin: quote.PricePerMin, Held: hold.Amount, ClientState: state}
+		st = Started{CallID: callID, Lead: l, From: from.e164, To: l.Phone, PricePerMin: quote.PricePerMin, Held: hold.Amount, ClientState: state, ViaPhone: viaPhone}
 		if len(zones) > 0 {
 			st.HerTimeZone = zones[0]
 		}

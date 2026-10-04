@@ -166,3 +166,11 @@ func dollars(micro int64) string {
 
 // ErrListNotFound is a call screen opened on a list that isn't the rep's.
 var ErrListNotFound = &Blocked{http.StatusNotFound, "list_not_found", "That list isn't one of yours", "Pick a list on the Leads page.", ""}
+
+// Linking a phone.
+var (
+	ErrPhoneNotLinked = &Blocked{http.StatusConflict, "phone_not_linked", "Your phone isn't connected", "Scan the code again with your phone, or talk on this laptop.", ""}
+	ErrPairingCode    = &Blocked{http.StatusNotFound, "pairing_code", "That code didn't work", "Codes last 10 minutes and only work for the account that made them. Make a new one on your laptop.", ""}
+	ErrPairingPlan    = &Blocked{http.StatusForbidden, "pairing_plan", "Talking on your phone is part of Starter", "On Free you talk through this laptop.", "upgrade"}
+	ErrNotPaired      = &Blocked{http.StatusNotFound, "not_paired", "No phone is linked", "", ""}
+)

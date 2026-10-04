@@ -70,6 +70,14 @@ export interface SessionExtras {
   skipNext: () => void;
   /** Holds the countdown while the rep types a note. */
   holdCountdown: (on: boolean) => void;
+  /** Live: the code dialog for linking the phone, while open. */
+  pair: { code: string; expiresAt: string | null; renew: () => void; close: () => void } | null;
+  /** Shows the code to link (or relink) the phone. */
+  openPairing: () => void;
+  /** The linked phone's name ("Pixel 6a"); empty when none. */
+  phoneName: string;
+  /** Seconds before a call on a lost phone is ended. */
+  phoneLostLeft: number;
 }
 
 export function clockOf(seconds: number): string {
@@ -299,6 +307,10 @@ export function useCallSession() {
     pauseAuto: () => {},
     skipNext: () => { if (phase === 'live') return; const n = nextOpen(current); if (n >= 0) setCurrent(n); },
     holdCountdown: () => {},
+    pair: null,
+    openPairing: () => setPhase('pairing'),
+    phoneName: '',
+    phoneLostLeft: 15,
   };
 
   return {

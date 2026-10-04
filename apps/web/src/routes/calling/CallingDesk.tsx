@@ -241,7 +241,8 @@ export default function CallingDesk({ s }: { s: CallSession }) {
 
       <section className="flex flex-col gap-3.5 max-xl:order-2 xl:overflow-auto xl:border-l xl:border-line xl:p-5 [&>*]:shrink-0" aria-label="Call">
         {isProblem(sim) ? (
-          <ProblemCard problem={sim} timer={clock} lead={merge.first_name} canUsePhone={!free} onFix={fixProblem} />
+          <ProblemCard problem={sim} timer={clock} lead={merge.first_name} canUsePhone={!free} onFix={fixProblem}
+            switchLabel={demo ? undefined : 'End the call and use this laptop'} startLeft={s.phoneLostLeft} />
         ) : (
         <CallCard>
           <div className="flex items-center justify-between">
@@ -262,6 +263,14 @@ export default function CallingDesk({ s }: { s: CallSession }) {
           <Note tone="danger" className="text-13">
             <Icon name="wallet" size={15} />
             <span className="flex-1">Your balance is almost used up. The call ends when it runs out.</span>
+          </Note>
+        )}
+        {!demo && via === 'phone' && !phoneLinked && !s.pair && phase !== 'live' && (
+          <Note tone="brand" className="flex-wrap text-13">
+            <Icon name="phone" size={16} className="text-brand-ink" />
+            <span className="min-w-[180px] flex-1">Your phone isn't connected. Open Dialer on it, or link it again.</span>
+            <Button variant="outline" className="h-[34px]" onClick={s.openPairing}>Scan code</Button>
+            <Button variant="quiet" className="h-[34px]" onClick={() => setTalkVia('computer')}>Use this laptop</Button>
           </Note>
         )}
         {s.dev && (
@@ -346,27 +355,32 @@ export default function CallingDesk({ s }: { s: CallSession }) {
                 <span><b className="block text-14 font-semibold">On this computer</b><span className="block text-12 text-muted">Use this laptop's mic and speakers, or plug in a headset</span></span>
                 <Radio />
               </ChoiceCard>
-              <ChoiceCard checked={via === 'phone'} locked={free || !demo}
-                onClick={() => { if (!demo) return; if (free) setUpgrade({ to: 'starter', reason: 'Talk on your phone with Starter' }); else setTalkVia('phone'); }}>
+              <ChoiceCard checked={via === 'phone'} locked={free}
+                onClick={() => { if (free) setUpgrade({ to: 'starter', reason: 'Talk on your phone with Starter' }); else setTalkVia('phone'); }}>
                 <Tile tone="brand" size={36}><Icon name="phone" /></Tile>
-                <span><b className="block text-14 font-semibold">Use my phone to talk</b><span className="block text-12 text-muted">Your phone is the mic and speaker. You watch the script here. No phone minutes used</span></span>
-                {!demo ? <Pill className="ml-auto flex-none">Soon</Pill> : free ? <Pill tone="brand" className="ml-auto flex-none"><Icon name="lock" size={14} />Starter</Pill> : <Radio />}
+                <span>
+                  <b className="block text-14 font-semibold">Use my phone to talk</b>
+                  <span className="block text-12 text-muted">
+                    {!demo && phoneLinked && s.phoneName ? `Linked: ${s.phoneName}. It rings and carries the sound; you watch the script here.` : 'Your phone is the mic and speaker. You watch the script here. No phone minutes used'}
+                  </span>
+                </span>
+                {free ? <Pill tone="brand" className="ml-auto flex-none"><Icon name="lock" size={14} />Starter</Pill> : <Radio />}
               </ChoiceCard>
             </div>
-            {free && demo && (
+            {free && (
               <Note>
                 <Icon name="lock" size={14} />
                 <span className="flex-1 text-13">Talking on your phone while you read here comes with Starter.</span>
                 <Button variant="outline" className="h-[34px]" onClick={() => setUpgrade({ to: 'starter', reason: 'Talk on your phone with Starter' })}>See Starter</Button>
               </Note>
             )}
-            {!free && via === 'phone' && !phoneLinked && (
+            {demo && !free && via === 'phone' && !phoneLinked && (
               <Note tone="brand">
                 <Icon name="qr" className="text-brand-ink" />
-                {phase === 'pairing'
+                {phase === 'pairing' || s.pair
                   ? <span className="flex-1 text-13">Waiting for your phone to scan</span>
-                  : <><span className="flex-1 text-13">Your phone isn't connected yet</span>
-                    <Button variant="outline" className="h-[34px]" onClick={() => setPhase('pairing')}>Scan code</Button></>}
+                  : <><span className="flex-1 text-13">{demo ? "Your phone isn't connected yet" : 'Your phone lost its connection. Open Dialer on it, or scan a new code.'}</span>
+                    <Button variant="outline" className="h-[34px]" onClick={s.openPairing}>Scan code</Button></>}
               </Note>
             )}
             <span className="flex-1 max-xl:hidden" />
@@ -382,7 +396,9 @@ export default function CallingDesk({ s }: { s: CallSession }) {
         )}
       </section>
 
-      <PairDialog open={phase === 'pairing'} onCancel={() => setPhase('ready')} onChange={() => { setTalkVia('computer'); setPhase('ready'); }} />
+      {demo
+        ? <PairDialog open={phase === 'pairing'} onCancel={() => setPhase('ready')} onChange={() => { setTalkVia('computer'); setPhase('ready'); }} />
+        : <PairDialog open={s.pair !== null} live={s.pair} onCancel={() => s.pair?.close()} onChange={() => { s.pair?.close(); setTalkVia('computer'); }} />}
       {peek && queue[peek.index] && (() => {
         const q = queue[peek.index]!;
         const first = q.lead.name.split(' ')[0] ?? q.lead.name;

@@ -17,15 +17,20 @@ export type TalkVia = 'computer' | 'phone';
 interface DeviceState {
   talkVia: TalkVia | null;
   phoneLinked: boolean;
+  /** The linked phone's name, live: "Pixel 6a". */
+  phoneName: string;
   setTalkVia: (v: TalkVia) => void;
   setPhoneLinked: (linked: boolean) => void;
+  setPhoneName: (name: string) => void;
 }
 
 export const useDeviceStore = create<DeviceState>((set) => ({
   talkVia: 'phone',
   phoneLinked: false,
+  phoneName: '',
   setTalkVia: (talkVia) => set({ talkVia }),
   setPhoneLinked: (phoneLinked) => set({ phoneLinked }),
+  setPhoneName: (phoneName) => set({ phoneName }),
 }));
 
 export const useCallStore = create<CallState>((set) => ({

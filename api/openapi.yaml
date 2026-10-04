@@ -946,6 +946,10 @@ paths:
               type: object
               required: [lead_id]
               properties:
+                via:
+                  type: string
+                  enum: [laptop, phone]
+                  description: phone sends the call through the rep's linked phone (Starter and Pro); it must be online
                 lead_id:
                   type: string
                   format: uuid
@@ -1365,30 +1369,53 @@ paths:
           description: The ID check is unavailable
 
   /pairing:
-    post:
+    get:
       tags: [pairing]
-      summary: Create a QR pairing code (laptop side)
-      operationId: createPairing
+      summary: The rep's link between laptop and phone; both poll it
+      description: |
+        `?as=phone` is the phone checking in (about every second). A phone not
+        seen for 6 seconds shows as lost; a call on it is ended after 15.
+        Only the phone gets the live call's client_state.
+      operationId: getPairing
+      parameters:
+        - name: as
+          in: query
+          schema:
+            type: string
+            enum: [laptop, phone]
       responses:
         "200":
-          description: One-time code (5 min TTL)
+          description: OK (status none when nothing is linked)
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  code:
-                    type: string
-                  qr_url:
-                    type: string
-                  expires_at:
-                    type: string
-                    format: date-time
+                $ref: "#/components/schemas/Pairing"
+    post:
+      tags: [pairing]
+      summary: Make a 6-digit code to link a phone (laptop side; Starter and Pro)
+      description: Replaces any open link. The code works once, for 10 minutes, for this account only; 5 wrong codes end it.
+      operationId: createPairing
+      responses:
+        "201":
+          description: Code made (only in this reply)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pairing"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    delete:
+      tags: [pairing]
+      summary: Unlink the phone (either side); a call going through it ends
+      operationId: endPairing
+      responses:
+        "204":
+          description: Unlinked
 
   /pairing/join:
     post:
       tags: [pairing]
-      summary: Join as phone audio leg using pairing code
+      summary: Link this phone with the code from the laptop
       operationId: joinPairing
       requestBody:
         required: true
@@ -1400,16 +1427,37 @@ paths:
               properties:
                 code:
                   type: string
+                phone_name:
+                  type: string
+                  maxLength: 60
       responses:
         "200":
-          description: Joined; Telnyx WebRTC token for phone leg
+          description: Linked; token signs the phone's browser phone in
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  token:
-                    type: string
+                $ref: "#/components/schemas/Pairing"
+        "404":
+          description: Wrong, old or another account's code
+
+  /pairing/mute:
+    post:
+      tags: [pairing]
+      summary: Mute or unmute the linked phone from the laptop
+      operationId: mutePairing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [muted]
+              properties:
+                muted:
+                  type: boolean
+      responses:
+        "204":
+          description: Done
 
   /webhooks/telnyx:
     post:
@@ -2091,8 +2139,8 @@ components:
           description: IANA zone for "their time"; empty when unknown
         phone:
           type: string
-          enum: [telnyx, fake]
-          description: Which browser phone dials; fake only in development, where /dev/calls plays the provider
+          enum: [telnyx, fake, paired]
+          description: Which browser phone dials; fake only in development, where /dev/calls plays the provider; paired means the linked phone dials
 
     Call:
       type: object
@@ -2372,6 +2420,72 @@ components:
           type: string
           format: date
           nullable: true
+
+    Pairing:
+      type: object
+      required: [id, status, phone_name, muted, expires_at, phone_seen_at, call, phone]
+      properties:
+        id:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum: [none, waiting, linked, lost]
+        phone_name:
+          type: string
+        muted:
+          type: boolean
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: While waiting, when the code stops working
+        phone_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: The phone's last check-in; a call on it is ended 15 seconds after
+        phone:
+          type: string
+          enum: [telnyx, fake]
+          description: Which browser phone the linked phone uses
+        code:
+          type: string
+          description: Only in the reply that made it
+        token:
+          type: string
+          description: Only in the join reply
+        call:
+          type: object
+          nullable: true
+          required: [id, status, lead_name, from, to, client_state, answered_at, price_per_minute_microdollars, needs_dial]
+          properties:
+            id:
+              type: string
+              format: uuid
+            status:
+              type: string
+              enum: [dialing, ringing, answered]
+            lead_name:
+              type: string
+            from:
+              type: string
+            to:
+              type: string
+            client_state:
+              type: string
+              description: Empty except for the phone
+            answered_at:
+              type: string
+              format: date-time
+              nullable: true
+            price_per_minute_microdollars:
+              type: integer
+              format: int64
+            needs_dial:
+              type: boolean
+              description: The laptop started it and the phone hasn't dialled yet
 
     Verification:
       type: object
