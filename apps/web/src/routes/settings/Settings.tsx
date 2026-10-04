@@ -11,6 +11,7 @@ import { errorText } from '@/lib/api';
 import { useChangePlan, useMe, usePlans, useSignout, useSubscription } from '@/lib/account';
 import { dayBefore, dayMonth, dayMonthYear } from '@/lib/dates';
 import { prettyNumber, useMyNumbers, useNumberAction, type RentedNumber } from '@/lib/numbers';
+import { useVerification, type Verification } from '@/lib/verification';
 
 type Section = 'profile' | 'billing' | 'numbers' | 'calling' | 'verify' | 'rules';
 
@@ -48,6 +49,14 @@ function Section({ title, sub, aside, children }: { title: string; sub?: string;
     </Card>
   );
 }
+
+const VERIFY_STATUS: Record<Verification['status'], string> = {
+  none: 'Not verified · new account limits apply',
+  pending: "Checking your photos · usually under 10 minutes",
+  review: "Checking by hand · the name on the ID doesn't match",
+  approved: 'Verified · new account limits are off',
+  rejected: "Last check didn't pass · new account limits apply",
+};
 
 const SECTIONS = new Set<Section>(['profile', 'billing', 'numbers', 'calling', 'verify', 'rules']);
 
@@ -158,6 +167,7 @@ export default function Settings() {
   const plans = usePlans();
   const changePlan = useChangePlan();
   const signout = useSignout();
+  const verification = useVerification();
   const s = sub.data;
   const movingToFree = live ? s?.pending_change === 'free' : demoMovingToFree;
   const renews = live ? s?.next_renewal ?? '' : '2026-11-01';
@@ -299,9 +309,13 @@ export default function Settings() {
 
         {section === 'verify' && (
           <Section title="Verify your ID" sub="A quick photo of your ID and your face. It lifts the new-account limits.">
-            <Kv label="Status">Not verified · new account limits apply</Kv>
+            <Kv label="Status">{live ? VERIFY_STATUS[verification.data?.status ?? 'none'] : 'Not verified · new account limits apply'}</Kv>
             <Kv label="What it changes">Removes new-account dial limits and the $3 a day cap on calls outside the US and Canada. On Starter, raises your limit from 120 to 500 dials a day.</Kv>
-            <Button variant="primary" className="mt-3" onClick={() => navigate('/verify')}>Verify my ID</Button>
+            {!(live && verification.data?.status === 'approved') && (
+              <Button variant="primary" className="mt-3" onClick={() => navigate('/verify')}>
+                {live && (verification.data?.status === 'pending' || verification.data?.status === 'review') ? 'See the check' : 'Verify my ID'}
+              </Button>
+            )}
           </Section>
         )}
 

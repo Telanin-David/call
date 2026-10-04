@@ -617,3 +617,46 @@ describe('live calling', () => {
     expect(costOf(25_000, 5)).toBe(2084);
   });
 });
+
+describe('live ID check', () => {
+  const V = { status: 'none', id_type: '', country: '', reason: '', submitted_at: null, decided_at: null };
+  beforeEach(() => { answers['GET /me'] = { status: 200, body: { ...ME, plan: 'starter', country: 'NG' } }; });
+
+  it('starts with the ID choice, the rep\'s name and a code for the phone', async () => {
+    answers['GET /verification'] = { status: 200, body: V };
+    renderAt('/verify');
+    expect(await screen.findByText('Ada Obi')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Ghana Card' })).toBeTruthy();
+    const qr = screen.getByRole('img', { name: 'Code to open the ID check on your phone' });
+    expect(qr.getAttribute('data-qr')).toMatch(/\/verify$/);
+  });
+
+  it('after a failed check says why and lets the rep try again', async () => {
+    answers['GET /verification'] = { status: 200, body: { ...V, status: 'rejected', reason: 'Document not verified', submitted_at: '2026-10-04T12:00:00Z' } };
+    renderAt('/verify');
+    expect(await screen.findByText(/Your last check didn't pass \(Document not verified\)/)).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /Take a photo of it|Start on this laptop|Use this laptop instead/ }).length).toBeGreaterThan(0);
+  });
+
+  it('shows a check in progress, by hand, and done', async () => {
+    answers['GET /verification'] = { status: 200, body: { ...V, status: 'pending', submitted_at: '2026-10-04T12:00:00Z' } };
+    renderAt('/verify');
+    expect(await screen.findByText("We're checking your ID")).toBeTruthy();
+    answers['POST /dev/verification/approve'] = { status: 200, body: { ...V, status: 'approved', submitted_at: '2026-10-04T12:00:00Z', decided_at: '2026-10-04T12:05:00Z' } };
+    fireEvent.click(screen.getByRole('button', { name: 'Pass it' }));
+    expect(await screen.findByText('Your ID is verified')).toBeTruthy();
+    cleanup();
+
+    answers['GET /verification'] = { status: 200, body: { ...V, status: 'review', submitted_at: '2026-10-04T12:00:00Z' } };
+    renderAt('/verify');
+    expect(await screen.findByText("We're checking your ID by hand")).toBeTruthy();
+    expect(screen.getByText(/doesn't match Ada Obi/)).toBeTruthy();
+  });
+
+  it('Settings shows the real status', async () => {
+    answers['GET /verification'] = { status: 200, body: { ...V, status: 'approved' } };
+    renderAt('/settings?tab=verify');
+    expect(await screen.findByText('Verified · new account limits are off')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Verify my ID' })).toBeNull();
+  });
+});

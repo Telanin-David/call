@@ -41,6 +41,19 @@ fine for checking screens but is not the production plan.
       `numbers.Cost` constant ($1.00) must match it: reps pay it × 1.5, and
       numbers that cost more are not offered.
 
+## ID check (Smile ID)
+
+- [ ] Set `SMILEID_PARTNER_ID`, `SMILEID_API_KEY` and `SMILEID_CALLBACK_URL`
+      (`https://<api>/webhooks/smileid`). Without the keys the ID check is off
+      outside development. `SMILEID_SANDBOX` stays `true` until launch.
+- [ ] With the sandbox key, run one check end to end and confirm the result
+      codes: the adapter treats `0810` (document verified) as approved and any
+      other finished code as a rejection (`internal/kyc/smileid.go`). The
+      request format and signature follow Smile ID's official JavaScript
+      library; their docs site was not reachable while building.
+- [ ] Checks whose name doesn't match the account wait for a person: the admin
+      console (D6) needs a screen to approve or reject them.
+
 ## API contract
 
 - [ ] Generate the Go server and the TypeScript client from `api/openapi.yaml`

@@ -32,6 +32,13 @@ type Config struct {
 	TelnyxAPIKey       string
 	TelnyxConnectionID string
 	TelnyxPublicKey    string
+
+	SmileIDPartnerID   string
+	SmileIDAPIKey      string
+	SmileIDCallbackURL string
+	// SmileIDSandbox sends checks to Smile ID's test server. Only
+	// SMILEID_SANDBOX=false sends them to the live one.
+	SmileIDSandbox bool
 }
 
 // devSessionKey keys code hashes when SESSION_KEY is unset in development.
@@ -60,6 +67,11 @@ func MustLoadConfig() Config {
 		TelnyxAPIKey:       getenv("TELNYX_API_KEY", ""),
 		TelnyxConnectionID: getenv("TELNYX_CONNECTION_ID", ""),
 		TelnyxPublicKey:    getenv("TELNYX_PUBLIC_KEY", ""),
+
+		SmileIDPartnerID:   getenv("SMILEID_PARTNER_ID", ""),
+		SmileIDAPIKey:      getenv("SMILEID_API_KEY", ""),
+		SmileIDCallbackURL: getenv("SMILEID_CALLBACK_URL", ""),
+		SmileIDSandbox:     getenv("SMILEID_SANDBOX", "true") != "false",
 	}
 	cfg.WebOrigins = strings.Split(getenv("WEB_ORIGINS", cfg.WebURL), ",")
 	if cfg.SessionKey == "" && cfg.Env == "production" {
